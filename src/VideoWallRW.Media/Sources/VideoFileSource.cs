@@ -1,6 +1,7 @@
 using Serilog;
 using VideoWallRW.Engine;
 using VideoWallRW.Engine.Graphics;
+using VideoWallRW.Media.Audio;
 using VideoWallRW.Media.Decoding;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -11,12 +12,16 @@ namespace VideoWallRW.Media.Sources;
 /// Fonte de vídeo de arquivo: decodifica via FFmpeg e faz upload para duas
 /// texturas D3D11 (double buffer), expondo sempre a SRV mais recente.
 /// <see cref="AcquireFrame"/> é chamado exclusivamente pela render thread.
+/// Se o arquivo tiver trilha de áudio e um <see cref="AudioEngine"/> tiver sido
+/// informado, o áudio é decodificado e tocado — controlado via <see cref="IAudioControllable"/>.
 /// </summary>
-public sealed class VideoFileSource : IPlayableSource
+public sealed class VideoFileSource : IPlayableSource, IAudioControllable
 {
     private readonly GraphicsDevice _gfx;
     private readonly FrameQueue _queue;
     private readonly VideoDecodeWorker _worker;
+    private readonly AudioEngine? _audioEngine;
+    private readonly ClipAudioTrack? _audioTrack;
 
     // Double buffer: upload alterna entre tex[0] e tex[1].
     private readonly ID3D11Texture2D[] _textures = new ID3D11Texture2D[2];
@@ -38,15 +43,22 @@ public sealed class VideoFileSource : IPlayableSource
     public event Action? EndReached;
 #pragma warning restore CS0067
 
-    public VideoFileSource(GraphicsDevice gfx, string filePath)
+    public VideoFileSource(GraphicsDevice gfx, string filePath, AudioEngine? audioEngine = null)
     {
         _gfx = gfx;
+        _audioEngine = audioEngine;
 
         // Obter metadados sem iniciar a thread (abrir é rápido para arquivos locais).
         using var probe = MediaDecoder.Open(filePath);
         Width = probe.Width;
         Height = probe.Height;
         Duration = probe.Duration;
+
+        if (probe.HasAudio && _audioEngine is not null)
+        {
+            _audioTrack = new ClipAudioTrack();
+            _audioEngine.AddTrack(_audioTrack);
+        }
 
         // Criar texturas Dynamic BGRA (upload pela CPU a cada frame).
         var texDesc = new Texture2DDescription
@@ -68,7 +80,9 @@ public sealed class VideoFileSource : IPlayableSource
         }
 
         _queue = new FrameQueue();
-        _worker = new VideoDecodeWorker(filePath, _queue);
+        _worker = new VideoDecodeWorker(filePath, _queue,
+            onAudioSamples: _audioTrack is null ? null : _audioTrack.Write,
+            onAudioSeek: _audioTrack is null ? null : _audioTrack.Clear);
         _state = SourceState.Ready;
 
         Log.Debug("VideoFileSource criado: {File} {W}×{H} {Dur:F2}s", filePath, Width, Height, Duration);
@@ -80,6 +94,9 @@ public sealed class VideoFileSource : IPlayableSource
     public void Seek(double seconds) => _worker.RequestSeek(seconds);
 
     public double DecodeFps => _worker.DecodeFps;
+
+    public void SetAudioState(bool playing, double volume, bool muted, double speed, double fade)
+        => _audioTrack?.SetAudioState(playing, volume, muted, speed, fade);
 
     /// <summary>
     /// Render thread: retorna a SRV com o frame correto para <paramref name="playheadSeconds"/>.
@@ -125,6 +142,8 @@ public sealed class VideoFileSource : IPlayableSource
     {
         _worker.Dispose();
         _queue.Dispose();
+        if (_audioTrack is not null)
+            _audioEngine?.RemoveTrack(_audioTrack);
         foreach (var srv in _srvs) srv.Dispose();
         foreach (var tex in _textures) tex.Dispose();
         Log.Debug("VideoFileSource descartado.");

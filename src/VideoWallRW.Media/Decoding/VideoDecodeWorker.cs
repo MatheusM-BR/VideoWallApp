@@ -12,6 +12,8 @@ public sealed class VideoDecodeWorker : IDisposable
 {
     private readonly string _filePath;
     private readonly FrameQueue _queue;
+    private readonly Action<float[], int>? _onAudioSamples;
+    private readonly Action? _onAudioSeek;
     private readonly CancellationTokenSource _cts = new();
     private readonly Thread _thread;
     private int _generation; // Interlocked
@@ -26,10 +28,13 @@ public sealed class VideoDecodeWorker : IDisposable
 
     public double DecodeFps => _decodeFps;
 
-    public VideoDecodeWorker(string filePath, FrameQueue queue)
+    public VideoDecodeWorker(string filePath, FrameQueue queue,
+        Action<float[], int>? onAudioSamples = null, Action? onAudioSeek = null)
     {
         _filePath = filePath;
         _queue = queue;
+        _onAudioSamples = onAudioSamples;
+        _onAudioSeek = onAudioSeek;
         _thread = new Thread(ThreadLoop) { Name = $"Decode:{Path.GetFileName(filePath)}", IsBackground = true };
         _thread.Start();
     }
@@ -40,6 +45,7 @@ public sealed class VideoDecodeWorker : IDisposable
         _seekTarget = seconds;
         Interlocked.Increment(ref _generation);
         _queue.Clear();
+        _onAudioSeek?.Invoke();
         _seekPending = true;
     }
 
@@ -49,8 +55,8 @@ public sealed class VideoDecodeWorker : IDisposable
         MediaDecoder? decoder = null;
         try
         {
-            decoder = MediaDecoder.Open(_filePath);
-            Log.Information("Decode worker iniciado: {File}", _filePath);
+            decoder = MediaDecoder.Open(_filePath, _onAudioSamples);
+            Log.Information("Decode worker iniciado: {File} (áudio: {HasAudio})", _filePath, decoder.HasAudio);
 
             while (!ct.IsCancellationRequested)
             {

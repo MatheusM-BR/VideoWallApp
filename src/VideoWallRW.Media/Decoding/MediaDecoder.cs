@@ -10,6 +10,10 @@ namespace VideoWallRW.Media.Decoding;
 /// </summary>
 public sealed unsafe class MediaDecoder : IDisposable
 {
+    /// <summary>Formato canônico de saída de áudio: estéreo, 48kHz, float32 interleaved.</summary>
+    public const int AudioOutChannels = 2;
+    public const int AudioOutSampleRate = 48000;
+
     private AVFormatContext* _fmtCtx;
     private AVCodecContext* _codecCtx;
     private SwsContext* _swsCtx;
@@ -19,17 +23,27 @@ public sealed unsafe class MediaDecoder : IDisposable
     private bool _disposed;
     private double _lastPts = -1;
 
+    private AVCodecContext* _audioCodecCtx;
+    private SwrContext* _swrCtx;
+    private AVFrame* _audioFrame;
+    private int _audioStreamIndex = -1;
+    private byte[] _audioScratch = [];
+    private readonly Action<float[], int>? _onAudioSamples;
+
     public double Duration { get; }
     public int Width { get; }
     public int Height { get; }
     public double FrameRate { get; }
+    public bool HasAudio => _audioStreamIndex >= 0;
 
     /// <summary>Format-ratios do stream (para cálculo de PTS).</summary>
     private readonly AVRational _timeBase;
 
     private MediaDecoder(AVFormatContext* fmtCtx, AVCodecContext* codecCtx,
         int streamIndex, AVRational timeBase, double duration,
-        int width, int height, double frameRate)
+        int width, int height, double frameRate,
+        AVCodecContext* audioCodecCtx, int audioStreamIndex, SwrContext* swrCtx,
+        Action<float[], int>? onAudioSamples)
     {
         _fmtCtx = fmtCtx;
         _codecCtx = codecCtx;
@@ -39,16 +53,26 @@ public sealed unsafe class MediaDecoder : IDisposable
         Width = width;
         Height = height;
         FrameRate = frameRate;
+        _audioCodecCtx = audioCodecCtx;
+        _audioStreamIndex = audioStreamIndex;
+        _swrCtx = swrCtx;
+        _onAudioSamples = onAudioSamples;
 
         _packet = ffmpeg.av_packet_alloc();
         _frame = ffmpeg.av_frame_alloc();
+        if (_audioStreamIndex >= 0)
+            _audioFrame = ffmpeg.av_frame_alloc();
     }
 
     /// <summary>
     /// Abre o arquivo e retorna um <see cref="MediaDecoder"/> pronto.
     /// Lança <see cref="MediaOpenException"/> com mensagem legível em caso de falha.
+    /// <paramref name="onAudioSamples"/>, se informado, é chamado (na thread que decodifica)
+    /// com amostras float32 estéreo 48kHz interleaved sempre que houver áudio novo.
+    /// Falha ao abrir/inicializar áudio nunca impede a abertura do vídeo — o clipe
+    /// simplesmente segue sem som.
     /// </summary>
-    public static MediaDecoder Open(string path)
+    public static MediaDecoder Open(string path, Action<float[], int>? onAudioSamples = null)
     {
         AVFormatContext* fmtCtx = null;
         var ret = ffmpeg.avformat_open_input(&fmtCtx, path, null, null);
@@ -109,7 +133,74 @@ public sealed unsafe class MediaDecoder : IDisposable
             path, width, height, frameRate, duration,
             ffmpeg.avcodec_get_name(codecCtx->codec_id));
 
-        return new MediaDecoder(fmtCtx, codecCtx, streamIndex, timeBase, duration, width, height, frameRate);
+        OpenAudio(path, fmtCtx, out var audioCodecCtx, out var audioStreamIndex, out var swrCtx);
+
+        return new MediaDecoder(fmtCtx, codecCtx, streamIndex, timeBase, duration, width, height, frameRate,
+            audioCodecCtx, audioStreamIndex, swrCtx, onAudioSamples);
+    }
+
+    /// <summary>
+    /// Tenta abrir a melhor stream de áudio e preparar o reamostrador para o formato
+    /// canônico (estéreo/48kHz/float32). Nunca lança — falha aqui apenas desativa o
+    /// áudio deste clip, o vídeo continua normalmente. (Tupla com ponteiros não é
+    /// permitida em C# — por isso os resultados saem via <c>out</c>.)
+    /// </summary>
+    private static void OpenAudio(string path, AVFormatContext* fmtCtx,
+        out AVCodecContext* audioCodecCtx, out int audioStreamIndex, out SwrContext* swr)
+    {
+        audioCodecCtx = null;
+        audioStreamIndex = -1;
+        swr = null;
+
+        AVCodec* audioCodec = null;
+        int streamIndex = ffmpeg.av_find_best_stream(
+            fmtCtx, AVMediaType.AVMEDIA_TYPE_AUDIO, -1, -1, &audioCodec, 0);
+        if (streamIndex < 0)
+            return;
+
+        var codecCtx = ffmpeg.avcodec_alloc_context3(audioCodec);
+        if (codecCtx == null)
+        {
+            Log.Warning("Falha ao alocar contexto de áudio em '{Path}' — clipe seguirá sem som.", path);
+            return;
+        }
+
+        var ret = ffmpeg.avcodec_parameters_to_context(codecCtx, fmtCtx->streams[streamIndex]->codecpar);
+        if (ret >= 0)
+        {
+            codecCtx->thread_count = 0;
+            ret = ffmpeg.avcodec_open2(codecCtx, audioCodec, null);
+        }
+        if (ret < 0)
+        {
+            Log.Warning("Falha ao abrir codec de áudio em '{Path}': {Err} — clipe seguirá sem som.",
+                path, AvError(ret));
+            ffmpeg.avcodec_free_context(&codecCtx);
+            return;
+        }
+
+        AVChannelLayout outLayout = default;
+        ffmpeg.av_channel_layout_default(&outLayout, AudioOutChannels);
+        SwrContext* swrCtx = null;
+        var swrRet = ffmpeg.swr_alloc_set_opts2(&swrCtx, &outLayout, AVSampleFormat.AV_SAMPLE_FMT_FLT, AudioOutSampleRate,
+            &codecCtx->ch_layout, codecCtx->sample_fmt, codecCtx->sample_rate, 0, null);
+        ffmpeg.av_channel_layout_uninit(&outLayout);
+
+        if (swrRet < 0 || swrCtx == null || ffmpeg.swr_init(swrCtx) < 0)
+        {
+            Log.Warning("Falha ao inicializar reamostrador de áudio em '{Path}' — clipe seguirá sem som.", path);
+            if (swrCtx != null) ffmpeg.swr_free(&swrCtx);
+            ffmpeg.avcodec_free_context(&codecCtx);
+            return;
+        }
+
+        Log.Debug("Áudio aberto: {Path} — {Ch}ch @ {Rate}Hz, codec {Codec}",
+            path, codecCtx->ch_layout.nb_channels, codecCtx->sample_rate,
+            ffmpeg.avcodec_get_name(codecCtx->codec_id));
+
+        audioCodecCtx = codecCtx;
+        audioStreamIndex = streamIndex;
+        swr = swrCtx;
     }
 
     /// <summary>
@@ -152,6 +243,10 @@ public sealed unsafe class MediaDecoder : IDisposable
                 if (sendRet < 0 && sendRet != ffmpeg.AVERROR(ffmpeg.EAGAIN))
                     Log.Warning("avcodec_send_packet retornou {Code}", AvError(sendRet));
             }
+            else if (_packet->stream_index == _audioStreamIndex)
+            {
+                DecodeAudioPacket();
+            }
             ffmpeg.av_packet_unref(_packet);
         }
     }
@@ -167,7 +262,64 @@ public sealed unsafe class MediaDecoder : IDisposable
         // AVSEEK_FLAG_BACKWARD: ir ao keyframe anterior ao alvo (necessário para H.264).
         ffmpeg.av_seek_frame(_fmtCtx, _videoStreamIndex, ts, ffmpeg.AVSEEK_FLAG_BACKWARD);
         ffmpeg.avcodec_flush_buffers(_codecCtx);
+        if (_audioCodecCtx != null)
+            ffmpeg.avcodec_flush_buffers(_audioCodecCtx);
         _lastPts = -1;
+    }
+
+    /// <summary>Decodifica um pacote de áudio e reamostra cada frame resultante.</summary>
+    private void DecodeAudioPacket()
+    {
+        var sendRet = ffmpeg.avcodec_send_packet(_audioCodecCtx, _packet);
+        if (sendRet < 0 && sendRet != ffmpeg.AVERROR(ffmpeg.EAGAIN))
+        {
+            Log.Warning("avcodec_send_packet (áudio) retornou {Code}", AvError(sendRet));
+            return;
+        }
+
+        while (true)
+        {
+            var ret = ffmpeg.avcodec_receive_frame(_audioCodecCtx, _audioFrame);
+            if (ret == ffmpeg.AVERROR(ffmpeg.EAGAIN) || ret == ffmpeg.AVERROR_EOF)
+                break;
+            if (ret < 0)
+            {
+                Log.Warning("avcodec_receive_frame (áudio) retornou {Code}", AvError(ret));
+                break;
+            }
+            ResampleAndEmit();
+            ffmpeg.av_frame_unref(_audioFrame);
+        }
+    }
+
+    private void ResampleAndEmit()
+    {
+        int maxOutSamples = ffmpeg.swr_get_out_samples(_swrCtx, _audioFrame->nb_samples);
+        if (maxOutSamples <= 0)
+            return;
+
+        int neededBytes = maxOutSamples * AudioOutChannels * sizeof(float);
+        if (_audioScratch.Length < neededBytes)
+            _audioScratch = new byte[neededBytes];
+
+        int converted;
+        byte*[] inPlanes = _audioFrame->data;
+        fixed (byte** inPtr = inPlanes)
+        fixed (byte* outBufPtr = _audioScratch)
+        {
+            byte*[] outPlanes = [outBufPtr];
+            fixed (byte** outPtr = outPlanes)
+            {
+                converted = ffmpeg.swr_convert(_swrCtx, outPtr, maxOutSamples, inPtr, _audioFrame->nb_samples);
+            }
+        }
+        if (converted <= 0)
+            return;
+
+        int floatCount = converted * AudioOutChannels;
+        var samples = new float[floatCount];
+        Buffer.BlockCopy(_audioScratch, 0, samples, 0, floatCount * sizeof(float));
+        _onAudioSamples?.Invoke(samples, floatCount);
     }
 
     private void FillTarget(DecodedFrame target)
@@ -230,9 +382,12 @@ public sealed unsafe class MediaDecoder : IDisposable
     private void DisposeCore()
     {
         if (_swsCtx != null) { ffmpeg.sws_freeContext(_swsCtx); _swsCtx = null; }
+        if (_swrCtx != null) { fixed (SwrContext** p = &_swrCtx) ffmpeg.swr_free(p); }
         if (_frame != null) { fixed (AVFrame** p = &_frame) ffmpeg.av_frame_free(p); }
+        if (_audioFrame != null) { fixed (AVFrame** p = &_audioFrame) ffmpeg.av_frame_free(p); }
         if (_packet != null) { fixed (AVPacket** p = &_packet) ffmpeg.av_packet_free(p); }
         if (_codecCtx != null) { fixed (AVCodecContext** p = &_codecCtx) ffmpeg.avcodec_free_context(p); }
+        if (_audioCodecCtx != null) { fixed (AVCodecContext** p = &_audioCodecCtx) ffmpeg.avcodec_free_context(p); }
         if (_fmtCtx != null) { fixed (AVFormatContext** p = &_fmtCtx) ffmpeg.avformat_close_input(p); }
     }
 

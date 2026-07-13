@@ -4,6 +4,7 @@ using Serilog;
 using VideoWallRW.Engine;
 using VideoWallRW.Engine.Graphics;
 using VideoWallRW.Media;
+using VideoWallRW.Media.Audio;
 using VideoWallRW.Media.Sources;
 
 namespace VideoWallRW.App;
@@ -12,6 +13,7 @@ public partial class App : Application
 {
     private GraphicsDevice? _gfx;
     private RenderThread? _render;
+    private AudioEngine? _audio;
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
@@ -56,16 +58,21 @@ public partial class App : Application
             return;
         }
 
+        // Falha ao abrir o dispositivo de áudio (sem placa de som, RDP sem áudio redirecionado
+        // etc.) nunca derruba o programa — os clipes seguem tocando normalmente, sem som.
+        _audio = AudioEngine.Create();
+
         _render = new RenderThread(_gfx);
 
         // Factory injetada: cria VideoFileSource no contexto do App (que tem referência a Media).
         // Isso mantém Engine sem dependência direta de Media.
         var gfxRef = _gfx;
+        var audioRef = _audio;
         _render.SetClipFactory((clip, defaultImageDuration) =>
         {
             return clip.Source switch
             {
-                Core.Model.FileVideoSource v => new VideoFileSource(gfxRef, v.Path),
+                Core.Model.FileVideoSource v => new VideoFileSource(gfxRef, v.Path, audioRef),
                 Core.Model.FileImageSource i => new ImageFileSource(gfxRef, i.Path)
                 {
                     Duration = clip.ImageDuration ?? defaultImageDuration
@@ -83,8 +90,10 @@ public partial class App : Application
 
     private void OnExit(object sender, ExitEventArgs e)
     {
-        // Ordem importa: parar a thread (que descarta as saídas) antes do device.
+        // Ordem importa: parar a thread (que descarta as saídas) antes do device;
+        // o áudio pode ser encerrado a qualquer momento, é independente do D3D11.
         _render?.Stop();
+        _audio?.Dispose();
         _gfx?.Dispose();
         Log.Information("VideoWallRW encerrado");
         Log.CloseAndFlush();
