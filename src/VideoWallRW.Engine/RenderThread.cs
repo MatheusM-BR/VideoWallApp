@@ -154,22 +154,6 @@ public sealed class RenderThread : IDisposable
             case DisableOutput(var deviceName):
                 Disable(deviceName);
                 break;
-            case LoadTestClip(var path):
-                LoadClip(path);
-                break;
-            case PlayClip:
-                foreach (var layer in _layers) layer.ActivePlayer?.Play();
-                break;
-            case PauseClip:
-                foreach (var layer in _layers) layer.ActivePlayer?.Pause();
-                break;
-            case SeekClip(var seconds):
-                foreach (var layer in _layers) layer.ActivePlayer?.Seek(seconds);
-                break;
-            case SetClipSpeed(var speed):
-                foreach (var layer in _layers) if (layer.ActivePlayer != null) layer.ActivePlayer.Speed = speed;
-                break;
-                
             // Comandos de Fase 2
             case SyncComposition(var data):
                 SyncComp(data);
@@ -377,20 +361,6 @@ public sealed class RenderThread : IDisposable
                 return index;
         }
         return -1;
-    }
-
-    // Compatibilidade temporária fase 1
-    private void LoadClip(string path)
-    {
-        if (_clipFactory == null) return;
-        var comp = new Core.Model.Composition();
-        var baseLayer = new Core.Model.Layer { Name = "Base" };
-        var clip = new Core.Model.Clip(new Core.Model.FileVideoSource(path));
-        baseLayer.Clips[0] = clip;
-        comp.AddLayer(baseLayer);
-        
-        SyncComp(comp);
-        OnTriggerClip(0, 0);
     }
 
     // ── Factory injetada pelo App (evita dependência Engine → Media) ──────────

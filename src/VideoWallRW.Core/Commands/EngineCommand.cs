@@ -9,12 +9,6 @@ public sealed record EnableOutput(string MonitorDeviceName)  : EngineCommand;
 public sealed record DisableOutput(string MonitorDeviceName) : EngineCommand;
 
 // ── Fase 1: transporte de clip ────────────────────────────────────────────────
-public sealed record LoadTestClip(string Path)   : EngineCommand;
-public sealed record PlayClip                    : EngineCommand;
-public sealed record PauseClip                   : EngineCommand;
-public sealed record SeekClip(double Seconds)    : EngineCommand;
-public sealed record SetClipSpeed(double Speed)  : EngineCommand;
-
 // ── Fase 2: acionadores de grade ──────────────────────────────────────────────
 public sealed record SyncComposition(VideoWallRW.Core.Model.Composition Data) : EngineCommand;
 public sealed record TriggerClip(int LayerIndex, int ColumnIndex) : EngineCommand;
