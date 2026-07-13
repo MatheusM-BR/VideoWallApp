@@ -185,6 +185,10 @@ public sealed class CompositionRenderer : IDisposable
         ctx.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         ctx.VSSetShader(_vs);
         ctx.PSSetShader(_ps);
+        // O VS lê uvTransform de b0 (é ele quem calcula o UV do fullscreen triangle) —
+        // sem isso a matriz chega zerada no VS e todo pixel amostra o canto (0,0) da
+        // textura misturado com a borda transparente, apagando a imagem quase por completo.
+        ctx.VSSetConstantBuffer(0, _cbuffer);
         ctx.PSSetConstantBuffer(0, _cbuffer);
         ctx.PSSetShaderResource(0, srv);
         ctx.PSSetSampler(0, _sampler);
