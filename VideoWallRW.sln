@@ -1,0 +1,64 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{D6D830F7-C872-43FA-BB4F-96FDED4694C7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoWallRW.Core", "src\VideoWallRW.Core\VideoWallRW.Core.csproj", "{DF90F826-5C71-48C7-8336-FFAF86115807}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoWallRW.Engine", "src\VideoWallRW.Engine\VideoWallRW.Engine.csproj", "{14B413F8-2D36-4B7F-A168-A4879F17F57E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoWallRW.Media", "src\VideoWallRW.Media\VideoWallRW.Media.csproj", "{96C2ADF3-281D-4453-9CE0-7C3A1415DF13}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoWallRW.Sources", "src\VideoWallRW.Sources\VideoWallRW.Sources.csproj", "{905D8201-52BE-4689-A5A5-1A87ED928F20}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoWallRW.App", "src\VideoWallRW.App\VideoWallRW.App.csproj", "{D540BD87-A614-4391-85ED-7BB00A0784D1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A364CED6-3105-46EB-AE02-A62341F42887}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoWallRW.Core.Tests", "tests\VideoWallRW.Core.Tests\VideoWallRW.Core.Tests.csproj", "{37ED571F-8542-49D8-B29C-64D40056754E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DF90F826-5C71-48C7-8336-FFAF86115807}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DF90F826-5C71-48C7-8336-FFAF86115807}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DF90F826-5C71-48C7-8336-FFAF86115807}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DF90F826-5C71-48C7-8336-FFAF86115807}.Release|Any CPU.Build.0 = Release|Any CPU
+		{14B413F8-2D36-4B7F-A168-A4879F17F57E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{14B413F8-2D36-4B7F-A168-A4879F17F57E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{14B413F8-2D36-4B7F-A168-A4879F17F57E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{14B413F8-2D36-4B7F-A168-A4879F17F57E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{96C2ADF3-281D-4453-9CE0-7C3A1415DF13}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{96C2ADF3-281D-4453-9CE0-7C3A1415DF13}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{96C2ADF3-281D-4453-9CE0-7C3A1415DF13}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{96C2ADF3-281D-4453-9CE0-7C3A1415DF13}.Release|Any CPU.Build.0 = Release|Any CPU
+		{905D8201-52BE-4689-A5A5-1A87ED928F20}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{905D8201-52BE-4689-A5A5-1A87ED928F20}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{905D8201-52BE-4689-A5A5-1A87ED928F20}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{905D8201-52BE-4689-A5A5-1A87ED928F20}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D540BD87-A614-4391-85ED-7BB00A0784D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D540BD87-A614-4391-85ED-7BB00A0784D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D540BD87-A614-4391-85ED-7BB00A0784D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D540BD87-A614-4391-85ED-7BB00A0784D1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{37ED571F-8542-49D8-B29C-64D40056754E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{37ED571F-8542-49D8-B29C-64D40056754E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{37ED571F-8542-49D8-B29C-64D40056754E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{37ED571F-8542-49D8-B29C-64D40056754E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{DF90F826-5C71-48C7-8336-FFAF86115807} = {D6D830F7-C872-43FA-BB4F-96FDED4694C7}
+		{14B413F8-2D36-4B7F-A168-A4879F17F57E} = {D6D830F7-C872-43FA-BB4F-96FDED4694C7}
+		{96C2ADF3-281D-4453-9CE0-7C3A1415DF13} = {D6D830F7-C872-43FA-BB4F-96FDED4694C7}
+		{905D8201-52BE-4689-A5A5-1A87ED928F20} = {D6D830F7-C872-43FA-BB4F-96FDED4694C7}
+		{D540BD87-A614-4391-85ED-7BB00A0784D1} = {D6D830F7-C872-43FA-BB4F-96FDED4694C7}
+		{37ED571F-8542-49D8-B29C-64D40056754E} = {A364CED6-3105-46EB-AE02-A62341F42887}
+	EndGlobalSection
+EndGlobal
