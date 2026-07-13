@@ -5,6 +5,7 @@ using VideoWallRW.Core.Commands;
 using VideoWallRW.Core.Stats;
 using VideoWallRW.Engine.Graphics;
 using VideoWallRW.Engine.Output;
+using VideoWallRW.Engine.Playback;
 using VideoWallRW.Engine.Rendering;
 
 namespace VideoWallRW.Engine;
@@ -23,6 +24,11 @@ public sealed class RenderThread : IDisposable
     private readonly Dictionary<string, int> _frameCounts = [];
     private Thread? _thread;
     private volatile bool _running;
+
+    // ── Fase 1: estado de playback ────────────────────────────────────────────
+    private ClipPlayer? _player;
+    private CompositionRenderer? _composition;
+    private string? _clipPath;
 
     /// <summary>Publicado ~2x/segundo, na render thread.</summary>
     public event Action<EngineStats>? StatsUpdated;
@@ -55,15 +61,17 @@ public sealed class RenderThread : IDisposable
     private void Loop()
     {
         Log.Information("Render thread iniciada");
-        using var scene = new TestSceneRenderer(_gfx);
+        using var testScene = new TestSceneRenderer(_gfx);
         var clock = Stopwatch.StartNew();
         var statsClock = Stopwatch.StartNew();
+        double lastTime = 0;
+
         try
         {
             while (_running)
             {
                 while (_commands.Reader.TryRead(out var command))
-                    Handle(command);
+                    Handle(command, testScene);
 
                 // As janelas de saída vivem nesta thread; o pump precisa rodar aqui.
                 OutputWindow.PumpMessages();
@@ -75,8 +83,27 @@ public sealed class RenderThread : IDisposable
                 }
 
                 double time = clock.Elapsed.TotalSeconds;
-                foreach (var output in _outputs)
-                    scene.Render(_gfx.Context, output.Rtv, output.Monitor.Width, output.Monitor.Height, time);
+                double dt = time - lastTime;
+                lastTime = time;
+                if (dt > 0.1) dt = 0.1; // cap: evitar salto grande após pausa do debugger
+
+                _player?.Tick(dt);
+
+                if (_composition != null && _player != null)
+                {
+                    // Passe de composição + saídas via CompositionRenderer.
+                    var outputList = _outputs
+                        .Select(o => (o.Rtv, o.Monitor.Width, o.Monitor.Height))
+                        .ToList();
+                    _composition.Render(_gfx.Context, _player.Source, _player.Playhead, outputList);
+                }
+                else
+                {
+                    // Fase 0 fallback: gradiente de teste.
+                    foreach (var output in _outputs)
+                        testScene.Render(_gfx.Context, output.Rtv,
+                            output.Monitor.Width, output.Monitor.Height, time);
+                }
 
                 foreach (var output in _outputs)
                 {
@@ -100,15 +127,18 @@ public sealed class RenderThread : IDisposable
         }
         finally
         {
-            foreach (var output in _outputs)
-                output.Dispose();
+            _player?.Dispose();
+            _player = null;
+            _composition?.Dispose();
+            _composition = null;
+            foreach (var output in _outputs) output.Dispose();
             _outputs.Clear();
             OutputWindow.PumpMessages();
             Log.Information("Render thread encerrada");
         }
     }
 
-    private void Handle(EngineCommand command)
+    private void Handle(EngineCommand command, TestSceneRenderer testScene)
     {
         switch (command)
         {
@@ -118,11 +148,69 @@ public sealed class RenderThread : IDisposable
             case DisableOutput(var deviceName):
                 Disable(deviceName);
                 break;
+            case LoadTestClip(var path):
+                LoadClip(path);
+                break;
+            case PlayClip:
+                _player?.Play();
+                break;
+            case PauseClip:
+                _player?.Pause();
+                break;
+            case SeekClip(var seconds):
+                _player?.Seek(seconds);
+                break;
+            case SetClipSpeed(var speed):
+                if (_player != null) _player.Speed = speed;
+                break;
             default:
                 Log.Warning("Comando não tratado: {Command}", command);
                 break;
         }
     }
+
+    private void LoadClip(string path)
+    {
+        // Descartar clip anterior.
+        _player?.Dispose();
+        _player = null;
+        _composition?.Dispose();
+        _composition = null;
+
+        try
+        {
+            // VideoFileSource abre o arquivo (probe rápido) e inicia o worker.
+            // O import de VideoWallRW.Media é feito via interface (IPlayableSource no Core).
+            // Para instanciar, o Engine carrega via factory injetada ou cast direto.
+            // Nesta fase de teste, o App passa o path e o Engine cria diretamente
+            // usando a referência de projeto (Media → Engine é permitido via App).
+            // NOTA: Engine.csproj não referencia Media; a criação concreta é delegada
+            // ao App via factory. Aqui usamos um delegate configurado pelo App.
+            if (_clipFactory == null)
+            {
+                Log.Warning("ClipFactory não configurada; LoadTestClip ignorado.");
+                return;
+            }
+            var source = _clipFactory(path);
+            _player = new ClipPlayer(source);
+            _composition = new CompositionRenderer(_gfx);
+            _clipPath = path;
+            Log.Information("Clip carregado: {Path}", path);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao carregar clip: {Path}", path);
+        }
+    }
+
+    // ── Factory injetada pelo App (evita dependência Engine → Media) ──────────
+    private Func<string, IPlayableSource>? _clipFactory;
+
+    /// <summary>
+    /// Configura a fábrica de fontes de clip. Chamar antes de <see cref="Start"/>.
+    /// </summary>
+    public void SetClipFactory(Func<string, IPlayableSource> factory)
+        => _clipFactory = factory;
 
     private void Enable(string deviceName)
     {
@@ -149,8 +237,7 @@ public sealed class RenderThread : IDisposable
     private void Disable(string deviceName)
     {
         var output = _outputs.FirstOrDefault(o => o.Monitor.DeviceName == deviceName);
-        if (output is null)
-            return;
+        if (output is null) return;
         _outputs.Remove(output);
         output.Dispose();
         _frameCounts.Remove(deviceName);
@@ -168,6 +255,15 @@ public sealed class RenderThread : IDisposable
             .ToList();
         _frameCounts.Clear();
         statsClock.Restart();
-        StatsUpdated?.Invoke(new EngineStats(outputs));
+
+        ClipSnapshot? clip = null;
+        if (_player != null && _clipPath != null)
+        {
+            double decodeFps = _player.Source.DecodeFps;
+            clip = new ClipSnapshot(_clipPath, _player.Playhead, _player.Source.Duration,
+                _player.State, decodeFps);
+        }
+
+        StatsUpdated?.Invoke(new EngineStats(outputs, clip));
     }
 }

@@ -15,4 +15,11 @@
     <PackageReference Include="Vortice.DXGI" Version="3.6.2" />
   </ItemGroup>
 
+  <!-- Copiar shaders HLSL para o subdiretório correto no output -->
+  <ItemGroup>
+    <Content Include="Rendering\Shaders\*.hlsl"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Rendering\Shaders\%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

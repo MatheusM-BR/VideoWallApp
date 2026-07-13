@@ -3,6 +3,8 @@ using System.Windows;
 using Serilog;
 using VideoWallRW.Engine;
 using VideoWallRW.Engine.Graphics;
+using VideoWallRW.Media;
+using VideoWallRW.Media.Sources;
 
 namespace VideoWallRW.App;
 
@@ -25,6 +27,22 @@ public partial class App : Application
             .CreateLogger();
         Log.Information("VideoWallRW iniciando");
 
+        // Inicializar FFmpeg — DLLs ficam na mesma pasta do exe (copiadas pelo csproj).
+        try
+        {
+            FFmpegBootstrap.Initialize(AppContext.BaseDirectory);
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Falha ao inicializar o FFmpeg");
+            MessageBox.Show(
+                $"Não foi possível inicializar o FFmpeg.\n" +
+                $"Verifique se as DLLs estão em:\n{AppContext.BaseDirectory}\n\nErro: {ex.Message}",
+                "VideoWallRW", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+            return;
+        }
+
         try
         {
             _gfx = GraphicsDevice.Create();
@@ -39,6 +57,12 @@ public partial class App : Application
         }
 
         _render = new RenderThread(_gfx);
+
+        // Factory injetada: cria VideoFileSource no contexto do App (que tem referência a Media).
+        // Isso mantém Engine sem dependência direta de Media.
+        var gfxRef = _gfx;
+        _render.SetClipFactory(path => new VideoFileSource(gfxRef, path));
+
         _render.Start();
 
         var window = new MainWindow(new MainViewModel(_gfx, _render));
