@@ -34,3 +34,9 @@ public interface IFrameSource : IDisposable
     void Start();
     void Stop();
 }
+
+/// <summary>Capacidade opcional de áudio de uma fonte, controlada pelo ClipPlayer.</summary>
+public interface IAudioControllable
+{
+    void SetAudioState(bool playing, double volume, bool muted, double speed, double fade);
+}

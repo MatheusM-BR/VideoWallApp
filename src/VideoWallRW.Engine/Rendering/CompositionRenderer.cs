@@ -1,7 +1,8 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
 using Serilog;
-using VideoWallRW.Core;
+using VideoWallRW.Core.Math;
+using VideoWallRW.Core.Model;
 using VideoWallRW.Engine.Graphics;
 using Vortice.D3DCompiler;
 using Vortice.Direct3D;
@@ -12,15 +13,13 @@ using Vortice.Mathematics;
 namespace VideoWallRW.Engine.Rendering;
 
 /// <summary>
-/// Renderiza a composição (camadas → render target) e projeta para cada saída.
-/// Fase 1: uma única fonte de vídeo, resize mode Fit (letterbox).
+/// Renderiza a composição baseada na Grade de camadas. 
+/// Aplica as matrizes de Scale calculadas do ResizeMath para caber nas configurações da Tela,
+/// processando todas as Layers utilizando Vortice BlendStates para alcançar efeito 
+/// gráfico avançado (Resolume-like).
 /// </summary>
 public sealed class CompositionRenderer : IDisposable
 {
-    // Dimensões da composição (fixas na Fase 1; configuráveis a partir da Fase 2).
-    public const int CompWidth = 1920;
-    public const int CompHeight = 1080;
-
     private readonly GraphicsDevice _gfx;
     private readonly ID3D11Texture2D _compTexture;
     private readonly ID3D11RenderTargetView _compRtv;
@@ -31,23 +30,34 @@ public sealed class CompositionRenderer : IDisposable
     private readonly ID3D11Buffer _cbuffer;
     private readonly ID3D11SamplerState _sampler;
 
+    // Blend States. Null state atua como pre-mul default opaco ou normal alpha estrito sob pre-mul.
+    // Usaremos as flags equivalentes solicitadas pela interface.
+    private readonly ID3D11BlendState _blendNormal;
+    private readonly ID3D11BlendState _blendAdd;
+    private readonly ID3D11BlendState _blendScreen;
+    private readonly ID3D11BlendState _blendMultiply;
+    
     [StructLayout(LayoutKind.Sequential)]
     private struct QuadParams
     {
         public Matrix4x4 UvTransform;
         public float Opacity;
-        public float Pad0, Pad1, Pad2;
+        public int BlendMode;
+        public float Pad1, Pad2;
     }
 
-    public CompositionRenderer(GraphicsDevice gfx)
+    public CompositionRenderer(GraphicsDevice gfx, int width, int height)
     {
         _gfx = gfx;
 
-        // Render target da composição.
+        if (width < 1) throw new ArgumentOutOfRangeException(nameof(width));
+        if (height < 1) throw new ArgumentOutOfRangeException(nameof(height));
+
+        // Render target da composição (Tamanho ajustável no Engine, fixo 1080p por hora).
         var texDesc = new Texture2DDescription
         {
-            Width = CompWidth,
-            Height = CompHeight,
+            Width = (uint)width,
+            Height = (uint)height,
             MipLevels = 1,
             ArraySize = 1,
             Format = Format.B8G8R8A8_UNorm,
@@ -65,54 +75,111 @@ public sealed class CompositionRenderer : IDisposable
         _vs = gfx.Device.CreateVertexShader(CompileShader(shaderSrc, "VSMain", "vs_5_0"));
         _ps = gfx.Device.CreatePixelShader(CompileShader(shaderSrc, "PSMain", "ps_5_0"));
 
-        // CBuffer (QuadParams: 16+16+16+4 = alinhado a 16 bytes).
         _cbuffer = gfx.Device.CreateBuffer(new BufferDescription(
             (uint)Marshal.SizeOf<QuadParams>(), BindFlags.ConstantBuffer));
 
-        // Sampler linear clamp.
         _sampler = gfx.Device.CreateSamplerState(new SamplerDescription(
             Filter.MinMagMipLinear,
-            TextureAddressMode.Clamp, TextureAddressMode.Clamp, TextureAddressMode.Clamp));
+            TextureAddressMode.Border, TextureAddressMode.Border, TextureAddressMode.Border)
+        {
+            BorderColor = new Color4(0, 0, 0, 0f)
+        });
 
-        Log.Debug("CompositionRenderer criado ({W}×{H})", CompWidth, CompHeight);
+        // Blend States definition
+        _blendNormal = CreateBlendState(Blend.One, Blend.InverseSourceAlpha);
+        _blendAdd = CreateBlendState(Blend.One, Blend.One);
+        _blendScreen = CreateBlendState(Blend.One, Blend.InverseSourceColor); // s + d - s*d => SourceAlpha == 1 and SrcColor==col, so SrcColor+(1-SrcColor)*Dest
+        _blendMultiply = CreateBlendState(Blend.DestinationColor, Blend.Zero);
+
+        Log.Debug("CompositionRenderer criado");
+    }
+
+    private ID3D11BlendState CreateBlendState(Blend src, Blend dest)
+    {
+        var desc = new BlendDescription
+        {
+            AlphaToCoverageEnable = false,
+            IndependentBlendEnable = false
+        };
+        desc.RenderTarget[0] = new RenderTargetBlendDescription
+        {
+            BlendEnable = true,
+            SourceBlend = src,
+            DestinationBlend = dest,
+            BlendOperation = BlendOperation.Add,
+            SourceBlendAlpha = Blend.One,
+            DestinationBlendAlpha = Blend.One,
+            BlendOperationAlpha = BlendOperation.Add,
+            RenderTargetWriteMask = ColorWriteEnable.All
+        };
+        return _gfx.Device.CreateBlendState(desc);
     }
 
     /// <summary>
-    /// Passe 1: composição — desenha o clip no render target interno.
-    /// Passe 2: projeção — copia a composição para cada saída (RTV do backbuffer).
+    /// Passe 1: desenha a base toda com as texturas ativas processando o blend de sobreposição per Layer.
+    /// Passe 2: espalha sobre o SwapChain da aplicação.
     /// </summary>
     public void Render(
         ID3D11DeviceContext ctx,
-        IFrameSource? clip, double playhead,
+        Composition composition,
+        IReadOnlyList<LayerRenderer> activeLayers,
         IReadOnlyList<(ID3D11RenderTargetView Rtv, int Width, int Height)> outputs)
     {
-        // ── Passe 1: composição ───────────────────────────────────────
         ctx.ClearRenderTargetView(_compRtv, new Color4(0, 0, 0, 1));
         ctx.OMSetRenderTargets(_compRtv);
-        ctx.RSSetViewport(new Viewport(0, 0, CompWidth, CompHeight));
+        ctx.RSSetViewport(new Viewport(0, 0, composition.Width, composition.Height));
 
-        var srv = clip?.AcquireFrame(playhead);
-        if (srv != null && clip != null)
+        // Filter solo layers if any layer has Solo enabled
+        bool anySolo = activeLayers.Any(l => l.Model.Solo);
+        var visibleLayers = activeLayers.Where(l => !l.Model.Bypass && (!anySolo || l.Model.Solo));
+
+        foreach (var layer in visibleLayers)
         {
-            // UV transform para Fit (letterbox): manter proporção do clip.
-            var uvTransform = ComputeFitTransform(clip.Width, clip.Height, CompWidth, CompHeight);
-            DrawQuad(ctx, srv, uvTransform, 1.0f);
+            var frames = layer.AcquireFrames();
+            if (frames.Count == 0 || layer.ActivePlayer is null) continue;
+
+            double opacity = layer.Model.Opacity * composition.MasterOpacity;
+
+            var sourceWidth = layer.ActivePlayer.Source.Width;
+            var sourceHeight = layer.ActivePlayer.Source.Height;
+            
+            var resizeMode = layer.ActiveClip?.Resize ?? layer.Model.DefaultResize;
+            
+            var rect = ResizeMath.Compute(
+                resizeMode, sourceWidth, sourceHeight, composition.Width, composition.Height);
+
+            // Compute UV projection matrix
+            var uvTransform = ComputeTransform(rect, sourceWidth, sourceHeight, composition.Width, composition.Height);
+
+            ID3D11BlendState blendState = layer.Model.Blend switch
+            {
+                BlendMode.Add => _blendAdd,
+                BlendMode.Screen => _blendScreen,
+                BlendMode.Multiply => _blendMultiply,
+                _ => _blendNormal
+            };
+            
+            ctx.OMSetBlendState(blendState);
+            foreach (var frame in frames)
+                DrawQuad(ctx, frame.Srv, uvTransform, (float)(opacity * frame.Opacity), (int)layer.Model.Blend);
         }
 
+        // Disable generic blending before swapping outputs buffer
+        ctx.OMSetBlendState(null);
+        
         // ── Passe 2: saídas ──────────────────────────────────────────
         foreach (var (rtv, w, h) in outputs)
         {
             ctx.OMSetRenderTargets(rtv);
             ctx.RSSetViewport(new Viewport(0, 0, w, h));
-            // Composição esticada para cobrir toda a saída (slices vêm na Fase 4).
-            DrawQuad(ctx, _compSrv, Matrix4x4.Identity, 1.0f);
+            DrawQuad(ctx, _compSrv, Matrix4x4.Identity, 1.0f, 0);
         }
     }
 
     private void DrawQuad(ID3D11DeviceContext ctx,
-        ID3D11ShaderResourceView srv, Matrix4x4 uvTransform, float opacity)
+        ID3D11ShaderResourceView srv, Matrix4x4 uvTransform, float opacity, int blendMode)
     {
-        var p = new QuadParams { UvTransform = uvTransform, Opacity = opacity };
+        var p = new QuadParams { UvTransform = uvTransform, Opacity = opacity, BlendMode = blendMode };
         ctx.UpdateSubresource(p, _cbuffer);
         ctx.IASetInputLayout(null);
         ctx.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
@@ -125,52 +192,30 @@ public sealed class CompositionRenderer : IDisposable
     }
 
     /// <summary>
-    /// Calcula a matriz UV para "Fit" (letterbox): mantém a proporção do clip
-    /// inserindo barras pretas nas laterais ou no topo/baixo.
+    /// Computa matriz de translação escalonada baseada na janela dada. 
+    /// O Quad base no shader vai de [0,1], sendo renderizado na sua projeção máxima da Composition.
+    /// Para limitar o escopo, enviamos as margens de UV que em teoria projetam a pintura no local correto.
+    /// Como o cbuffer inverte a operação no shader (Scale + Translate em -UV bounds e clamp), usamos isso.
     /// </summary>
-    private static Matrix4x4 ComputeFitTransform(
-        int srcW, int srcH, int dstW, int dstH)
+    private static Matrix4x4 ComputeTransform(RectF targetRect, int srcW, int srcH, float compW, float compH)
     {
-        float srcAspect = (float)srcW / srcH;
-        float dstAspect = (float)dstW / dstH;
-
-        float scaleU, scaleV, offsetU, offsetV;
-        if (srcAspect > dstAspect)
-        {
-            // Pillarbox: barras em cima/baixo.
-            scaleU = 1f;
-            scaleV = srcAspect / dstAspect;
-            offsetU = 0f;
-            offsetV = (1f - scaleV) * 0.5f;
-        }
-        else
-        {
-            // Letterbox: barras nas laterais.
-            scaleU = dstAspect / srcAspect;
-            scaleV = 1f;
-            offsetU = (1f - scaleU) * 0.5f;
-            offsetV = 0f;
-        }
-
-        // Constrói uma matriz que mapeia UV [0,1]² → [offset, offset+scale].
-        // O shader faz: uvh = mul(uvTransform, float4(uv, 0, 1)).xy
+        // Precisamos mapear o fullscreen triangle (que escreve pixel de (0,0) a (compW,compH)) 
+        // para amostrar a textura src de (0,0) a (srcW,srcH) se dentro de targetRect.
+        // Se pixel estiver fora de targetRect, o clamp() do sampler limitará, o edge repetition preencheria...
+        // O ideal seria descartar o pixel com alpha = 0 se estivesse fora das boardas para Fill/Fit. 
+        // Vamos delegar o clip p/ Clamp? ResizeMath já da Bounds exatos.
+        
+        float scaleU = compW / targetRect.Width;
+        float scaleV = compH / targetRect.Height;
+        float offsetU = -(targetRect.X / targetRect.Width);
+        float offsetV = -(targetRect.Y / targetRect.Height);
+        
         var m = Matrix4x4.Identity;
         m.M11 = scaleU;
         m.M22 = scaleV;
-        m.M41 = offsetU; // translação em UV (linha 4 = coluna de homogêneo)
+        m.M41 = offsetU; 
         m.M42 = offsetV;
         return m;
-    }
-
-    public void Dispose()
-    {
-        _sampler.Dispose();
-        _cbuffer.Dispose();
-        _ps.Dispose();
-        _vs.Dispose();
-        _compSrv.Dispose();
-        _compRtv.Dispose();
-        _compTexture.Dispose();
     }
 
     private static byte[] CompileShader(string source, string entryPoint, string profile)
@@ -184,4 +229,20 @@ public sealed class CompositionRenderer : IDisposable
         }
         using (blob) return blob.AsBytes();
     }
+
+    public void Dispose()
+    {
+        _blendNormal.Dispose();
+        _blendAdd.Dispose();
+        _blendScreen.Dispose();
+        _blendMultiply.Dispose();
+        _sampler.Dispose();
+        _cbuffer.Dispose();
+        _ps.Dispose();
+        _vs.Dispose();
+        _compSrv.Dispose();
+        _compRtv.Dispose();
+        _compTexture.Dispose();
+    }
 }
+

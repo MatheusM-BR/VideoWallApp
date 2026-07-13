@@ -4,9 +4,10 @@
 
 cbuffer QuadParams : register(b0)
 {
-    float4x4 uvTransform;   // transforma [0,1]² → [u0,v0,u1,v1] do clip na composição
+    row_major float4x4 uvTransform; // matriz System.Numerics enviada em row-major
     float    opacity;
-    float3   _pad;
+    int      blendMode;     // 0=Normal, 1=Add, 2=Multiply, 3=Screen
+    float2   _pad;
 };
 
 Texture2D    gTexture : register(t0);
@@ -26,8 +27,8 @@ VSOut VSMain(uint id : SV_VertexID)
     float2 uv   = float2((id << 1) & 2, id & 2);
     o.pos       = float4(uv * float2(2, -2) + float2(-1, 1), 0, 1);
     // Aplicar transformação de UV para letterbox / saída.
-    // uvTransform encode: col0.xy = scale, col3.xy = offset
-    float4 uvh  = mul(uvTransform, float4(uv, 0, 1));
+    // Para System.Numerics.Matrix4x4 (Row-Major), o correto é mul(vetor, matriz).
+    float4 uvh  = mul(float4(uv, 0, 1), uvTransform);
     o.uv        = uvh.xy;
     return o;
 }
@@ -35,6 +36,20 @@ VSOut VSMain(uint id : SV_VertexID)
 float4 PSMain(VSOut i) : SV_Target
 {
     float4 col = gTexture.Sample(gSampler, i.uv);
-    col.rgb    *= opacity;
+    
+    // Premultiplied alpha default
+    col.rgb *= col.a;
+    
+    // Multiply BlendMode: src_color * dest_color.
+    // Para fade-out, deve tender a branco (1.0) para que branco * dest_color mantenha o fundo intocado.
+    if (blendMode == 2)
+    {
+        col.rgb = lerp(float3(1, 1, 1), col.rgb, opacity);
+        return col; // alpha irrelevante no multiply, será omitido pelo hardware blending state.
+    }
+    
+    col.rgb *= opacity;
+    col.a   *= opacity;
+    
     return col;
 }
