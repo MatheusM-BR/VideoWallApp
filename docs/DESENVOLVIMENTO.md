@@ -33,7 +33,7 @@ Regras de progressão:
 
 | Fase | Descrição | Status |
 |------|-----------|--------|
-| 0 | Fundação D3D11 multi-monitor | pendente |
+| 0 | Fundação D3D11 multi-monitor | implementada — DoD visual em 2 monitores pendente |
 | 1 | Player de vídeo (FFmpeg SW) | pendente |
 | 2 | Grade layers × colunas | pendente |
 | 3 | Transporte, atalhos, autopilot | pendente |
