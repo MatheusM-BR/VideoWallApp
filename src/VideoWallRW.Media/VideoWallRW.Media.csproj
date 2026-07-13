@@ -12,16 +12,15 @@
 
   <ItemGroup>
     <PackageReference Include="FFmpeg.AutoGen" Version="7.1.1" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="Serilog" Version="4.2.0" />
+    <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
   </ItemGroup>
 
   <!-- Copia as DLLs nativas do FFmpeg (shared build) para o diretório de saída.
        Coloque os binários em third_party/ffmpeg/ na raiz da solução. -->
   <ItemGroup>
-    <Content Include="$(MSBuildThisFileDirectory)..\..\third_party\ffmpeg\*.dll"
-             Condition="Exists('$(MSBuildThisFileDirectory)..\..\third_party\ffmpeg\')"
-             CopyToOutputDirectory="PreserveNewest"
-             Link="%(Filename)%(Extension)" />
+    <Content Include="$(MSBuildThisFileDirectory)..\..\third_party\ffmpeg\*.dll" Condition="Exists('$(MSBuildThisFileDirectory)..\..\third_party\ffmpeg\')" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
