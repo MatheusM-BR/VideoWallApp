@@ -12,16 +12,18 @@ namespace VideoWallRW.Engine.Output;
 /// </summary>
 public sealed class SwapChainOutput : IDisposable
 {
+    private readonly Graphics.GraphicsDevice _gfx;
     private readonly IDXGISwapChain1 _swapChain;
     private readonly bool _tearingSupported;
 
     public OutputWindow Window { get; }
     public MonitorInfo Monitor => Window.Monitor;
-    public ID3D11RenderTargetView Rtv { get; }
+    public ID3D11RenderTargetView Rtv { get; private set; }
     public bool IsPrimary { get; set; }
 
     public SwapChainOutput(Graphics.GraphicsDevice gfx, MonitorInfo monitor)
     {
+        _gfx = gfx;
         _tearingSupported = gfx.TearingSupported;
         Window = new OutputWindow(monitor);
         try
@@ -43,8 +45,7 @@ public sealed class SwapChainOutput : IDisposable
             _swapChain = gfx.Factory.CreateSwapChainForHwnd(gfx.Device, Window.Hwnd, desc);
             gfx.Factory.MakeWindowAssociation(Window.Hwnd, WindowAssociationFlags.IgnoreAltEnter);
 
-            using var backBuffer = _swapChain.GetBuffer<ID3D11Texture2D>(0);
-            Rtv = gfx.Device.CreateRenderTargetView(backBuffer);
+            Rtv = CreateBackBufferRtv();
         }
         catch
         {
@@ -53,13 +54,31 @@ public sealed class SwapChainOutput : IDisposable
         }
     }
 
+    private ID3D11RenderTargetView CreateBackBufferRtv()
+    {
+        using var backBuffer = _swapChain.GetBuffer<ID3D11Texture2D>(0);
+        return _gfx.Device.CreateRenderTargetView(backBuffer);
+    }
+
     public Result Present()
     {
+        Result result;
         if (IsPrimary)
-            return _swapChain.Present(1, PresentFlags.None);
-        return _tearingSupported
-            ? _swapChain.Present(0, PresentFlags.AllowTearing)
-            : _swapChain.Present(0, PresentFlags.None);
+            result = _swapChain.Present(1, PresentFlags.None);
+        else
+            result = _tearingSupported
+                ? _swapChain.Present(0, PresentFlags.AllowTearing)
+                : _swapChain.Present(0, PresentFlags.None);
+
+        if (result.Success)
+        {
+            // Swapchains flip-model (FLIP_DISCARD) rotam qual buffer físico o índice 0
+            // representa a cada Present — o RTV precisa ser recriado a cada frame, senão
+            // o render passa a escrever num buffer obsoleto e a saída trava preta.
+            Rtv.Dispose();
+            Rtv = CreateBackBufferRtv();
+        }
+        return result;
     }
 
     public void Dispose()
