@@ -61,7 +61,18 @@ public partial class App : Application
         // Factory injetada: cria VideoFileSource no contexto do App (que tem referência a Media).
         // Isso mantém Engine sem dependência direta de Media.
         var gfxRef = _gfx;
-        _render.SetClipFactory(path => new VideoFileSource(gfxRef, path));
+        _render.SetClipFactory((clip, defaultImageDuration) =>
+        {
+            return clip.Source switch
+            {
+                Core.Model.FileVideoSource v => new VideoFileSource(gfxRef, v.Path),
+                Core.Model.FileImageSource i => new ImageFileSource(gfxRef, i.Path)
+                {
+                    Duration = clip.ImageDuration ?? defaultImageDuration
+                },
+                _ => throw new NotSupportedException($"Tipo de fonte {clip.Source.GetType()} não é suportada por esta factory.")
+            };
+        });
 
         _render.Start();
 

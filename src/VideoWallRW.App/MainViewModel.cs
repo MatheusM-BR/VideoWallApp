@@ -9,6 +9,8 @@ using VideoWallRW.Core.Stats;
 using VideoWallRW.Engine;
 using VideoWallRW.Engine.Graphics;
 using VideoWallRW.Engine.Output;
+using VideoWallRW.App.ViewModels;
+using VideoWallRW.Core.Model;
 
 namespace VideoWallRW.App;
 
@@ -16,24 +18,27 @@ public sealed partial class MainViewModel : ObservableObject
 {
     private readonly GraphicsDevice _gfx;
     private readonly RenderThread _render;
+    private bool _masterPaused;
+    private bool _blackout;
+    private double _opacityBeforeBlackout = 1.0;
 
     public ObservableCollection<MonitorViewModel> Monitors { get; } = [];
 
     [ObservableProperty] private string _statusText = "Pronto — marque um monitor para ativar a saída.";
 
-    // ── Clip ──────────────────────────────────────────────────────────────────
-    [ObservableProperty] private bool _clipLoaded;
-    [ObservableProperty] private string _playPauseLabel = "▶ Play";
-    [ObservableProperty] private string _timecodeText = "--:--.- / --:--.-";
-    [ObservableProperty] private double _seekPosition;     // 0.0 .. 1.0
-    [ObservableProperty] private double _seekMax = 1.0;
-
-
-
-    public MainViewModel(GraphicsDevice gfx, RenderThread render)
+    public CompositionViewModel Grid { get; }    public MainViewModel(GraphicsDevice gfx, RenderThread render)
     {
         _gfx = gfx;
         _render = render;
+        
+        var compModel = new Composition { ColumnCount = 8 };
+        compModel.AddLayer(new Layer { Name = "Layer 3" });
+        compModel.AddLayer(new Layer { Name = "Layer 2" });
+        compModel.AddLayer(new Layer { Name = "Layer 1" }); // Base
+        
+        Grid = new CompositionViewModel(compModel, _render);
+        Grid.SyncToEngine(); // Manda a árvore pro Renderer Thread
+        
         _render.StatsUpdated += OnStatsUpdated;
         _render.EngineFailed += OnEngineFailed;
         RefreshMonitors();
@@ -57,46 +62,20 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Abrir vídeo",
-            Filter = "Vídeos|*.mp4;*.mov;*.mkv;*.avi;*.wmv;*.webm;*.ts;*.m4v|Todos os arquivos|*.*",
+            Title = "Adicionar Arquivo ao Deck",
+            Filter = "Mídias|*.mp4;*.mov;*.mkv;*.avi;*.wmv;*.webm;*.png;*.jpg;*.jpeg|Todos os arquivos|*.*",
         };
         if (dlg.ShowDialog() != true) return;
-        _render.Post(new LoadTestClip(dlg.FileName));
-        ClipLoaded = true;
-        PlayPauseLabel = "⏸ Pause";
-        StatusText = $"Carregando: {Path.GetFileName(dlg.FileName)}";
-    }
+        
+        // P/ Teste: coloca na Layer 0 (superior no resolume index), Col 0
+        var ext = Path.GetExtension(dlg.FileName).ToLowerInvariant();
+        SourceDescriptor src = ext is ".png" or ".jpg" or ".jpeg" 
+            ? new FileImageSource(dlg.FileName) 
+            : new FileVideoSource(dlg.FileName);
 
-    [RelayCommand]
-    private void PlayPause()
-    {
-        if (!ClipLoaded) return;
-        if (PlayPauseLabel.StartsWith("▶"))
-        {
-            _render.Post(new PlayClip());
-            PlayPauseLabel = "⏸ Pause";
-        }
-        else
-        {
-            _render.Post(new PauseClip());
-            PlayPauseLabel = "▶ Play";
-        }
-    }
-
-    [RelayCommand]
-    private void SeekTo(double normalizedPos)
-    {
-        if (!ClipLoaded || SeekMax <= 0) return;
-        _render.Post(new SeekClip(normalizedPos * SeekMax));
-    }
-
-    [RelayCommand]
-    private void SetSpeed(string? speedStr)
-    {
-        if (!ClipLoaded) return;
-        if (double.TryParse(speedStr, System.Globalization.NumberStyles.Float,
-            System.Globalization.CultureInfo.InvariantCulture, out double speed))
-            _render.Post(new SetClipSpeed(speed));
+        Grid.SetClip(0, 0, new Clip(src) { Name = Path.GetFileName(dlg.FileName) });
+        
+        StatusText = $"Load p/ testes em [0,0]: {Path.GetFileName(dlg.FileName)}";
     }
 
     private void OnStatsUpdated(EngineStats stats)
@@ -113,24 +92,10 @@ public sealed partial class MainViewModel : ObservableObject
             if (stats.Outputs.Count > 0)
                 StatusText = string.Join("   |   ",
                     stats.Outputs.Select(o => $"{o.MonitorDeviceName}: {o.Fps:F1} fps"));
-            else if (!ClipLoaded)
+            else
                 StatusText = "Nenhuma saída ativa";
 
-            if (stats.Clip is { } clip)
-            {
-                // Timecode
-                TimecodeText = $"{FormatTime(clip.PlayheadSeconds)} / {FormatTime(clip.DurationSeconds)}";
-
-                // Slider de seek (sem causar loop de feedback — seek é disparado apenas no MouseUp).
-                if (clip.DurationSeconds > 0)
-                {
-                    SeekMax = clip.DurationSeconds;
-                    SeekPosition = clip.PlayheadSeconds;
-                }
-
-                // Label play/pause sincronizado com o estado real.
-                PlayPauseLabel = clip.State == PlaybackState.Playing ? "⏸ Pause" : "▶ Play";
-            }
+            // (Opcional) Poderíamos monitorar o stats.Clip para o painel de propriedades...
         });
     }
 
@@ -147,6 +112,37 @@ public sealed partial class MainViewModel : ObservableObject
     {
         var ts = TimeSpan.FromSeconds(seconds);
         return $"{(int)ts.TotalMinutes:D2}:{ts.Seconds:D2}.{ts.Milliseconds / 100}";
+    }
+
+    public void ToggleMasterPause()
+    {
+        _masterPaused = !_masterPaused;
+        _render.Post(new SetMasterPaused(_masterPaused));
+        StatusText = _masterPaused ? "Pausa global ativa" : "Pausa global desativada";
+    }
+
+    public void ToggleBlackout()
+    {
+        if (!_blackout)
+        {
+            _opacityBeforeBlackout = Grid.Model.MasterOpacity;
+            Grid.Model.MasterOpacity = 0;
+        }
+        else
+        {
+            Grid.Model.MasterOpacity = _opacityBeforeBlackout;
+        }
+
+        _blackout = !_blackout;
+        _render.Post(new SetMasterOpacity(Grid.Model.MasterOpacity));
+        StatusText = _blackout ? "Blackout ativo" : "Blackout desativado";
+    }
+
+    public void ToggleOutputs()
+    {
+        bool enableOutputs = Monitors.All(monitor => !monitor.IsActive);
+        foreach (var monitor in Monitors)
+            monitor.IsActive = enableOutputs;
     }
 }
 

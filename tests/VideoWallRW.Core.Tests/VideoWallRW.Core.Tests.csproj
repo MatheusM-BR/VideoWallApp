@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\VideoWallRW.Core\VideoWallRW.Core.csproj" />
+    <ProjectReference Include="..\..\src\VideoWallRW.Engine\VideoWallRW.Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

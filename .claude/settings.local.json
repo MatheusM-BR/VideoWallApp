@@ -12,7 +12,11 @@
       "PowerShell(git add docs/DESENVOLVIMENTO.md)",
       "PowerShell($env:DOTNET_ROOT = \"$env:LOCALAPPDATA\\\\Microsoft\\\\dotnet\"; $env:PATH = \"$env:DOTNET_ROOT;$env:PATH\"; dotnet publish src/VideoWallRW.App -c Release -r win-x64 --self-contained true -o artifacts\\\\publish\\\\VideoWallRW-win-x64 --nologo -v minimal)",
       "PowerShell($pub = \"artifacts\\\\publish\\\\VideoWallRW-win-x64\"; $size = \\(Get-ChildItem $pub -Recurse | Measure-Object Length -Sum\\).Sum / 1MB; \"Tamanho: {0:F0} MB, arquivos: {1}\" -f $size, \\(Get-ChildItem $pub -Recurse -File\\).Count; Test-Path \"$pub\\\\VideoWallRW.App.exe\"; $app = Start-Process -FilePath \"$pub\\\\VideoWallRW.App.exe\" -PassThru; Start-Sleep -Seconds 5; $alive = -not $app.HasExited; if \\($alive\\) { Stop-Process -Id $app.Id -Confirm:$false }; \"Build portatil abriu e ficou vivo: $alive\")",
-      "PowerShell(git add src/VideoWallRW.Engine/Graphics/GraphicsDevice.cs publish.ps1 docs/DISTRIBUICAO.md)"
+      "PowerShell(git add src/VideoWallRW.Engine/Graphics/GraphicsDevice.cs publish.ps1 docs/DISTRIBUICAO.md)",
+      "Bash(powershell -NoProfile -Command '& { $env:DOTNET_ROOT = \"$env:LOCALAPPDATA\\\\Microsoft\\\\dotnet\"; $env:PATH = \"$env:DOTNET_ROOT;$env:PATH\"; dotnet build VideoWallRW.sln -warnaserror --nologo -v minimal }')",
+      "Bash(powershell -NoProfile -Command '& { $env:DOTNET_ROOT = \"$env:LOCALAPPDATA\\\\Microsoft\\\\dotnet\"; $env:PATH = \"$env:DOTNET_ROOT;$env:PATH\"; dotnet test tests/VideoWallRW.Core.Tests --nologo -v minimal --no-build }')",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }

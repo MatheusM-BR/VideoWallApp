@@ -1,11 +1,15 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using VideoWallRW.App.Input;
 
 namespace VideoWallRW.App;
 
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
+    private readonly KeymapService _keymap = new();
 
     public MainWindow(MainViewModel vm)
     {
@@ -14,17 +18,44 @@ public partial class MainWindow : Window
         InitializeComponent();
     }
 
-    // O slider de seek dispara SeekTo no MouseUp para evitar seek contínuo enquanto
-    // o usuário arrasta (que degeneraria em centenas de comandos por segundo).
-    private void OnSeekMouseUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    private void OnClipDrop(object sender, DragEventArgs e)
     {
-        if (sender is Slider slider)
-            _vm.SeekToCommand.Execute(slider.Value / Math.Max(slider.Maximum, 0.001));
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            {
+                if (sender is FrameworkElement fe && fe.DataContext is ViewModels.ClipViewModel clipVm)
+                {
+                    _vm.Grid.SetFiles(clipVm.LayerIndex, clipVm.ColumnIndex, files);
+                    e.Handled = true;
+                }
+            }
+        }
     }
 
-    private void OnSpeedChanged(object sender, SelectionChangedEventArgs e)
+    private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (sender is ComboBox combo && combo.SelectedItem is ComboBoxItem item)
-            _vm.SetSpeedCommand.Execute(item.Tag?.ToString());
+        if (Keyboard.FocusedElement is TextBoxBase || !_keymap.TryGetAction(e, out var action))
+            return;
+
+        if (action.StartsWith("TriggerColumn", StringComparison.Ordinal) &&
+            int.TryParse(action["TriggerColumn".Length..], out int column))
+        {
+            _vm.Grid.TriggerColumnFromShortcut(column - 1);
+        }
+        else
+        {
+            switch (action)
+            {
+                case "ToggleMasterPause": _vm.ToggleMasterPause(); break;
+                case "ClearLayer": _vm.Grid.ClearSelectedLayer(); break;
+                case "ClearAll": _vm.Grid.ClearAll(); break;
+                case "Blackout": _vm.ToggleBlackout(); break;
+                case "ToggleOutputs": _vm.ToggleOutputs(); break;
+                default: return;
+            }
+        }
+
+        e.Handled = true;
     }
 }
