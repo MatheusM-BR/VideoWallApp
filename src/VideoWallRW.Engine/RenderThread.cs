@@ -25,10 +25,11 @@ public sealed class RenderThread : IDisposable
     private Thread? _thread;
     private volatile bool _running;
 
-    // ── Fase 1: estado de playback ────────────────────────────────────────────
-    private ClipPlayer? _player;
-    private CompositionRenderer? _composition;
-    private string? _clipPath;
+    // ── Fase 2: estado de playback compositado ────────────────────────────────
+    private Core.Model.Composition? _compositionData;
+    private CompositionRenderer? _compositionRenderer;
+    private readonly List<LayerRenderer> _layers = [];
+    private bool _masterPaused;
 
     /// <summary>Publicado ~2x/segundo, na render thread.</summary>
     public event Action<EngineStats>? StatsUpdated;
@@ -87,15 +88,19 @@ public sealed class RenderThread : IDisposable
                 lastTime = time;
                 if (dt > 0.1) dt = 0.1; // cap: evitar salto grande após pausa do debugger
 
-                _player?.Tick(dt);
+                if (!_masterPaused)
+                {
+                    foreach (var layer in _layers)
+                        layer.Tick(dt);
+                }
 
-                if (_composition != null && _player != null)
+                if (_compositionRenderer != null && _compositionData != null)
                 {
                     // Passe de composição + saídas via CompositionRenderer.
                     var outputList = _outputs
                         .Select(o => (o.Rtv, o.Monitor.Width, o.Monitor.Height))
                         .ToList();
-                    _composition.Render(_gfx.Context, _player.Source, _player.Playhead, outputList);
+                    _compositionRenderer.Render(_gfx.Context, _compositionData, _layers, outputList);
                 }
                 else
                 {
@@ -127,10 +132,11 @@ public sealed class RenderThread : IDisposable
         }
         finally
         {
-            _player?.Dispose();
-            _player = null;
-            _composition?.Dispose();
-            _composition = null;
+            foreach (var layer in _layers) layer.Dispose();
+            _layers.Clear();
+            _compositionRenderer?.Dispose();
+            _compositionRenderer = null;
+            _compositionData = null;
             foreach (var output in _outputs) output.Dispose();
             _outputs.Clear();
             OutputWindow.PumpMessages();
@@ -152,16 +158,48 @@ public sealed class RenderThread : IDisposable
                 LoadClip(path);
                 break;
             case PlayClip:
-                _player?.Play();
+                foreach (var layer in _layers) layer.ActivePlayer?.Play();
                 break;
             case PauseClip:
-                _player?.Pause();
+                foreach (var layer in _layers) layer.ActivePlayer?.Pause();
                 break;
             case SeekClip(var seconds):
-                _player?.Seek(seconds);
+                foreach (var layer in _layers) layer.ActivePlayer?.Seek(seconds);
                 break;
             case SetClipSpeed(var speed):
-                if (_player != null) _player.Speed = speed;
+                foreach (var layer in _layers) if (layer.ActivePlayer != null) layer.ActivePlayer.Speed = speed;
+                break;
+                
+            // Comandos de Fase 2
+            case SyncComposition(var data):
+                SyncComp(data);
+                break;
+            case TriggerClip(var layerIdx, var colIdx):
+                OnTriggerClip(layerIdx, colIdx);
+                break;
+            case TriggerColumn(var colIdx):
+                OnTriggerColumn(colIdx);
+                break;
+            case ClearLayer(var layerIdx):
+                OnClearLayer(layerIdx);
+                break;
+            case ClearAll:
+                OnClearAll();
+                break;
+            case SetLayerOpacity(var layerIdx, var opacity):
+                OnSetLayerOpacity(layerIdx, opacity);
+                break;
+            case SetLayerState(var layerIdx, var blend, var bypass, var solo, var transitionSeconds):
+                OnSetLayerState(layerIdx, blend, bypass, solo, transitionSeconds);
+                break;
+            case UpdateClip(var layerIdx, var colIdx, var clip):
+                OnUpdateClip(layerIdx, colIdx, clip);
+                break;
+            case SetMasterPaused(var isPaused):
+                _masterPaused = isPaused;
+                break;
+            case SetMasterOpacity(var opacity):
+                OnSetMasterOpacity(opacity);
                 break;
             default:
                 Log.Warning("Comando não tratado: {Command}", command);
@@ -169,47 +207,199 @@ public sealed class RenderThread : IDisposable
         }
     }
 
-    private void LoadClip(string path)
+    private void SyncComp(Core.Model.Composition data)
     {
-        // Descartar clip anterior.
-        _player?.Dispose();
-        _player = null;
-        _composition?.Dispose();
-        _composition = null;
+        // Descarta camadas antigas
+        foreach (var layer in _layers) layer.Dispose();
+        _layers.Clear();
+        _compositionRenderer?.Dispose();
+        
+        _compositionData = data.Clone();
+        _compositionRenderer = new CompositionRenderer(_gfx,
+            _compositionData.Width, _compositionData.Height);
+        
+        foreach (var layerModel in _compositionData.Layers)
+        {
+            _layers.Add(new LayerRenderer(layerModel));
+        }
+        
+        Log.Information("Composition Sincronizada com {N} camadas no Motor.", _layers.Count);
+    }
+
+    private void OnTriggerClip(int layerIdx, int colIdx)
+    {
+        if (_compositionData == null || layerIdx < 0 || layerIdx >= _compositionData.Layers.Count) return;
+        var layerModel = _compositionData.Layers[layerIdx];
+        if (colIdx < 0 || colIdx >= layerModel.Clips.Length) return;
+        
+        var clipModel = layerModel.Clips[colIdx];
+        var layerRenderer = _layers[layerIdx];
+        
+        if (clipModel?.Source == null)
+        {
+            layerRenderer.SetPlayer(null, null); // Clear layer if slot is empty
+            return;
+        }
+
+        if (_clipFactory == null)
+        {
+            Log.Warning("ClipFactory não mapeada no Engine.");
+            return;
+        }
 
         try
         {
-            // VideoFileSource abre o arquivo (probe rápido) e inicia o worker.
-            // O import de VideoWallRW.Media é feito via interface (IPlayableSource no Core).
-            // Para instanciar, o Engine carrega via factory injetada ou cast direto.
-            // Nesta fase de teste, o App passa o path e o Engine cria diretamente
-            // usando a referência de projeto (Media → Engine é permitido via App).
-            // NOTA: Engine.csproj não referencia Media; a criação concreta é delegada
-            // ao App via factory. Aqui usamos um delegate configurado pelo App.
-            if (_clipFactory == null)
-            {
-                Log.Warning("ClipFactory não configurada; LoadTestClip ignorado.");
-                return;
-            }
-            var source = _clipFactory(path);
-            _player = new ClipPlayer(source);
-            _composition = new CompositionRenderer(_gfx);
-            _clipPath = path;
-            Log.Information("Clip carregado: {Path}", path);
+            // Cria player e vincula atomicamente -> cross-fade implementável a partir de agora sem black frame
+            var source = _clipFactory(clipModel, _compositionData.DefaultImageDuration);
+            var player = new ClipPlayer(source, clipModel);
+            player.EndReached += endedClip => OnClipEnded(layerIdx, endedClip);
+            bool retrigger = layerRenderer.ActiveClip?.Id == clipModel.Id;
+            layerRenderer.SetPlayer(player, clipModel, retrigger);
+            Log.Information("Trigger disparado: Camada {L}, Coluna {C}", layerIdx, colIdx);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Falha ao carregar clip: {Path}", path);
+            Log.Error(ex, "Erro ao disparar clipe na camada {L}", layerIdx);
         }
     }
 
+    private void OnTriggerColumn(int colIdx)
+    {
+        if (_compositionData == null) return;
+        for (int i = 0; i < _compositionData.Layers.Count; i++)
+        {
+            OnTriggerClip(i, colIdx);
+        }
+    }
+
+    private void OnClearLayer(int layerIdx)
+    {
+        if (layerIdx >= 0 && layerIdx < _layers.Count)
+            _layers[layerIdx].SetPlayer(null, null);
+    }
+
+    private void OnClearAll()
+    {
+        foreach (var layer in _layers)
+            layer.SetPlayer(null, null);
+    }
+
+    private void OnSetLayerOpacity(int layerIdx, double opacity)
+    {
+        if (_compositionData != null && layerIdx >= 0 && layerIdx < _compositionData.Layers.Count)
+        {
+            _compositionData.Layers[layerIdx].Opacity = Math.Clamp(opacity, 0.0, 1.0);
+        }
+    }
+
+    private void OnSetMasterOpacity(double opacity)
+    {
+        if (_compositionData is not null)
+            _compositionData.MasterOpacity = Math.Clamp(opacity, 0.0, 1.0);
+    }
+
+    private void OnSetLayerState(int layerIdx, Core.Model.BlendMode blend, bool bypass, bool solo,
+        double transitionSeconds)
+    {
+        if (_compositionData is null || layerIdx < 0 || layerIdx >= _compositionData.Layers.Count)
+            return;
+
+        var layer = _compositionData.Layers[layerIdx];
+        layer.Blend = blend;
+        layer.Bypass = bypass;
+        layer.Solo = solo;
+        layer.TransitionSeconds = Math.Clamp(transitionSeconds, 0.0, 10.0);
+    }
+
+    private void OnUpdateClip(int layerIdx, int colIdx, Core.Model.Clip? clip)
+    {
+        if (_compositionData is null || layerIdx < 0 || layerIdx >= _compositionData.Layers.Count)
+            return;
+
+        var clips = _compositionData.Layers[layerIdx].Clips;
+        if (colIdx < 0 || colIdx >= clips.Length)
+            return;
+
+        var updatedClip = clip?.Copy();
+        clips[colIdx] = updatedClip;
+        if (updatedClip is not null)
+            _layers[layerIdx].UpdateClip(updatedClip);
+    }
+
+    private void OnClipEnded(int layerIdx, Core.Model.Clip endedClip)
+    {
+        if (_compositionData is null || layerIdx < 0 || layerIdx >= _layers.Count ||
+            _layers[layerIdx].ActiveClip?.Id != endedClip.Id)
+            return;
+
+        int currentColumn = Array.FindIndex(_compositionData.Layers[layerIdx].Clips,
+            clip => clip?.Id == endedClip.Id);
+        int nextColumn = FindAutopilotColumn(_compositionData.Layers[layerIdx], currentColumn, endedClip.Autopilot);
+        if (nextColumn >= 0)
+        {
+            OnTriggerClip(layerIdx, nextColumn);
+            return;
+        }
+
+        if (endedClip.PlayMode == Core.Model.PlayMode.OnceClear)
+            OnClearLayer(layerIdx);
+    }
+
+    private static int FindAutopilotColumn(Core.Model.Layer layer, int currentColumn,
+        Core.Model.AutopilotAction action)
+    {
+        if (action == Core.Model.AutopilotAction.None || layer.Clips.Length == 0)
+            return -1;
+
+        var populated = Enumerable.Range(0, layer.Clips.Length)
+            .Where(index => layer.Clips[index] is not null)
+            .ToArray();
+        if (populated.Length == 0)
+            return -1;
+
+        return action switch
+        {
+            Core.Model.AutopilotAction.PlayFirstClip => populated[0],
+            Core.Model.AutopilotAction.PlayRandomClip => populated[Random.Shared.Next(populated.Length)],
+            Core.Model.AutopilotAction.PlayNextClip => FindAdjacent(layer, currentColumn, 1),
+            Core.Model.AutopilotAction.PlayPreviousClip => FindAdjacent(layer, currentColumn, -1),
+            _ => -1
+        };
+    }
+
+    private static int FindAdjacent(Core.Model.Layer layer, int currentColumn, int direction)
+    {
+        for (int offset = 1; offset <= layer.Clips.Length; offset++)
+        {
+            int index = (currentColumn + direction * offset) % layer.Clips.Length;
+            if (index < 0) index += layer.Clips.Length;
+            if (layer.Clips[index] is not null)
+                return index;
+        }
+        return -1;
+    }
+
+    // Compatibilidade temporária fase 1
+    private void LoadClip(string path)
+    {
+        if (_clipFactory == null) return;
+        var comp = new Core.Model.Composition();
+        var baseLayer = new Core.Model.Layer { Name = "Base" };
+        var clip = new Core.Model.Clip(new Core.Model.FileVideoSource(path));
+        baseLayer.Clips[0] = clip;
+        comp.AddLayer(baseLayer);
+        
+        SyncComp(comp);
+        OnTriggerClip(0, 0);
+    }
+
     // ── Factory injetada pelo App (evita dependência Engine → Media) ──────────
-    private Func<string, IPlayableSource>? _clipFactory;
+    private Func<Core.Model.Clip, double, IPlayableSource>? _clipFactory;
 
     /// <summary>
     /// Configura a fábrica de fontes de clip. Chamar antes de <see cref="Start"/>.
     /// </summary>
-    public void SetClipFactory(Func<string, IPlayableSource> factory)
+    public void SetClipFactory(Func<Core.Model.Clip, double, IPlayableSource> factory)
         => _clipFactory = factory;
 
     private void Enable(string deviceName)
@@ -256,14 +446,15 @@ public sealed class RenderThread : IDisposable
         _frameCounts.Clear();
         statsClock.Restart();
 
-        ClipSnapshot? clip = null;
-        if (_player != null && _clipPath != null)
+        ClipSnapshot? clipShot = null;
+        var firstLayer = _layers.FirstOrDefault();
+        if (firstLayer?.ActivePlayer != null && firstLayer.ActiveClip != null && firstLayer.ActiveClip.Source is Core.Model.FileVideoSource vSrc)
         {
-            double decodeFps = _player.Source.DecodeFps;
-            clip = new ClipSnapshot(_clipPath, _player.Playhead, _player.Source.Duration,
-                _player.State, decodeFps);
+            double decodeFps = firstLayer.ActivePlayer.Source.DecodeFps;
+            clipShot = new ClipSnapshot(vSrc.Path, firstLayer.ActivePlayer.Playhead, firstLayer.ActivePlayer.Source.Duration,
+                firstLayer.ActivePlayer.State, decodeFps);
         }
 
-        StatsUpdated?.Invoke(new EngineStats(outputs, clip));
+        StatsUpdated?.Invoke(new EngineStats(outputs, clipShot));
     }
 }
