@@ -1,5 +1,7 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Media;
 using Serilog;
 using VideoWallRW.Engine;
 using VideoWallRW.Engine.Graphics;
@@ -17,6 +19,13 @@ public partial class App : Application
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
+        // O processo também cria seu próprio device D3D11 (RenderThread) além do que o WPF
+        // usa internamente para desenhar suas próprias janelas — em algumas combinações de
+        // GPU/driver isso deixa a janela do painel em branco até o primeiro repaint forçado.
+        // O painel não tem nada pesado para desenhar (o vídeo vai pelas janelas de saída,
+        // não pelo WPF), então cair para software aqui não tem custo perceptível.
+        RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+
         var logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "VideoWallRW", "logs");
