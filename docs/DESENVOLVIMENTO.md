@@ -36,7 +36,7 @@ Regras de progressão:
 | 0 | Fundação D3D11 multi-monitor | implementada — DoD visual em 2 monitores pendente |
 | 1 | Player de vídeo (FFmpeg SW) | implementada — DoD manual pendente |
 | 2 | Grade layers × colunas | implementada — DoD manual pendente |
-| 3 | Transporte, atalhos, autopilot | implementada exceto áudio (T3.6) — DoD manual pendente |
+| 3 | Transporte, atalhos, autopilot | implementada (T3.6 áudio incluído) — DoD manual pendente |
 | 4 | Advanced Output (slices) | pendente |
 | 5 | Fontes ao vivo (NDI + captura) | pendente |
 | 6 | Performance (HW decode, HAP, preroll) | pendente |
