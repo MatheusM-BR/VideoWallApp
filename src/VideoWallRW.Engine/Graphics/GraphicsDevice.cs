@@ -37,8 +37,16 @@ public sealed class GraphicsDevice : IDisposable
             flags |= DeviceCreationFlags.Debug;
 #endif
         FeatureLevel[] featureLevels = [FeatureLevel.Level_11_1, FeatureLevel.Level_11_0];
-        D3D11.D3D11CreateDevice(null, DriverType.Hardware, flags, featureLevels,
-            out ID3D11Device? device, out FeatureLevel achieved, out ID3D11DeviceContext? context).CheckError();
+        var result = D3D11.D3D11CreateDevice(null, DriverType.Hardware, flags, featureLevels,
+            out ID3D11Device? device, out FeatureLevel achieved, out ID3D11DeviceContext? context);
+        if (result.Failure)
+        {
+            // Máquina sem GPU utilizável ou driver quebrado: WARP (software) mantém o
+            // programa funcional para diagnóstico — performance de show exige hardware.
+            Log.Warning("Device de hardware falhou ({Result}); usando WARP (renderização por software)", result);
+            D3D11.D3D11CreateDevice(null, DriverType.Warp, flags, featureLevels,
+                out device, out achieved, out context).CheckError();
+        }
 
         // Obrigatório para o D3D11VA da fase 6; ligado desde já (barato).
         using (var multithread = context!.QueryInterfaceOrNull<ID3D11Multithread>())
