@@ -355,6 +355,16 @@ public sealed unsafe class MediaDecoder : IDisposable
             int[] dstLinesize = [dstStride];
             ffmpeg.sws_scale(_swsCtx, _frame->data, _frame->linesize, 0, _frame->height,
                 dstData, dstLinesize);
+
+            // sws_scale não garante alpha=255 ao converter de um formato sem alpha (ex.: YUV420P)
+            // para BGRA — em vários builds do FFmpeg o byte de alpha sai zerado. Vídeo é sempre
+            // opaco no escopo atual (sem transparência real), e o pixel shader faz o premultiply
+            // por esse canal (col.rgb *= col.a) — alpha=0 apagaria a imagem inteira mesmo com os
+            // pixels RGB corretos. Forçar opaco aqui é o ponto certo: um único lugar, sem
+            // depender do comportamento de uma versão específica do swscale.
+            byte* p = dstPtr;
+            for (int i = 3; i < needed; i += 4)
+                p[i] = 0xFF;
         }
 
         target.Stride = dstStride;
