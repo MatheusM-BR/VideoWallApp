@@ -48,6 +48,10 @@ public sealed class Screen
     public ColorCorrection Color { get; set; } = new();
     public List<Slice> Slices { get; set; } = [];
 
+    /// <summary>Roteamento por saída (estilo Arena): null = composição inteira
+    /// (todas as layers misturadas); N = só a layer de índice N vai pra este monitor.</summary>
+    public int? SourceLayerIndex { get; set; }
+
     public Screen Clone() => new()
     {
         Id = Id,
@@ -56,6 +60,7 @@ public sealed class Screen
         Enabled = Enabled,
         Color = new ColorCorrection { Brightness = Color.Brightness, Contrast = Color.Contrast, Gamma = Color.Gamma },
         Slices = Slices.Select(s => s.Clone()).ToList(),
+        SourceLayerIndex = SourceLayerIndex,
     };
 }
 

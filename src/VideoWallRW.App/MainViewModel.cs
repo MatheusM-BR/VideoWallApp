@@ -59,6 +59,7 @@ public sealed partial class MainViewModel : ObservableObject
         Grid = new CompositionViewModel(compModel, _render);
         Grid.SyncToEngine();
         Grid.Changed += MarkDirty;
+        Grid.Changed += RefreshMonitorRouteOptions; // layers mudaram → combos de roteamento também
         _watchFolders = new WatchFolderManager(Grid, Dispatcher.CurrentDispatcher);
         FileBrowser = new FileBrowserViewModel(SendFileToSelectedCell);
 
@@ -130,10 +131,42 @@ public sealed partial class MainViewModel : ObservableObject
             .Select(m => m.Info.DeviceName).ToHashSet();
         Monitors.Clear();
         foreach (var info in MonitorEnumerator.Enumerate(_gfx))
-            Monitors.Add(new MonitorViewModel(info, _render)
+            Monitors.Add(new MonitorViewModel(info, _render, OnMonitorRouteChanged)
             {
                 IsActive = previouslyActive.Contains(info.DeviceName),
             });
+        RefreshMonitorRouteOptions();
+    }
+
+    /// <summary>Preenche o combo "Composição / Layer N" de cada monitor com os nomes
+    /// atuais das layers e a seleção salva no OutputSetup.</summary>
+    private void RefreshMonitorRouteOptions()
+    {
+        var layerNames = Grid.Layers.Select(l => l.Name).ToList();
+        foreach (var monitor in Monitors)
+        {
+            var screen = _outputSetup.Screens.FirstOrDefault(s => s.MonitorDeviceName == monitor.Info.DeviceName);
+            monitor.SetRouteOptions(layerNames, screen?.SourceLayerIndex);
+        }
+    }
+
+    /// <summary>Roteamento rápido layer→monitor pela linha SAÍDAS: grava no OutputSetup
+    /// (criando a tela fullscreen padrão se o monitor ainda não estava configurado).</summary>
+    private void OnMonitorRouteChanged(MonitorViewModel monitor, int? layerIndex)
+    {
+        var screen = _outputSetup.Screens.FirstOrDefault(s => s.MonitorDeviceName == monitor.Info.DeviceName);
+        if (screen is null)
+        {
+            screen = OutputSetup.CreateFullscreenScreen(monitor.Info.DeviceName,
+                Grid.Model.Width, Grid.Model.Height, monitor.Info.Width, monitor.Info.Height);
+            _outputSetup.Screens.Add(screen);
+        }
+        screen.SourceLayerIndex = layerIndex;
+        _render.Post(new SyncOutputSetup(_outputSetup));
+        MarkDirty();
+        StatusText = layerIndex is { } idx
+            ? $"{monitor.Info.DeviceName} → Layer {idx + 1}"
+            : $"{monitor.Info.DeviceName} → composição inteira";
     }
 
     [RelayCommand]
@@ -349,6 +382,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         MasterFader = project.Composition.MasterOpacity;
         Blackout = project.Composition.Blackout;
+        RefreshMonitorRouteOptions();
     }
 
     private void CheckMissingMedia(Composition composition)
@@ -640,6 +674,8 @@ public sealed partial class MainViewModel : ObservableObject
 public sealed partial class MonitorViewModel : ObservableObject
 {
     private readonly RenderThread _render;
+    private readonly Action<MonitorViewModel, int?>? _routeChanged;
+    private bool _suppressRoute;
 
     public MonitorInfo Info { get; }
     public string Title => $"{Info.DeviceName} — {Info.Width}×{Info.Height} @ ({Info.X},{Info.Y})";
@@ -647,10 +683,35 @@ public sealed partial class MonitorViewModel : ObservableObject
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private string _fpsText = "";
 
-    public MonitorViewModel(MonitorInfo info, RenderThread render)
+    /// <summary>Opções de roteamento: [0]="Composição", [1..]="layers".</summary>
+    public ObservableCollection<string> RouteOptions { get; } = [];
+
+    /// <summary>0 = composição inteira; N = layer N-1 isolada neste monitor.</summary>
+    [ObservableProperty] private int _selectedRouteIndex;
+
+    public MonitorViewModel(MonitorInfo info, RenderThread render,
+        Action<MonitorViewModel, int?>? routeChanged = null)
     {
         Info = info;
         _render = render;
+        _routeChanged = routeChanged;
+    }
+
+    public void SetRouteOptions(IReadOnlyList<string> layerNames, int? currentLayerIndex)
+    {
+        _suppressRoute = true;
+        RouteOptions.Clear();
+        RouteOptions.Add("Composição");
+        for (int i = 0; i < layerNames.Count; i++)
+            RouteOptions.Add($"{i + 1}: {layerNames[i]}");
+        SelectedRouteIndex = currentLayerIndex is { } idx && idx >= 0 && idx < layerNames.Count ? idx + 1 : 0;
+        _suppressRoute = false;
+    }
+
+    partial void OnSelectedRouteIndexChanged(int value)
+    {
+        if (_suppressRoute) return;
+        _routeChanged?.Invoke(this, value <= 0 ? null : value - 1);
     }
 
     partial void OnIsActiveChanged(bool value)

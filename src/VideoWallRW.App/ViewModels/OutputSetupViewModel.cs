@@ -132,6 +132,7 @@ public sealed partial class OutputSetupViewModel : ObservableObject
                     Brightness = screen.Color.Brightness,
                     Contrast = screen.Color.Contrast,
                     Gamma = screen.Color.Gamma,
+                    SourceLayerIndex = screen.SourceLayerIndex,
                 };
                 foreach (var slice in screen.Slices)
                     screenVm.AddSlice(slice.Clone());
@@ -175,6 +176,11 @@ public sealed partial class ScreenViewModel : ObservableObject
     [ObservableProperty] private double _brightness;
     [ObservableProperty] private double _contrast = 1.0;
     [ObservableProperty] private double _gamma = 1.0;
+
+    /// <summary>Roteamento layer→monitor (null = composição inteira). Editado pelo
+    /// combo rápido na linha SAÍDAS da janela principal; aqui só faz o round-trip
+    /// para o editor de slices não apagar a escolha.</summary>
+    public int? SourceLayerIndex { get; set; }
 
     public ObservableCollection<SliceViewModel> Slices { get; } = [];
 
@@ -237,6 +243,7 @@ public sealed partial class ScreenViewModel : ObservableObject
             MonitorDeviceName = MonitorDeviceName,
             Enabled = Enabled,
             Color = new ColorCorrection { Brightness = Brightness, Contrast = Contrast, Gamma = Gamma },
+            SourceLayerIndex = SourceLayerIndex,
         };
         foreach (var sliceVm in Slices)
             screen.Slices.Add(sliceVm.ToModel());

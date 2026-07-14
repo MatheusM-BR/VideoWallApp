@@ -24,6 +24,12 @@ public sealed class CompositionRenderer : IDisposable
     private readonly ID3D11Texture2D _compTexture;
     private readonly ID3D11RenderTargetView _compRtv;
     private readonly ID3D11ShaderResourceView _compSrv;
+    private readonly int _compWidth;
+    private readonly int _compHeight;
+
+    // Roteamento layer→monitor: uma textura extra por layer isolada em uso
+    // (criadas sob demanda quando alguma tela tem SourceLayerIndex definido).
+    private readonly Dictionary<int, (ID3D11Texture2D Tex, ID3D11RenderTargetView Rtv, ID3D11ShaderResourceView Srv)> _layerComps = [];
 
     private readonly ID3D11VertexShader _vs;
     private readonly ID3D11PixelShader _ps;
@@ -70,6 +76,8 @@ public sealed class CompositionRenderer : IDisposable
 
         if (width < 1) throw new ArgumentOutOfRangeException(nameof(width));
         if (height < 1) throw new ArgumentOutOfRangeException(nameof(height));
+        _compWidth = width;
+        _compHeight = height;
 
         // Render target da composição (Tamanho ajustável no Engine, fixo 1080p por hora).
         var texDesc = new Texture2DDescription
@@ -163,47 +171,57 @@ public sealed class CompositionRenderer : IDisposable
         IReadOnlyList<(ID3D11RenderTargetView Rtv, int Width, int Height, Screen Screen)> outputs,
         bool identify = false)
     {
+        // AcquireFrames UMA vez por layer por frame (tem efeito colateral: promove o
+        // crossfade) — o resultado é reutilizado no Pass 1 e no roteamento por layer.
+        var layerDraws = new List<(LayerRenderer Layer, int Index,
+            IReadOnlyList<(ID3D11ShaderResourceView Srv, float Opacity)> Frames, Matrix4x4 Uv)>();
+        for (int i = 0; i < activeLayers.Count; i++)
+        {
+            var layer = activeLayers[i];
+            var frames = layer.AcquireFrames();
+            if (frames.Count == 0 || layer.ActivePlayer is null) continue;
+
+            var resizeMode = layer.ActiveClip?.Resize ?? layer.Model.DefaultResize;
+            var rect = ResizeMath.Compute(resizeMode,
+                layer.ActivePlayer.Source.Width, layer.ActivePlayer.Source.Height,
+                composition.Width, composition.Height);
+            var uvTransform = ComputeTransform(rect,
+                layer.ActivePlayer.Source.Width, layer.ActivePlayer.Source.Height,
+                composition.Width, composition.Height);
+
+            layerDraws.Add((layer, i, frames.Select(f => (f.Srv, f.Opacity)).ToList(), uvTransform));
+        }
+
+        // ── Pass 1: composição inteira (todas as layers visíveis, com blend) ──
         ctx.ClearRenderTargetView(_compRtv, new Color4(0, 0, 0, 1));
         ctx.OMSetRenderTargets(_compRtv);
         ctx.RSSetViewport(new Viewport(0, 0, composition.Width, composition.Height));
 
-        // Filter solo layers if any layer has Solo enabled
         bool anySolo = activeLayers.Any(l => l.Model.Solo);
-        var visibleLayers = activeLayers.Where(l => !l.Model.Bypass && (!anySolo || l.Model.Solo));
-
-        foreach (var layer in visibleLayers)
+        foreach (var draw in layerDraws)
         {
-            var frames = layer.AcquireFrames();
-            if (frames.Count == 0 || layer.ActivePlayer is null) continue;
-
-            double opacity = layer.Model.Opacity;
-
-            var sourceWidth = layer.ActivePlayer.Source.Width;
-            var sourceHeight = layer.ActivePlayer.Source.Height;
-
-            var resizeMode = layer.ActiveClip?.Resize ?? layer.Model.DefaultResize;
-
-            var rect = ResizeMath.Compute(
-                resizeMode, sourceWidth, sourceHeight, composition.Width, composition.Height);
-
-            // Compute UV projection matrix
-            var uvTransform = ComputeTransform(rect, sourceWidth, sourceHeight, composition.Width, composition.Height);
-
-            ID3D11BlendState blendState = layer.Model.Blend switch
-            {
-                BlendMode.Add => _blendAdd,
-                BlendMode.Screen => _blendScreen,
-                BlendMode.Multiply => _blendMultiply,
-                _ => _blendNormal
-            };
-
-            ctx.OMSetBlendState(blendState);
-            foreach (var frame in frames)
-                DrawQuad(ctx, frame.Srv, uvTransform, (float)(opacity * frame.Opacity), (int)layer.Model.Blend);
+            if (draw.Layer.Model.Bypass || (anySolo && !draw.Layer.Model.Solo)) continue;
+            DrawLayerFrames(ctx, draw);
         }
-
-        // Disable generic blending before swapping outputs buffer
         ctx.OMSetBlendState(null);
+
+        // ── Pass 1.5: layers isoladas para telas roteadas (SourceLayerIndex) ──
+        var neededLayers = outputs
+            .Where(o => o.Screen.SourceLayerIndex is { } idx && idx >= 0 && idx < activeLayers.Count)
+            .Select(o => o.Screen.SourceLayerIndex!.Value)
+            .Distinct();
+        foreach (int layerIndex in neededLayers)
+        {
+            var rt = GetOrCreateLayerComp(layerIndex);
+            ctx.ClearRenderTargetView(rt.Rtv, new Color4(0, 0, 0, 1));
+            ctx.OMSetRenderTargets(rt.Rtv);
+            ctx.RSSetViewport(new Viewport(0, 0, composition.Width, composition.Height));
+
+            var draw = layerDraws.FirstOrDefault(d => d.Index == layerIndex);
+            if (draw.Layer is not null && !draw.Layer.Model.Bypass)
+                DrawLayerFrames(ctx, draw);
+            ctx.OMSetBlendState(null);
+        }
 
         // ── Passe 2: saídas fatiadas por slice (Fase 4) ─────────────────────
         // Blackout escurece só a saída (aqui), nunca o master fader guardado —
@@ -227,12 +245,58 @@ public sealed class CompositionRenderer : IDisposable
                 continue;
             }
 
+            // Roteamento: tela com SourceLayerIndex recebe só aquela layer; senão, a
+            // composição inteira. Índice fora do alcance cai na composição (projeto
+            // aberto com menos layers do que o roteamento salvo).
+            var sourceSrv = screen.SourceLayerIndex is { } layerIdx && _layerComps.TryGetValue(layerIdx, out var layerComp)
+                ? layerComp.Srv
+                : _compSrv;
+
             foreach (var slice in screen.Slices)
             {
                 var (positionM, uvM) = SliceMath.Compute(slice, composition.Width, composition.Height, w, h);
-                DrawSlice(ctx, _compSrv, positionM, uvM, screen.Color, effectiveMasterOpacity);
+                DrawSlice(ctx, sourceSrv, positionM, uvM, screen.Color, effectiveMasterOpacity);
             }
         }
+    }
+
+    private void DrawLayerFrames(ID3D11DeviceContext ctx,
+        (LayerRenderer Layer, int Index, IReadOnlyList<(ID3D11ShaderResourceView Srv, float Opacity)> Frames, Matrix4x4 Uv) draw)
+    {
+        ID3D11BlendState blendState = draw.Layer.Model.Blend switch
+        {
+            BlendMode.Add => _blendAdd,
+            BlendMode.Screen => _blendScreen,
+            BlendMode.Multiply => _blendMultiply,
+            _ => _blendNormal
+        };
+        ctx.OMSetBlendState(blendState);
+
+        double opacity = draw.Layer.Model.Opacity;
+        foreach (var frame in draw.Frames)
+            DrawQuad(ctx, frame.Srv, draw.Uv, (float)(opacity * frame.Opacity), (int)draw.Layer.Model.Blend);
+    }
+
+    private (ID3D11Texture2D Tex, ID3D11RenderTargetView Rtv, ID3D11ShaderResourceView Srv) GetOrCreateLayerComp(int layerIndex)
+    {
+        if (_layerComps.TryGetValue(layerIndex, out var existing))
+            return existing;
+
+        var texDesc = new Texture2DDescription
+        {
+            Width = (uint)_compWidth,
+            Height = (uint)_compHeight,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.B8G8R8A8_UNorm,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
+        };
+        var tex = _gfx.Device.CreateTexture2D(texDesc);
+        var entry = (tex, _gfx.Device.CreateRenderTargetView(tex), _gfx.Device.CreateShaderResourceView(tex));
+        _layerComps[layerIndex] = entry;
+        return entry;
     }
 
     private void DrawSlice(ID3D11DeviceContext ctx, ID3D11ShaderResourceView srv,
@@ -332,6 +396,13 @@ public sealed class CompositionRenderer : IDisposable
         _slicePs.Dispose();
         _sliceVs.Dispose();
         _identityCards.Dispose();
+        foreach (var (tex, rtv, srv) in _layerComps.Values)
+        {
+            srv.Dispose();
+            rtv.Dispose();
+            tex.Dispose();
+        }
+        _layerComps.Clear();
         _compSrv.Dispose();
         _compRtv.Dispose();
         _compTexture.Dispose();

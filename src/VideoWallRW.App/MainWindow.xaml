@@ -107,6 +107,9 @@
                       BorderThickness="1" CornerRadius="2" Padding="6,2" Margin="0,0,4,0">
                 <StackPanel Orientation="Horizontal">
                   <CheckBox IsChecked="{Binding IsActive}" Content="{Binding Title}" FontSize="11" />
+                  <TextBlock Text="→" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                  <ComboBox ItemsSource="{Binding RouteOptions}" SelectedIndex="{Binding SelectedRouteIndex}"
+                            Width="120" FontSize="11" ToolTip="O que este monitor exibe: a composição inteira ou uma layer isolada" />
                   <TextBlock Text="{Binding FpsText}" Foreground="{StaticResource Accent}" FontSize="11"
                              FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0" />
                 </StackPanel>
