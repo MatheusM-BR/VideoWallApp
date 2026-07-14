@@ -237,6 +237,12 @@ public sealed class RenderThread : IDisposable
             case SetSequencerRunning(var running):
                 OnSetSequencerRunning(running);
                 break;
+            case ReloadClip(var layerIdx, var colIdx):
+                // Reabre a fonte do zero (o ClipFactory lê o arquivo do disco de novo) —
+                // o editor de imagem (Fase 10) salva em cima do arquivo e chama isso pra
+                // o telão atualizar sem frame preto, mesmo fluxo de crossfade do trigger normal.
+                OnTriggerClip(layerIdx, colIdx);
+                break;
             default:
                 Log.Warning("Comando não tratado: {Command}", command);
                 break;

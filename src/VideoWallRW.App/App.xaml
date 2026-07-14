@@ -8,5 +8,7 @@
     <local:IdentifyLabelConverter x:Key="IdentifyLabelConverter" />
     <local:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
     <local:NotNullToVisibilityConverter x:Key="NotNullToVisibilityConverter" />
+    <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    <local:EnumBoolConverter x:Key="EnumBoolConverter" />
   </Application.Resources>
 </Application>

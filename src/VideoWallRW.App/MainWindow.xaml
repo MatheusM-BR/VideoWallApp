@@ -13,6 +13,7 @@
       <Button DockPanel.Dock="Left" Content="Salvar como..." Command="{Binding SaveProjectAsCommand}" Padding="8,4" Margin="0,0,14,0" />
       <Button DockPanel.Dock="Left" Content="⌨ Atalhos..." Command="{Binding OpenKeymapEditorCommand}" Padding="8,4" Margin="0,0,4,0" />
       <Button DockPanel.Dock="Left" Content="⚙ Instalação..." Command="{Binding OpenInstallationCommand}" Padding="8,4" Margin="0,0,4,0" />
+      <Button DockPanel.Dock="Left" Content="🗓 Agenda..." Command="{Binding OpenAgendaCommand}" Padding="8,4" Margin="0,0,4,0" />
       <ToggleButton DockPanel.Dock="Left" Content="▶ Sequenciador" IsChecked="{Binding SequencerRunning}"
                     Padding="8,4" Margin="0,0,4,0" />
       <ToggleButton DockPanel.Dock="Right" Content="BLACKOUT" IsChecked="{Binding Blackout}" Padding="10,4" Margin="10,0,0,0"
@@ -88,6 +89,11 @@
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
                         <Border BorderBrush="#DDD" BorderThickness="1" Width="100" Height="75" Margin="4" AllowDrop="True" Drop="OnClipDrop">
+                          <Border.ContextMenu>
+                            <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                              <MenuItem Header="Editar imagem..." Click="OnEditImageClick" />
+                            </ContextMenu>
+                          </Border.ContextMenu>
                           <Border.Style>
                             <Style TargetType="Border">
                               <Setter Property="Background" Value="#E0E0E0"/>

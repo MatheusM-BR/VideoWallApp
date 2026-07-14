@@ -43,7 +43,7 @@ Regras de progressão:
 | 7 | Persistência e operação | implementada (T7.1-T7.7) — DoD manual pendente |
 | 8 | Modo instalação fixa | implementada (T8.1-T8.7) — DoD manual (máquina dedicada, reinício real) pendente |
 | 9 | Extras | T9.4 (OSC) + T9.5 (controle remoto web) implementados e testados; **T9.1 (desktop capture), T9.2 (Spout), T9.3 (MIDI), T9.6 (edge blend/corner-pin), T9.7 (QoL) pulados** — sem hardware/apps externos pra validar neste ambiente (mesmo padrão da Fase 5/D3D11VA) |
-| 10 | Módulo Agenda: banner de eventos + editor de imagem (paralelizável após a Fase 3) | pendente |
+| 10 | Módulo Agenda: banner de eventos + editor de imagem (paralelizável após a Fase 3) | implementada (T10.1-T10.6) — parser testado contra HTML real do site (fixtures); UI/editor buildam e o app sobe sem exceção, mas o fluxo de clique-a-clique (baixar banner real, cortar/pintar na janela) não foi verificado interativamente neste ambiente — DoD manual pendente |
 
 ## Convenções globais (valem para todas as fases)
 

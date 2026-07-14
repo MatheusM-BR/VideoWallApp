@@ -46,6 +46,13 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnEditImageClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem { DataContext: ViewModels.ClipViewModel clipVm }) return;
+        if (clipVm.Model?.Source is not Core.Model.FileImageSource img) return;
+        _vm.EditCellImage(clipVm.LayerIndex, clipVm.ColumnIndex, img.Path);
+    }
+
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (Keyboard.FocusedElement is TextBoxBase || !_keymap.TryGetAction(e, out var action))

@@ -30,3 +30,15 @@ public sealed class NotNullToVisibilityConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
 }
+
+/// <summary>Liga um ToggleButton.IsChecked a um valor específico de enum (ex.: ferramenta
+/// atual do editor de imagem) — ConverterParameter é o valor do enum representado por
+/// esse botão.</summary>
+public sealed class EnumBoolConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object parameter, CultureInfo culture)
+        => value?.Equals(parameter) == true;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => (value is true) ? parameter : Binding.DoNothing;
+}

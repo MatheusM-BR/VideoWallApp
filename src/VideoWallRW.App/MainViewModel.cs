@@ -145,6 +145,69 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenAgenda()
+    {
+        var vm = new ViewModels.AgendaViewModel(GetProjectFolder, OpenImageEditorForFile, OpenPdfImporter);
+        var window = new AgendaWindow(vm) { Owner = Application.Current.MainWindow };
+        window.Show();
+    }
+
+    private string GetProjectFolder() => _currentProjectPath is null
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "VideoWallRW")
+        : Path.GetDirectoryName(_currentProjectPath)!;
+
+    /// <summary>Fase 10 T10.6: "editar imagem" abre o editor; ao salvar, envia direto
+    /// pra célula selecionada (ou pergunta layer/coluna se nada estiver selecionado).</summary>
+    private void OpenImageEditorForFile(string path, string suggestedName)
+    {
+        double? compAspect = Grid.Model.Height > 0 ? (double)Grid.Model.Width / Grid.Model.Height : null;
+        var vm = new ImageEditorViewModel(path, (editedPath, name) => SendImageToCell(editedPath, name), compAspect);
+        var window = new ImageEditorWindow(vm) { Owner = Application.Current.MainWindow };
+        window.Show();
+    }
+
+    private void OpenPdfImporter(string pdfPath)
+    {
+        var vm = new PdfImportViewModel(pdfPath, (imagePath, name) => OpenImageEditorForFile(imagePath, name));
+        var window = new PdfImportWindow(vm) { Owner = Application.Current.MainWindow };
+        window.Show();
+    }
+
+    /// <summary>Manda a imagem editada pra célula selecionada na grade; sem seleção,
+    /// usa a primeira célula vazia da layer 0 (mesma heurística do watch-folder).</summary>
+    private void SendImageToCell(string path, string suggestedName)
+    {
+        int layerIndex = Grid.SelectedClip?.LayerIndex ?? 0;
+        int columnIndex = Grid.SelectedClip?.ColumnIndex ?? -1;
+        if (columnIndex < 0)
+        {
+            Grid.AddFileAutoColumn(layerIndex, path);
+        }
+        else
+        {
+            Grid.SetClip(layerIndex, columnIndex, new Clip(new FileImageSource(path)) { Name = suggestedName });
+        }
+        StatusText = $"Imagem enviada para a célula: {suggestedName}";
+    }
+
+    /// <summary>Reabre o editor numa imagem já na grade (menu de contexto da célula) e,
+    /// ao salvar, recarrega o clip no motor sem frame preto (comando ReloadClip).</summary>
+    public void EditCellImage(int layerIndex, int columnIndex, string path)
+    {
+        double? compAspect = Grid.Model.Height > 0 ? (double)Grid.Model.Width / Grid.Model.Height : null;
+        var vm = new ImageEditorViewModel(path, (editedPath, _) =>
+        {
+            Grid.SetClip(layerIndex, columnIndex, new Clip(new FileImageSource(editedPath))
+            {
+                Name = Grid.Model.Layers[layerIndex].Clips[columnIndex]?.Name ?? Path.GetFileNameWithoutExtension(editedPath),
+            });
+            _render.Post(new ReloadClip(layerIndex, columnIndex));
+        }, compAspect);
+        var window = new ImageEditorWindow(vm) { Owner = Application.Current.MainWindow };
+        window.Show();
+    }
+
+    [RelayCommand]
     private void OpenInstallation()
     {
         var vm = new InstallationViewModel(_installation, UpdateInstallation);

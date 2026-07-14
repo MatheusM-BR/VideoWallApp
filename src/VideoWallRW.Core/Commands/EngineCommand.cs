@@ -35,3 +35,6 @@ public sealed record TriggerScene(System.Guid SceneId) : EngineCommand;
 // ── Fase 8: modo instalação fixa ──────────────────────────────────────────────
 public sealed record SyncInstallation(VideoWallRW.Core.Model.InstallationConfig Data) : EngineCommand;
 public sealed record SetSequencerRunning(bool Running) : EngineCommand;
+
+// ── Fase 10: módulo Agenda (editor de imagem → recarregar clip do disco) ──────
+public sealed record ReloadClip(int LayerIndex, int ColumnIndex) : EngineCommand;
