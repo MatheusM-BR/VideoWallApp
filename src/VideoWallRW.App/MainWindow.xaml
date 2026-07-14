@@ -27,9 +27,26 @@
 
         <ToggleButton DockPanel.Dock="Right" Content="BLACKOUT" IsChecked="{Binding Blackout}"
                       Style="{StaticResource BlackoutButton}" Padding="14,4" Margin="10,0,0,0" />
-        <!-- Play/Pause global em evidência (tecla Espaço) -->
+        <!-- Mute geral: o programa SEMPRE abre mutado -->
+        <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding MasterMuted}" Padding="12,4" Margin="10,0,0,0"
+                      FontWeight="Bold" FontSize="13" ToolTip="Mute geral do áudio (o programa abre mutado)">
+          <ToggleButton.Style>
+            <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+              <Setter Property="Content" Value="🔊 SOM" />
+              <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                  <Setter Property="Content" Value="🔇 MUTE" />
+                  <Setter Property="Background" Value="{StaticResource AccentDim}" />
+                  <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                </Trigger>
+              </Style.Triggers>
+            </Style>
+          </ToggleButton.Style>
+        </ToggleButton>
+        <!-- Pausa da SEQUÊNCIA (autopilot/sequenciador); os vídeos continuam (Espaço) -->
         <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding MasterPaused}" Padding="16,4" Margin="10,0,0,0"
-                      FontWeight="Bold" FontSize="13" ToolTip="Pausa/retoma todas as layers (Espaço)">
+                      FontWeight="Bold" FontSize="13"
+                      ToolTip="Pausa a troca automática de clipes (autopilot/sequenciador) — os vídeos continuam tocando (Espaço)">
           <ToggleButton.Style>
             <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
               <Setter Property="Content" Value="⏸ PAUSE" />
@@ -183,7 +200,8 @@
                           Duration="{Binding Duration}"
                           InPoint="{Binding TrimIn, Mode=TwoWay}"
                           OutPoint="{Binding TrimOut, Mode=TwoWay}"
-                          ScrubSeconds="{Binding ScrubSeconds, Mode=OneWayToSource}" />
+                          ScrubSeconds="{Binding ScrubSeconds, Mode=OneWayToSource}"
+                          Playhead="{Binding PlayheadSeconds}" />
       </Grid>
     </Border>
 
@@ -264,6 +282,14 @@
                           <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}" FontWeight="Bold" FontSize="12"
                                    VerticalAlignment="Center" BorderThickness="0" Background="Transparent"
                                    Margin="0,0,4,0" ToolTip="Nome da layer (clique para editar)" />
+                        </DockPanel>
+                        <!-- Autopilot rápido: aplica a todos os clips da layer -->
+                        <DockPanel Margin="0,0,0,4">
+                          <TextBlock DockPanel.Dock="Left" Text="Auto" FontSize="10" Width="28"
+                                     Foreground="{StaticResource FgDim}" VerticalAlignment="Center" />
+                          <ComboBox FontSize="10" ToolTip="Autopilot da layer inteira: o que fazer quando cada clip termina (aplica a todos os clips)"
+                                    ItemsSource="{Binding DataContext.Grid.AutopilotActions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                    SelectedItem="{Binding LayerAutopilot, Mode=TwoWay}" />
                         </DockPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                           <ToggleButton Content="B" IsChecked="{Binding Bypass}" Padding="7,1" FontSize="10"

@@ -37,19 +37,28 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _windowTitle = "VideoWallRW — Novo projeto";
     [ObservableProperty] private bool _sequencerRunning;
 
-    /// <summary>Pausa global (todas as layers) — botão ⏸/▶ em evidência + tecla Espaço.</summary>
+    /// <summary>Pausa da SEQUÊNCIA (autopilot/sequenciador; os vídeos continuam tocando)
+    /// — botão ⏸/▶ em evidência + tecla Espaço.</summary>
     [ObservableProperty] private bool _masterPaused;
+
+    /// <summary>Mute geral do áudio — o programa SEMPRE abre mutado (padrão da operação).</summary>
+    [ObservableProperty] private bool _masterMuted = true;
 
     public CompositionViewModel Grid { get; }
     public FileBrowserViewModel FileBrowser { get; }
 
     private readonly bool _kiosk;
+    private readonly VideoWallRW.Media.Audio.AudioEngine? _audio;
 
-    public MainViewModel(GraphicsDevice gfx, RenderThread render, bool kiosk = false)
+    public MainViewModel(GraphicsDevice gfx, RenderThread render, bool kiosk = false,
+        VideoWallRW.Media.Audio.AudioEngine? audio = null)
     {
         _gfx = gfx;
         _render = render;
         _kiosk = kiosk;
+        _audio = audio;
+        if (_audio is not null)
+            _audio.MasterMute = MasterMuted; // programa abre MUTADO por padrão
 
         var compModel = new Composition { ColumnCount = 8 };
         compModel.AddLayer(new Layer { Name = "Layer 3" });
@@ -641,6 +650,9 @@ public sealed partial class MainViewModel : ObservableObject
                 : "Nenhuma saída ativa";
             string dropsText = stats.DroppedFrames > 0 ? $"   |   ⚠ {stats.DroppedFrames} drops" : "";
             StatusText = $"{outputsText}   |   {stats.ActiveClipCount} clip(s) ativo(s){dropsText}";
+
+            if (stats.Positions is not null)
+                Grid.UpdatePlayheads(stats.Positions);
         });
     }
 
@@ -658,7 +670,16 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnMasterPausedChanged(bool value)
     {
         _render.Post(new SetMasterPaused(value));
-        StatusText = value ? "⏸ Pausado (Espaço retoma)" : "▶ Tocando";
+        StatusText = value
+            ? "⏸ Sequência pausada — vídeos continuam tocando; autopilot/sequenciador segurados (Espaço retoma)"
+            : "▶ Sequência liberada";
+    }
+
+    partial void OnMasterMutedChanged(bool value)
+    {
+        if (_audio is not null)
+            _audio.MasterMute = value;
+        StatusText = value ? "🔇 Áudio mutado" : "🔊 Áudio ligado";
     }
 
     public void ToggleBlackout() => Blackout = !Blackout;

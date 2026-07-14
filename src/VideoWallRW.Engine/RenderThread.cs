@@ -36,6 +36,12 @@ public sealed class RenderThread : IDisposable
     private Core.Model.OutputSetup? _outputSetup;
     private bool _identify;
 
+    // Criação assíncrona de players: a factory (abre FFmpeg, demuxa, cria texturas)
+    // roda em Task.Run; o resultado volta pra render thread por esta fila. A geração
+    // por layer descarta anexos obsoletos (operador disparou outro clip no meio).
+    private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _deferred = new();
+    private readonly Dictionary<int, int> _triggerGeneration = [];
+
     // ── Fase 7: cenas ───────────────────────────────────────────────────────────
     private List<Core.Persistence.SceneSnapshot> _scenes = [];
 
@@ -90,6 +96,12 @@ public sealed class RenderThread : IDisposable
                 while (_commands.Reader.TryRead(out var command))
                     Handle(command, testScene);
 
+                // Executa criações de player concluídas em background (fix do engasgo:
+                // abrir FFmpeg do próximo clip fora da render thread). Antes do check de
+                // saídas — o clip anexa mesmo sem monitor ativo, como era no fluxo síncrono.
+                while (_deferred.TryDequeue(out var action))
+                    action();
+
                 // As janelas de saída vivem nesta thread; o pump precisa rodar aqui.
                 OutputWindow.PumpMessages();
 
@@ -105,13 +117,12 @@ public sealed class RenderThread : IDisposable
                 if (dt > 1.0 / 40.0) _dropCount++; // frametime > 1.5x o alvo de 60fps (~16.7ms)
                 if (dt > 0.1) dt = 0.1; // cap: evitar salto grande após pausa do debugger
 
-                if (!_masterPaused)
-                {
-                    foreach (var layer in _layers)
-                        layer.Tick(dt);
-                    if (_sequencerRunning)
-                        TickSequencer(dt);
-                }
+                // Pausa global = pausa a SEQUÊNCIA (autopilot/sequenciador), não o
+                // conteúdo: os vídeos continuam tocando no telão.
+                foreach (var layer in _layers)
+                    layer.Tick(dt);
+                if (!_masterPaused && _sequencerRunning)
+                    TickSequencer(dt);
 
                 _schedulerAccum += dt;
                 if (_schedulerAccum >= 10.0)
@@ -462,20 +473,39 @@ public sealed class RenderThread : IDisposable
             return;
         }
 
-        try
+        // A factory abre arquivo/FFmpeg (dezenas~centenas de ms) — em background, senão
+        // o frame atual engasga na troca de clip. O anexo volta pela fila _deferred e é
+        // descartado se outro trigger da mesma layer aconteceu no meio (geração).
+        int generation = _triggerGeneration.GetValueOrDefault(layerIdx) + 1;
+        _triggerGeneration[layerIdx] = generation;
+        var factory = _clipFactory;
+        double defaultImageDuration = _compositionData.DefaultImageDuration;
+
+        Task.Run(() =>
         {
-            // Cria player e vincula atomicamente -> cross-fade implementável a partir de agora sem black frame
-            var source = _clipFactory(clipModel, _compositionData.DefaultImageDuration);
-            var player = new ClipPlayer(source, clipModel);
-            player.EndReached += endedClip => OnClipEnded(layerIdx, endedClip);
-            bool retrigger = layerRenderer.ActiveClip?.Id == clipModel.Id;
-            layerRenderer.SetPlayer(player, clipModel, retrigger);
-            Log.Information("Trigger disparado: Camada {L}, Coluna {C}", layerIdx, colIdx);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Erro ao disparar clipe na camada {L}", layerIdx);
-        }
+            try
+            {
+                var source = factory(clipModel, defaultImageDuration);
+                _deferred.Enqueue(() =>
+                {
+                    if (_triggerGeneration.GetValueOrDefault(layerIdx) != generation ||
+                        layerIdx >= _layers.Count)
+                    {
+                        source.Dispose(); // trigger obsoleto — outro clip ganhou a corrida
+                        return;
+                    }
+                    var player = new ClipPlayer(source, clipModel);
+                    player.EndReached += endedClip => OnClipEnded(layerIdx, endedClip);
+                    bool retrigger = _layers[layerIdx].ActiveClip?.Id == clipModel.Id;
+                    _layers[layerIdx].SetPlayer(player, clipModel, retrigger);
+                    Log.Information("Trigger disparado: Camada {L}, Coluna {C}", layerIdx, colIdx);
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Erro ao abrir clipe da camada {L}", layerIdx);
+            }
+        });
     }
 
     private void OnTriggerColumn(int colIdx)
@@ -543,6 +573,11 @@ public sealed class RenderThread : IDisposable
 
     private void OnClipEnded(int layerIdx, Core.Model.Clip endedClip)
     {
+        // Pausa global = segurar a sequência: o clip que terminou fica no último
+        // frame e o autopilot não avança até o operador retomar.
+        if (_masterPaused)
+            return;
+
         if (_compositionData is null || layerIdx < 0 || layerIdx >= _layers.Count ||
             _layers[layerIdx].ActiveClip?.Id != endedClip.Id)
             return;
@@ -657,7 +692,16 @@ public sealed class RenderThread : IDisposable
         }
 
         int activeClips = _layers.Count(l => l.ActivePlayer is not null);
-        StatsUpdated?.Invoke(new EngineStats(outputs, clipShot, _dropCount, activeClips));
+
+        // Posição de cada clip no ar — a UI desenha a agulha na barra de trim.
+        var positions = new List<LayerClipPosition>();
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            if (_layers[i].ActivePlayer is { } player && _layers[i].ActiveClip is { } clip)
+                positions.Add(new LayerClipPosition(i, clip.Id, player.Playhead));
+        }
+
+        StatsUpdated?.Invoke(new EngineStats(outputs, clipShot, _dropCount, activeClips, positions));
         _dropCount = 0;
     }
 }

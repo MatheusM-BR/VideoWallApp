@@ -103,7 +103,7 @@ public partial class App : Application
         _heartbeat = new HeartbeatClient();
 
         bool kiosk = e.Args.Any(a => a.Equals("--kiosk", StringComparison.OrdinalIgnoreCase));
-        var vm = new MainViewModel(_gfx, _render, kiosk);
+        var vm = new MainViewModel(_gfx, _render, kiosk, _audio);
         if (kiosk)
             ApplyKiosk(vm);
 

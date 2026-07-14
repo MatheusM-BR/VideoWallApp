@@ -35,6 +35,14 @@ public sealed class TrimBar : FrameworkElement
         nameof(ScrubSeconds), typeof(double), typeof(TrimBar),
         new FrameworkPropertyMetadata(-1.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
 
+    /// <summary>Posição atual de reprodução (s) do clip no ar — desenhada como uma
+    /// agulha branca; menor que 0 = sem reprodução (agulha oculta).</summary>
+    public static readonly DependencyProperty PlayheadProperty = DependencyProperty.Register(
+        nameof(Playhead), typeof(double), typeof(TrimBar),
+        new FrameworkPropertyMetadata(-1.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public double Playhead { get => (double)GetValue(PlayheadProperty); set => SetValue(PlayheadProperty, value); }
+
     public double Duration { get => (double)GetValue(DurationProperty); set => SetValue(DurationProperty, value); }
     public double InPoint { get => (double)GetValue(InPointProperty); set => SetValue(InPointProperty, value); }
     public double OutPoint { get => (double)GetValue(OutPointProperty); set => SetValue(OutPointProperty, value); }
@@ -85,6 +93,13 @@ public sealed class TrimBar : FrameworkElement
         dc.DrawRectangle(RangeBrush, null, new Rect(inX, 1, System.Math.Max(outX - inX, 0), ActualHeight - 2));
         dc.DrawRectangle(HandleBrush, null, new Rect(inX - HandleWidth / 2, 0, HandleWidth, ActualHeight));
         dc.DrawRectangle(HandleBrush, null, new Rect(outX - HandleWidth / 2, 0, HandleWidth, ActualHeight));
+
+        // Agulha da posição atual de reprodução (vídeo no ar).
+        if (Playhead >= 0)
+        {
+            double px = ToX(Playhead);
+            dc.DrawRectangle(Brushes.White, null, new Rect(px - 1, 0, 2, ActualHeight));
+        }
 
         DrawLabel(dc, Format(EffectiveIn), System.Math.Min(inX + 8, ActualWidth - 80), muted: false);
         DrawLabel(dc, Format(EffectiveOut <= 0 ? Duration : EffectiveOut), System.Math.Max(outX - 46, 4), muted: false);

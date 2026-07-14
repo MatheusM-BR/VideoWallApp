@@ -45,6 +45,10 @@ public sealed partial class ClipViewModel : ObservableObject
     /// <summary>Frame extraído durante o scrub da TrimBar (null = sem scrub ativo).</summary>
     [ObservableProperty] private string? _scrubFramePath;
 
+    /// <summary>Posição atual de reprodução (s) quando este clip está no ar; -1 = parado.
+    /// Alimentado pelos stats do engine (~2x/s) — vira a agulha da TrimBar.</summary>
+    [ObservableProperty] private double _playheadSeconds = -1;
+
     /// <summary>Instante do scrub vindo da TrimBar (-1 = parado). Debounce de 120ms
     /// antes de extrair o frame — arrastar rápido não enfileira decodificações.</summary>
     private double _scrubSeconds = -1;
@@ -323,6 +327,10 @@ public sealed partial class LayerViewModel : ObservableObject
     /// </summary>
     [ObservableProperty] private int _lastTriggeredColumn = -1;
 
+    /// <summary>Autopilot rápido da layer: escolher aqui aplica a TODOS os clips da
+    /// layer de uma vez (o operador monta a playlist sem abrir clip por clip).</summary>
+    [ObservableProperty] private AutopilotAction _layerAutopilot;
+
     private double _opacity = 1.0;
     public double Opacity
     {
@@ -354,6 +362,8 @@ public sealed partial class LayerViewModel : ObservableObject
         Bypass = model.Bypass;
         Solo = model.Solo;
         TransitionSeconds = model.TransitionSeconds;
+        // Reflete o autopilot atual se todos os clips da layer concordam (sem disparar aplicação).
+        _layerAutopilot = model.Clips.FirstOrDefault(c => c is not null)?.Autopilot ?? AutopilotAction.None;
 
         for (int i = 0; i < model.Clips.Length; i++)
         {
@@ -381,6 +391,13 @@ public sealed partial class LayerViewModel : ObservableObject
 
     // Renomear layer pela UI (o engine não usa o nome; basta persistir no modelo).
     partial void OnNameChanged(string value) => Model.Name = value;
+
+    partial void OnLayerAutopilotChanged(AutopilotAction value)
+    {
+        foreach (var clip in Clips)
+            if (clip.Model is not null)
+                clip.Autopilot = value; // dispara ApplyEdits → UpdateClip no engine, clip a clip
+    }
 
     partial void OnBlendChanged(BlendMode value) => UpdateLayerState();
     partial void OnBypassChanged(bool value) => UpdateLayerState();
@@ -448,6 +465,19 @@ public sealed partial class CompositionViewModel : ObservableObject
         for (int i = 0; i < Model.Layers.Count; i++) Layers.Add(CreateLayerViewModel(Model.Layers[i], i));
 
         SyncToEngine();
+    }
+
+    /// <summary>Distribui as posições de reprodução vindas dos stats do engine para as
+    /// células certas (agulha da TrimBar). Chamado na UI thread ~2x/s.</summary>
+    public void UpdatePlayheads(IReadOnlyList<VideoWallRW.Core.Stats.LayerClipPosition> positions)
+    {
+        foreach (var layer in Layers)
+            foreach (var clip in layer.Clips)
+            {
+                var match = positions.FirstOrDefault(p =>
+                    p.LayerIndex == layer.LayerIndex && clip.Model?.Id == p.ClipId);
+                clip.PlayheadSeconds = match?.Playhead ?? -1;
+            }
     }
 
     /// <summary>Estado atual da grade para capturar uma cena (T7.5): coluna e opacidade ativas por layer.</summary>
