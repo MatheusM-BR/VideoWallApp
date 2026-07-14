@@ -29,9 +29,16 @@ public sealed class TrimBar : FrameworkElement
         new FrameworkPropertyMetadata(0.0,
             FrameworkPropertyMetadataOptions.BindsTwoWayByDefault | FrameworkPropertyMetadataOptions.AffectsRender));
 
+    /// <summary>Instante (s) sob a alça enquanto o operador arrasta; -1 quando parado.
+    /// A UI usa pra mostrar o frame exato que está sendo definido.</summary>
+    public static readonly DependencyProperty ScrubSecondsProperty = DependencyProperty.Register(
+        nameof(ScrubSeconds), typeof(double), typeof(TrimBar),
+        new FrameworkPropertyMetadata(-1.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
     public double Duration { get => (double)GetValue(DurationProperty); set => SetValue(DurationProperty, value); }
     public double InPoint { get => (double)GetValue(InPointProperty); set => SetValue(InPointProperty, value); }
     public double OutPoint { get => (double)GetValue(OutPointProperty); set => SetValue(OutPointProperty, value); }
+    public double ScrubSeconds { get => (double)GetValue(ScrubSecondsProperty); set => SetValue(ScrubSecondsProperty, value); }
 
     private enum DragTarget { None, In, Out }
     private DragTarget _dragging = DragTarget.None;
@@ -105,6 +112,7 @@ public sealed class TrimBar : FrameworkElement
         // meio move a alça mais próxima, igual ao trim do Resolume).
         _dragging = System.Math.Abs(x - inX) <= System.Math.Abs(x - outX) ? DragTarget.In : DragTarget.Out;
         _dragValue = ToSeconds(x);
+        ScrubSeconds = _dragValue;
         CaptureMouse();
         InvalidateVisual();
         e.Handled = true;
@@ -120,6 +128,7 @@ public sealed class TrimBar : FrameworkElement
         if (_dragging == DragTarget.In) _dragValue = System.Math.Min(_dragValue, outEff - 0.05);
         else _dragValue = System.Math.Max(_dragValue, InPoint + 0.05);
 
+        ScrubSeconds = _dragValue;
         InvalidateVisual();
     }
 
@@ -133,6 +142,7 @@ public sealed class TrimBar : FrameworkElement
         // Commit só aqui (uma escrita no binding, um UpdateClip no engine).
         if (target == DragTarget.In) InPoint = System.Math.Max(_dragValue, 0);
         else OutPoint = System.Math.Min(_dragValue, Duration);
+        ScrubSeconds = -1; // fim do arraste — o preview volta pro thumbnail normal
         InvalidateVisual();
         e.Handled = true;
     }

@@ -33,6 +33,14 @@ public sealed partial class SceneViewModel : ObservableObject
     [RelayCommand]
     private void Remove() => _remove(this);
 
+    [RelayCommand]
+    private void Rename()
+    {
+        string? newName = TextPromptWindow.Ask("Renomear cena", Name);
+        if (newName is not null)
+            Name = newName;
+    }
+
     partial void OnNameChanged(string value) => Model.Name = value;
     partial void OnHotkeyChanged(string? value) => Model.Hotkey = value;
 }

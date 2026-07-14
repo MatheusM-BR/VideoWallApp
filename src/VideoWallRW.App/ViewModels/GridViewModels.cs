@@ -41,6 +41,50 @@ public sealed partial class ClipViewModel : ObservableObject
 
     /// <summary>Duração total do arquivo (s); 0 = desconhecida/não é vídeo. Alimenta a TrimBar.</summary>
     [ObservableProperty] private double _duration;
+
+    /// <summary>Frame extraído durante o scrub da TrimBar (null = sem scrub ativo).</summary>
+    [ObservableProperty] private string? _scrubFramePath;
+
+    /// <summary>Instante do scrub vindo da TrimBar (-1 = parado). Debounce de 120ms
+    /// antes de extrair o frame — arrastar rápido não enfileira decodificações.</summary>
+    private double _scrubSeconds = -1;
+    private int _scrubRequestId;
+
+    public double ScrubSeconds
+    {
+        get => _scrubSeconds;
+        set
+        {
+            _scrubSeconds = value;
+            if (value < 0)
+            {
+                ScrubFramePath = null; // soltou a alça — preview volta pro thumbnail
+                return;
+            }
+            _ = ExtractScrubFrameAsync(value);
+        }
+    }
+
+    private async Task ExtractScrubFrameAsync(double seconds)
+    {
+        if (MediaPathOf(Model) is not { } path)
+            return;
+
+        int requestId = ++_scrubRequestId;
+        await Task.Delay(120); // debounce: só extrai quando a alça "assenta"
+        if (requestId != _scrubRequestId || _scrubSeconds < 0)
+            return;
+
+        string? frame = await Task.Run(() => VideoWallRW.Media.FrameExtractor.TryExtractFrame(path, seconds));
+        if (frame is not null && requestId == _scrubRequestId && _scrubSeconds >= 0)
+            ScrubFramePath = frame;
+    }
+
+    /// <summary>O que o painel PREVIEW mostra: frame do scrub quando arrastando, senão o thumbnail.</summary>
+    public string? PreviewImagePath => ScrubFramePath ?? ThumbnailPath;
+
+    partial void OnScrubFramePathChanged(string? value) => OnPropertyChanged(nameof(PreviewImagePath));
+    partial void OnThumbnailPathChanged(string? value) => OnPropertyChanged(nameof(PreviewImagePath));
     [ObservableProperty] private string _imageDurationText = string.Empty;
     [ObservableProperty] private ResizeMode? _resize;
     [ObservableProperty] private double _volume = 1.0;
@@ -326,6 +370,9 @@ public sealed partial class LayerViewModel : ObservableObject
         foreach (var clip in Clips)
             clip.IsActive = clip.ColumnIndex == value;
     }
+
+    // Renomear layer pela UI (o engine não usa o nome; basta persistir no modelo).
+    partial void OnNameChanged(string value) => Model.Name = value;
 
     partial void OnBlendChanged(BlendMode value) => UpdateLayerState();
     partial void OnBypassChanged(bool value) => UpdateLayerState();

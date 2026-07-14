@@ -149,14 +149,10 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenAgenda()
     {
-        var vm = new ViewModels.AgendaViewModel(GetProjectFolder, OpenImageEditorForFile, OpenPdfImporter, SendImageToCell);
+        var vm = new ViewModels.AgendaViewModel(OpenImageEditorForFile, OpenPdfImporter, SendImageToCell);
         var window = new AgendaWindow(vm) { Owner = Application.Current.MainWindow };
         window.Show();
     }
-
-    private string GetProjectFolder() => _currentProjectPath is null
-        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "VideoWallRW")
-        : Path.GetDirectoryName(_currentProjectPath)!;
 
     /// <summary>Fase 10 T10.6: "editar imagem" abre o editor; ao salvar, envia direto
     /// pra célula selecionada (ou pergunta layer/coluna se nada estiver selecionado).</summary>
@@ -175,33 +171,45 @@ public sealed partial class MainViewModel : ObservableObject
         window.Show();
     }
 
-    /// <summary>Painel Files (duplo-clique): arquivo vai pra célula selecionada; sem
-    /// seleção, primeira célula vazia da layer 0.</summary>
+    /// <summary>Abre o seletor de célula de destino, pré-selecionando a célula atual.
+    /// Retorna null se o operador cancelar.</summary>
+    private (int Layer, int Column)? PickTargetCell()
+    {
+        var dlg = new CellPickerWindow(
+            Grid.Layers.Select(l => l.Name).ToList(), Grid.Model.ColumnCount,
+            Grid.SelectedClip?.LayerIndex ?? 0, Grid.SelectedClip?.ColumnIndex ?? 0)
+        {
+            Owner = Application.Current.MainWindow,
+        };
+        return dlg.ShowDialog() == true ? (dlg.SelectedLayer, dlg.SelectedColumn) : null;
+    }
+
+    /// <summary>Painel Files (duplo-clique): com célula selecionada vai direto nela;
+    /// sem seleção, pergunta o destino.</summary>
     private void SendFileToSelectedCell(string path)
     {
-        int layerIndex = Grid.SelectedClip?.LayerIndex ?? 0;
-        int columnIndex = Grid.SelectedClip?.ColumnIndex ?? -1;
-        if (columnIndex < 0)
-            Grid.AddFileAutoColumn(layerIndex, path);
-        else
-            Grid.SetFiles(layerIndex, columnIndex, [path]);
+        int layerIndex, columnIndex;
+        if (Grid.SelectedClip is { } selected)
+        {
+            (layerIndex, columnIndex) = (selected.LayerIndex, selected.ColumnIndex);
+        }
+        else if (PickTargetCell() is { } cell)
+        {
+            (layerIndex, columnIndex) = cell;
+        }
+        else return;
+
+        Grid.SetFiles(layerIndex, columnIndex, [path]);
         StatusText = $"Enviado para a grade: {Path.GetFileName(path)}";
     }
 
-    /// <summary>Manda a imagem editada pra célula selecionada na grade; sem seleção,
-    /// usa a primeira célula vazia da layer 0 (mesma heurística do watch-folder).</summary>
+    /// <summary>Enviar imagem do editor/Agenda pra grade: o operador escolhe a célula
+    /// de destino (pré-selecionada na célula atual).</summary>
     private void SendImageToCell(string path, string suggestedName)
     {
-        int layerIndex = Grid.SelectedClip?.LayerIndex ?? 0;
-        int columnIndex = Grid.SelectedClip?.ColumnIndex ?? -1;
-        if (columnIndex < 0)
-        {
-            Grid.AddFileAutoColumn(layerIndex, path);
-        }
-        else
-        {
-            Grid.SetClip(layerIndex, columnIndex, new Clip(new FileImageSource(path)) { Name = suggestedName });
-        }
+        if (PickTargetCell() is not { } cell)
+            return;
+        Grid.SetClip(cell.Layer, cell.Column, new Clip(new FileImageSource(path)) { Name = suggestedName });
         StatusText = $"Imagem enviada para a célula: {suggestedName}";
     }
 
@@ -258,13 +266,11 @@ public sealed partial class MainViewModel : ObservableObject
         };
         if (dlg.ShowDialog() != true) return;
 
-        var ext = Path.GetExtension(dlg.FileName).ToLowerInvariant();
-        SourceDescriptor src = ext is ".png" or ".jpg" or ".jpeg"
-            ? new FileImageSource(dlg.FileName)
-            : new FileVideoSource(dlg.FileName);
+        if (PickTargetCell() is not { } cell)
+            return;
 
-        Grid.SetClip(0, 0, new Clip(src) { Name = Path.GetFileName(dlg.FileName) });
-        StatusText = $"Load p/ testes em [0,0]: {Path.GetFileName(dlg.FileName)}";
+        Grid.SetFiles(cell.Layer, cell.Column, [dlg.FileName]);
+        StatusText = $"Carregado em [{cell.Layer},{cell.Column}]: {Path.GetFileName(dlg.FileName)}";
     }
 
     // ── Fase 7: projeto ──────────────────────────────────────────────────────
@@ -565,6 +571,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void RemoveSceneInternal(SceneViewModel scene)
     {
+        var confirm = MessageBox.Show($"Excluir a cena \"{scene.Name}\"?", "VideoWallRW",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes)
+            return;
+
         Scenes.Remove(scene);
         _render.Post(new SyncScenes(Scenes.Select(s => s.Model).ToList()));
         MarkDirty();

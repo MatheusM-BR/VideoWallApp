@@ -48,9 +48,17 @@
           </ItemsControl.ItemsPanel>
           <ItemsControl.ItemTemplate>
             <DataTemplate>
-              <StackPanel Orientation="Horizontal" Margin="0,0,4,0">
+              <StackPanel Orientation="Horizontal" Margin="0,0,4,0"
+                          ToolTip="Clique dispara · botão direito renomeia/exclui">
+                <StackPanel.ContextMenu>
+                  <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                    <MenuItem Header="Renomear..." Command="{Binding RenameCommand}" />
+                    <MenuItem Header="Excluir" Command="{Binding RemoveCommand}" />
+                  </ContextMenu>
+                </StackPanel.ContextMenu>
                 <Button Content="{Binding Name}" Command="{Binding TriggerCommand}" />
-                <Button Content="✕" Command="{Binding RemoveCommand}" Padding="4,3" Foreground="{StaticResource FgDim}" />
+                <Button Content="✕" Command="{Binding RemoveCommand}" Padding="4,3" Foreground="{StaticResource FgDim}"
+                        ToolTip="Excluir cena" />
               </StackPanel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
@@ -155,7 +163,8 @@
         <controls:TrimBar Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="6" Height="26" Margin="0,8,0,0"
                           Duration="{Binding Duration}"
                           InPoint="{Binding TrimIn, Mode=TwoWay}"
-                          OutPoint="{Binding TrimOut, Mode=TwoWay}" />
+                          OutPoint="{Binding TrimOut, Mode=TwoWay}"
+                          ScrubSeconds="{Binding ScrubSeconds, Mode=OneWayToSource}" />
       </Grid>
     </Border>
 
@@ -213,7 +222,9 @@
                         <DockPanel Margin="0,0,0,4">
                           <Button DockPanel.Dock="Right" Content="✕" Command="{Binding ClearCommand}"
                                   Padding="5,1" FontSize="10" ToolTip="Limpar layer (tirar do ar)" />
-                          <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12" VerticalAlignment="Center" />
+                          <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}" FontWeight="Bold" FontSize="12"
+                                   VerticalAlignment="Center" BorderThickness="0" Background="Transparent"
+                                   Margin="0,0,4,0" ToolTip="Nome da layer (clique para editar)" />
                         </DockPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                           <ToggleButton Content="B" IsChecked="{Binding Bypass}" Padding="7,1" FontSize="10"
@@ -329,7 +340,8 @@
           <TextBlock Text="PREVIEW" Foreground="{StaticResource FgDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,4" />
           <Border Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
                   Height="128" ClipToBounds="True">
-            <Image Source="{Binding ThumbnailPath}" Stretch="Uniform" />
+            <!-- Durante o scrub da TrimBar mostra o frame do instante sendo definido -->
+            <Image Source="{Binding PreviewImagePath}" Stretch="Uniform" />
           </Border>
           <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,0"
                      TextTrimming="CharacterEllipsis" />

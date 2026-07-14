@@ -24,9 +24,6 @@ public sealed partial class FileBrowserViewModel : ObservableObject
     private static readonly string[] MediaExtensions =
         [".mp4", ".mov", ".mkv", ".avi", ".wmv", ".webm", ".png", ".jpg", ".jpeg", ".bmp"];
 
-    private static readonly string StatePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VideoWallRW", "browser.txt");
-
     private readonly Action<string> _sendToCell;
 
     [ObservableProperty] private string _currentFolder = "";
@@ -36,11 +33,8 @@ public sealed partial class FileBrowserViewModel : ObservableObject
     public FileBrowserViewModel(Action<string> sendToCell)
     {
         _sendToCell = sendToCell;
-        string start = TryLoadLastFolder()
-            ?? Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
-        if (!Directory.Exists(start))
-            start = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-        Navigate(start);
+        // Padrão da operação: abre sempre em C:\Video Wall (criada se não existir).
+        Navigate(AppPaths.EnsureMediaRoot());
     }
 
     [RelayCommand]
@@ -89,23 +83,5 @@ public sealed partial class FileBrowserViewModel : ObservableObject
                 Items.Add(new FileBrowserItem { Name = Path.GetFileName(file), FullPath = file, IsFolder = false });
         }
         catch (UnauthorizedAccessException) { /* pasta protegida — mostra o que deu */ }
-
-        SaveLastFolder(folder);
-    }
-
-    private static string? TryLoadLastFolder()
-    {
-        try { return File.Exists(StatePath) ? File.ReadAllText(StatePath).Trim() : null; }
-        catch { return null; }
-    }
-
-    private static void SaveLastFolder(string folder)
-    {
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(StatePath)!);
-            File.WriteAllText(StatePath, folder);
-        }
-        catch { /* melhor esforço */ }
     }
 }

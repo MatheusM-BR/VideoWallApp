@@ -16,6 +16,7 @@ public partial class PdfImportWindow : Window
         InitializeComponent();
         DataContext = viewModel;
         viewModel.PropertyChanged += OnVmPropertyChanged;
+        Closed += (_, _) => viewModel.Dispose();
     }
 
     private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)

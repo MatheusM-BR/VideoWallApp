@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Atalhos de teclado" Height="520" Width="420"
         WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Fg}"
         PreviewKeyDown="OnPreviewKeyDown">
   <DockPanel Margin="10">
     <TextBlock DockPanel.Dock="Top" Text="Clique em 'Redefinir' e aperte a nova combinação de teclas."

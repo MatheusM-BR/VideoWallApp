@@ -21,7 +21,6 @@ public sealed partial class AgendaEventViewModel(AgendaEvent model) : Observable
 public sealed partial class AgendaViewModel : ObservableObject, IDisposable
 {
     private readonly AgendaClient _client = new();
-    private readonly Func<string> _projectFolder;
     private readonly Action<string, string> _openImageEditor; // (path, suggestedClipName)
     private readonly Action<string> _openPdfImporter;
     private readonly Action<string, string> _sendToCell; // (path, clipName)
@@ -36,10 +35,9 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<AgendaEventViewModel> Events { get; } = [];
 
-    public AgendaViewModel(Func<string> projectFolder, Action<string, string> openImageEditor,
+    public AgendaViewModel(Action<string, string> openImageEditor,
         Action<string> openPdfImporter, Action<string, string> sendToCell)
     {
-        _projectFolder = projectFolder;
         _openImageEditor = openImageEditor;
         _openPdfImporter = openPdfImporter;
         _sendToCell = sendToCell;
@@ -102,10 +100,8 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
     private string EventFolder()
     {
         if (SelectedEvent is null) throw new InvalidOperationException();
-        string root = Path.Combine(_projectFolder(), "Assets", "Agenda",
-            $"{SelectedEvent.Model.Date:yyyy-MM-dd}-{SelectedEvent.Model.Slug}");
-        Directory.CreateDirectory(root);
-        return root;
+        // Tudo vai pra pasta padrão da operação (C:\Video Wall) — um lugar só.
+        return AppPaths.AgendaEventFolder(SelectedEvent.Model.Date, SelectedEvent.Model.Slug);
     }
 
     private void WriteMeta(string folder, string sourceUrl)

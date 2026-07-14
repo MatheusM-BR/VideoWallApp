@@ -1,29 +1,42 @@
 using System.IO;
+using System.Windows;
+using System.Windows.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PDFtoImage;
 using SkiaSharp;
+using SkiaSharp.Views.WPF;
 
 namespace VideoWallRW.App.ViewModels;
 
+/// <summary>Miniatura de uma página do PDF na lateral.</summary>
+public sealed partial class PdfPageThumbViewModel : ObservableObject
+{
+    public int PageNumber { get; init; }
+    [ObservableProperty] private ImageSource? _image;
+    public string Label => $"Página {PageNumber}";
+}
+
 /// <summary>
-/// Fase 10 T10.4: seleciona uma página de um PDF (catálogo/regulamento baixado da
-/// Agenda) e renderiza em PNG de alta resolução na pasta do evento. Sem grid de
-/// miniaturas de todas as páginas (simplificação deliberada — catálogos têm dezenas
-/// de páginas; renderizar todas em baixa já seria custoso) — só o número da página e
-/// uma prévia da atual.
+/// Fase 10 T10.4 (revisado): as páginas do PDF aparecem como miniaturas na lateral,
+/// renderizadas progressivamente em background; clicar numa página abre a prévia
+/// grande para exportar em alta. Catálogos têm dezenas de páginas — a miniatura é
+/// renderizada em DPI baixo, uma a uma, sem travar a UI.
 /// </summary>
-public sealed partial class PdfImportViewModel : ObservableObject
+public sealed partial class PdfImportViewModel : ObservableObject, IDisposable
 {
     private readonly string _pdfPath;
     private readonly Action<string, string> _onImageReady;
+    private readonly CancellationTokenSource _cts = new();
     private byte[]? _bytes;
 
     [ObservableProperty] private int _pageCount;
-    [ObservableProperty] private int _pageNumber = 1;
+    [ObservableProperty] private PdfPageThumbViewModel? _selectedPage;
     [ObservableProperty] private SKBitmap? _preview;
     [ObservableProperty] private int _dpi = 200;
-    [ObservableProperty] private string _statusText = "";
+    [ObservableProperty] private string _statusText = "Carregando páginas...";
+
+    public System.Collections.ObjectModel.ObservableCollection<PdfPageThumbViewModel> Pages { get; } = [];
 
     public PdfImportViewModel(string pdfPath, Action<string, string> onImageReady)
     {
@@ -36,28 +49,58 @@ public sealed partial class PdfImportViewModel : ObservableObject
     {
         _bytes = await File.ReadAllBytesAsync(_pdfPath);
         PageCount = Conversion.GetPageCount(_bytes);
-        await RenderPreviewAsync();
+        for (int i = 1; i <= PageCount; i++)
+            Pages.Add(new PdfPageThumbViewModel { PageNumber = i });
+        if (Pages.Count > 0)
+            SelectedPage = Pages[0];
+
+        // Miniaturas em background, uma a uma — a lista preenche progressivamente.
+        _ = Task.Run(() => RenderThumbsAsync(_cts.Token));
     }
 
-    partial void OnPageNumberChanged(int value) => _ = RenderPreviewAsync();
+    private async Task RenderThumbsAsync(CancellationToken ct)
+    {
+        for (int i = 0; i < Pages.Count && !ct.IsCancellationRequested; i++)
+        {
+            int page = i;
+            try
+            {
+                using var bmp = Conversion.ToImage(_bytes!, page: (Index)page, options: new(Dpi: 24));
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    var wb = bmp.ToWriteableBitmap();
+                    wb.Freeze();
+                    Pages[page].Image = wb;
+                });
+            }
+            catch (Exception)
+            {
+                // Página problemática não derruba o resto do catálogo.
+            }
+        }
+        await Application.Current.Dispatcher.InvokeAsync(() => StatusText = $"{PageCount} página(s).");
+    }
+
+    partial void OnSelectedPageChanged(PdfPageThumbViewModel? value) => _ = RenderPreviewAsync();
 
     private async Task RenderPreviewAsync()
     {
-        if (_bytes is null || PageCount == 0) return;
-        int page = Math.Clamp(PageNumber - 1, 0, PageCount - 1);
-        Preview?.Dispose();
+        if (_bytes is null || SelectedPage is null) return;
+        int page = SelectedPage.PageNumber - 1;
+        var old = Preview;
         Preview = await Task.Run(() => Conversion.ToImage(_bytes, page: (Index)page,
-            options: new(Dpi: 96))); // prévia em baixa — a exportação final usa o DPI configurável
+            options: new(Dpi: 96))); // prévia; exportação usa o DPI configurável
+        old?.Dispose();
     }
 
     [RelayCommand]
     private async Task ExportPage()
     {
-        if (_bytes is null) return;
-        StatusText = "Renderizando...";
-        int page = Math.Clamp(PageNumber - 1, 0, PageCount - 1);
+        if (_bytes is null || SelectedPage is null) return;
+        int pageNumber = SelectedPage.PageNumber;
+        StatusText = "Renderizando em alta...";
 
-        using var bitmap = await Task.Run(() => Conversion.ToImage(_bytes, page: (Index)page,
+        using var bitmap = await Task.Run(() => Conversion.ToImage(_bytes, page: (Index)(pageNumber - 1),
             options: new(Dpi: Dpi)));
 
         // Página A3 a 300 DPI explode memória — limita a maior dimensão a 4096px.
@@ -70,7 +113,7 @@ public sealed partial class PdfImportViewModel : ObservableObject
             final = bitmap.Resize(new SKImageInfo((int)(bitmap.Width * scale), (int)(bitmap.Height * scale)), SKFilterQuality.High);
         }
 
-        string dest = Path.Combine(Path.GetDirectoryName(_pdfPath)!, $"page-{PageNumber}.png");
+        string dest = Path.Combine(Path.GetDirectoryName(_pdfPath)!, $"page-{pageNumber}.png");
         using (var image = SKImage.FromBitmap(final))
         using (var data = image.Encode(SKEncodedImageFormat.Png, 100))
         await using (var stream = File.Create(dest))
@@ -79,7 +122,13 @@ public sealed partial class PdfImportViewModel : ObservableObject
         }
         if (!ReferenceEquals(final, bitmap)) final.Dispose();
 
-        StatusText = $"Salvo: {Path.GetFileName(dest)}";
-        _onImageReady(dest, $"Página {PageNumber}");
+        StatusText = $"Salvo: {dest}";
+        _onImageReady(dest, $"Página {pageNumber}");
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        Preview?.Dispose();
     }
 }

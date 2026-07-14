@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using SkiaSharp;
 using SkiaSharp.Views.Desktop;
@@ -12,11 +13,11 @@ public partial class ImageEditorWindow : Window
     private SKPoint? _dragStart;
     private SKPoint? _lastPaintPoint;
     private SKRect? _liveCropRect;
+    private (SKPoint A, SKPoint B)? _liveShape;
 
     public ImageEditorWindow(ImageEditorViewModel viewModel)
     {
-        // _vm ANTES do InitializeComponent: o ComboBox de cor tem IsSelected=True no
-        // primeiro item e dispara OnColorChanged ainda durante o parse do XAML.
+        // _vm ANTES do InitializeComponent: eventos de XAML podem disparar durante o parse.
         _vm = viewModel;
         InitializeComponent();
         DataContext = viewModel;
@@ -24,22 +25,25 @@ public partial class ImageEditorWindow : Window
         Closed += (_, _) => viewModel.Dispose();
     }
 
-    private void OnColorChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void OnPaletteClick(object sender, RoutedEventArgs e)
     {
-        if (_vm is null) return; // evento pode disparar durante o InitializeComponent
-        if (ColorPicker.SelectedItem is System.Windows.Controls.ComboBoxItem { Tag: string name })
-            _vm.BrushColor = name switch
-            {
-                "Red" => SKColors.Red,
-                "Black" => SKColors.Black,
-                "White" => SKColors.White,
-                "Yellow" => SKColors.Yellow,
-                _ => SKColors.Red,
-            };
+        if (sender is Button { DataContext: string hex })
+            _vm.SetColorHex(hex);
+    }
+
+    private void OnCanvasSize(object sender, RoutedEventArgs e)
+    {
+        var dlg = new CanvasSizeWindow(_vm.Bitmap.Width, _vm.Bitmap.Height) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        if (dlg.StretchImage)
+            _vm.ApplyResize(dlg.NewWidth, dlg.NewHeight);
+        else
+            _vm.ApplyCanvasResize(dlg.NewWidth, dlg.NewHeight);
     }
 
     /// <summary>Mapeia um ponto do controle (coordenadas WPF) pro espaço de pixels do
-    /// bitmap, considerando o "letterbox" do desenho scale-to-fit em <see cref="OnPaintSurface"/>.</summary>
+    /// bitmap, considerando o "letterbox" do desenho scale-to-fit.</summary>
     private SKPoint ToImageSpace(Point p)
     {
         var bmp = _vm.Bitmap;
@@ -59,8 +63,19 @@ public partial class ImageEditorWindow : Window
                 _liveCropRect = new SKRect(pt.X, pt.Y, pt.X, pt.Y);
                 break;
             case EditorTool.Brush:
+            case EditorTool.Eraser:
                 _vm.BeginStroke();
                 _lastPaintPoint = pt;
+                break;
+            case EditorTool.Eyedropper:
+                _vm.PickColorAt(pt);
+                break;
+            case EditorTool.Bucket:
+                _vm.FloodFillAt(pt);
+                break;
+            case EditorTool.Shape:
+                _dragStart = pt;
+                _liveShape = (pt, pt);
                 break;
             case EditorTool.Text:
                 _vm.ApplyText(pt);
@@ -83,10 +98,15 @@ public partial class ImageEditorWindow : Window
             _liveCropRect = new SKRect(start.X, start.Y, start.X + w, start.Y + h);
             Canvas.InvalidateVisual();
         }
-        else if (_vm.Tool == EditorTool.Brush && _lastPaintPoint is { } last)
+        else if (_vm.Tool is EditorTool.Brush or EditorTool.Eraser && _lastPaintPoint is { } last)
         {
             _vm.PaintStroke(last, pt);
             _lastPaintPoint = pt;
+            Canvas.InvalidateVisual();
+        }
+        else if (_vm.Tool == EditorTool.Shape && _dragStart is { } shapeStart)
+        {
+            _liveShape = (shapeStart, pt);
             Canvas.InvalidateVisual();
         }
     }
@@ -94,8 +114,17 @@ public partial class ImageEditorWindow : Window
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
         Canvas.ReleaseMouseCapture();
+
+        if (_vm.Tool == EditorTool.Shape && _liveShape is { } shape &&
+            (Math.Abs(shape.B.X - shape.A.X) > 2 || Math.Abs(shape.B.Y - shape.A.Y) > 2))
+        {
+            _vm.ApplyShape(shape.A, shape.B);
+        }
+
         _dragStart = null;
         _lastPaintPoint = null;
+        _liveShape = null;
+        Canvas.InvalidateVisual();
     }
 
     private void OnApplyCrop(object sender, RoutedEventArgs e)
@@ -122,15 +151,35 @@ public partial class ImageEditorWindow : Window
             (float)(offsetX + bmp.Width * scale), (float)(offsetY + bmp.Height * scale));
         canvas.DrawBitmap(bmp, dest);
 
+        SKPoint ToScreen(SKPoint img) => new(
+            (float)(offsetX + img.X * scale), (float)(offsetY + img.Y * scale));
+
         if (_liveCropRect is { } crop)
         {
-            var screenRect = new SKRect(
-                (float)(offsetX + Math.Min(crop.Left, crop.Right) * scale),
-                (float)(offsetY + Math.Min(crop.Top, crop.Bottom) * scale),
-                (float)(offsetX + Math.Max(crop.Left, crop.Right) * scale),
-                (float)(offsetY + Math.Max(crop.Top, crop.Bottom) * scale));
+            var a = ToScreen(new SKPoint(Math.Min(crop.Left, crop.Right), Math.Min(crop.Top, crop.Bottom)));
+            var b = ToScreen(new SKPoint(Math.Max(crop.Left, crop.Right), Math.Max(crop.Top, crop.Bottom)));
             using var paint = new SKPaint { Color = SKColors.Lime, Style = SKPaintStyle.Stroke, StrokeWidth = 2 };
-            canvas.DrawRect(screenRect, paint);
+            canvas.DrawRect(new SKRect(a.X, a.Y, b.X, b.Y), paint);
+        }
+
+        if (_liveShape is { } shape)
+        {
+            using var paint = new SKPaint
+            {
+                Color = _vm.BrushColor.WithAlpha(180),
+                Style = _vm.ShapeFilled && _vm.Shape != ShapeKind.Linha ? SKPaintStyle.Fill : SKPaintStyle.Stroke,
+                StrokeWidth = (float)(_vm.BrushSize * scale),
+                IsAntialias = true,
+            };
+            var a = ToScreen(shape.A);
+            var b = ToScreen(shape.B);
+            var rect = new SKRect(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Max(a.X, b.X), Math.Max(a.Y, b.Y));
+            switch (_vm.Shape)
+            {
+                case ShapeKind.Retângulo: canvas.DrawRect(rect, paint); break;
+                case ShapeKind.Elipse: canvas.DrawOval(rect, paint); break;
+                case ShapeKind.Linha: canvas.DrawLine(a, b, paint); break;
+            }
         }
     }
 }
