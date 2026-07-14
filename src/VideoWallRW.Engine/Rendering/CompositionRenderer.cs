@@ -30,6 +30,12 @@ public sealed class CompositionRenderer : IDisposable
     private readonly ID3D11Buffer _cbuffer;
     private readonly ID3D11SamplerState _sampler;
 
+    // Passe de saída por slices (Fase 4) — shader e sampler dedicados; ver SliceOutput.hlsl.
+    private readonly ID3D11VertexShader _sliceVs;
+    private readonly ID3D11PixelShader _slicePs;
+    private readonly ID3D11Buffer _sliceCbuffer;
+    private readonly ID3D11SamplerState _sliceSampler;
+
     // Blend States. Null state atua como pre-mul default opaco ou normal alpha estrito sob pre-mul.
     // Usaremos as flags equivalentes solicitadas pela interface.
     private readonly ID3D11BlendState _blendNormal;
@@ -44,6 +50,17 @@ public sealed class CompositionRenderer : IDisposable
         public float Opacity;
         public int BlendMode;
         public float Pad1, Pad2;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SliceParams
+    {
+        public Matrix4x4 PositionTransform;
+        public Matrix4x4 UvTransform;
+        public float Brightness;
+        public float Contrast;
+        public float InvGamma;
+        public float MasterOpacity;
     }
 
     public CompositionRenderer(GraphicsDevice gfx, int width, int height)
@@ -85,6 +102,22 @@ public sealed class CompositionRenderer : IDisposable
             BorderColor = new Color4(0, 0, 0, 0f)
         });
 
+        // Shader do passe de saída por slices (Fase 4).
+        string sliceShaderSrc = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "Rendering", "Shaders", "SliceOutput.hlsl"));
+        _sliceVs = gfx.Device.CreateVertexShader(CompileShader(sliceShaderSrc, "VSMain", "vs_5_0", "SliceOutput.hlsl"));
+        _slicePs = gfx.Device.CreatePixelShader(CompileShader(sliceShaderSrc, "PSMain", "ps_5_0", "SliceOutput.hlsl"));
+        _sliceCbuffer = gfx.Device.CreateBuffer(new BufferDescription(
+            (uint)Marshal.SizeOf<SliceParams>(), BindFlags.ConstantBuffer));
+        // Fora do InputRect deve sair preto opaco (é a saída final, nada mais compõe por cima) —
+        // diferente do sampler da composição (Pass 1), que usa borda transparente.
+        _sliceSampler = gfx.Device.CreateSamplerState(new SamplerDescription(
+            Filter.MinMagMipLinear,
+            TextureAddressMode.Border, TextureAddressMode.Border, TextureAddressMode.Border)
+        {
+            BorderColor = new Color4(0, 0, 0, 1f)
+        });
+
         // Blend States definition
         _blendNormal = CreateBlendState(Blend.One, Blend.InverseSourceAlpha);
         _blendAdd = CreateBlendState(Blend.One, Blend.One);
@@ -117,13 +150,15 @@ public sealed class CompositionRenderer : IDisposable
 
     /// <summary>
     /// Passe 1: desenha a base toda com as texturas ativas processando o blend de sobreposição per Layer.
-    /// Passe 2: espalha sobre o SwapChain da aplicação.
+    /// Passe 2: fatia a composição em slices por tela (Fase 4) — rotação, flip, correção de cor e
+    /// o master fader/blackout são aplicados aqui, na saída, nunca na composição em si (o preview
+    /// do operador deve continuar visível mesmo em blackout).
     /// </summary>
     public void Render(
         ID3D11DeviceContext ctx,
         Composition composition,
         IReadOnlyList<LayerRenderer> activeLayers,
-        IReadOnlyList<(ID3D11RenderTargetView Rtv, int Width, int Height)> outputs)
+        IReadOnlyList<(ID3D11RenderTargetView Rtv, int Width, int Height, Screen Screen)> outputs)
     {
         ctx.ClearRenderTargetView(_compRtv, new Color4(0, 0, 0, 1));
         ctx.OMSetRenderTargets(_compRtv);
@@ -138,13 +173,13 @@ public sealed class CompositionRenderer : IDisposable
             var frames = layer.AcquireFrames();
             if (frames.Count == 0 || layer.ActivePlayer is null) continue;
 
-            double opacity = layer.Model.Opacity * composition.MasterOpacity;
+            double opacity = layer.Model.Opacity;
 
             var sourceWidth = layer.ActivePlayer.Source.Width;
             var sourceHeight = layer.ActivePlayer.Source.Height;
-            
+
             var resizeMode = layer.ActiveClip?.Resize ?? layer.Model.DefaultResize;
-            
+
             var rect = ResizeMath.Compute(
                 resizeMode, sourceWidth, sourceHeight, composition.Width, composition.Height);
 
@@ -158,7 +193,7 @@ public sealed class CompositionRenderer : IDisposable
                 BlendMode.Multiply => _blendMultiply,
                 _ => _blendNormal
             };
-            
+
             ctx.OMSetBlendState(blendState);
             foreach (var frame in frames)
                 DrawQuad(ctx, frame.Srv, uvTransform, (float)(opacity * frame.Opacity), (int)layer.Model.Blend);
@@ -166,14 +201,42 @@ public sealed class CompositionRenderer : IDisposable
 
         // Disable generic blending before swapping outputs buffer
         ctx.OMSetBlendState(null);
-        
-        // ── Passe 2: saídas ──────────────────────────────────────────
-        foreach (var (rtv, w, h) in outputs)
+
+        // ── Passe 2: saídas fatiadas por slice (Fase 4) ─────────────────────
+        foreach (var (rtv, w, h, screen) in outputs)
         {
             ctx.OMSetRenderTargets(rtv);
             ctx.RSSetViewport(new Viewport(0, 0, w, h));
-            DrawQuad(ctx, _compSrv, Matrix4x4.Identity, 1.0f, 0);
+            foreach (var slice in screen.Slices)
+            {
+                var (positionM, uvM) = SliceMath.Compute(slice, composition.Width, composition.Height, w, h);
+                DrawSlice(ctx, _compSrv, positionM, uvM, screen.Color, (float)composition.MasterOpacity);
+            }
         }
+    }
+
+    private void DrawSlice(ID3D11DeviceContext ctx, ID3D11ShaderResourceView srv,
+        Matrix4x4 positionTransform, Matrix4x4 uvTransform, ColorCorrection color, float masterOpacity)
+    {
+        var p = new SliceParams
+        {
+            PositionTransform = positionTransform,
+            UvTransform = uvTransform,
+            Brightness = (float)color.Brightness,
+            Contrast = (float)color.Contrast,
+            InvGamma = (float)(1.0 / System.Math.Max(0.01, color.Gamma)),
+            MasterOpacity = masterOpacity,
+        };
+        ctx.UpdateSubresource(p, _sliceCbuffer);
+        ctx.IASetInputLayout(null);
+        ctx.IASetPrimitiveTopology(PrimitiveTopology.TriangleStrip);
+        ctx.VSSetShader(_sliceVs);
+        ctx.PSSetShader(_slicePs);
+        ctx.VSSetConstantBuffer(0, _sliceCbuffer);
+        ctx.PSSetConstantBuffer(0, _sliceCbuffer);
+        ctx.PSSetShaderResource(0, srv);
+        ctx.PSSetSampler(0, _sliceSampler);
+        ctx.Draw(4, 0);
     }
 
     private void DrawQuad(ID3D11DeviceContext ctx,
@@ -222,9 +285,9 @@ public sealed class CompositionRenderer : IDisposable
         return m;
     }
 
-    private static byte[] CompileShader(string source, string entryPoint, string profile)
+    private static byte[] CompileShader(string source, string entryPoint, string profile, string fileName = "Composite.hlsl")
     {
-        Compiler.Compile(source, entryPoint, "Composite.hlsl", profile, out Blob blob, out Blob errorBlob);
+        Compiler.Compile(source, entryPoint, fileName, profile, out Blob blob, out Blob errorBlob);
         using (errorBlob)
         {
             if (blob is null)
@@ -244,6 +307,10 @@ public sealed class CompositionRenderer : IDisposable
         _cbuffer.Dispose();
         _ps.Dispose();
         _vs.Dispose();
+        _sliceSampler.Dispose();
+        _sliceCbuffer.Dispose();
+        _slicePs.Dispose();
+        _sliceVs.Dispose();
         _compSrv.Dispose();
         _compRtv.Dispose();
         _compTexture.Dispose();

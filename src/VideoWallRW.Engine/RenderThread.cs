@@ -31,6 +31,9 @@ public sealed class RenderThread : IDisposable
     private readonly List<LayerRenderer> _layers = [];
     private bool _masterPaused;
 
+    // ── Fase 4: fatiamento de saída ────────────────────────────────────────────
+    private Core.Model.OutputSetup? _outputSetup;
+
     /// <summary>Publicado ~2x/segundo, na render thread.</summary>
     public event Action<EngineStats>? StatsUpdated;
 
@@ -98,7 +101,7 @@ public sealed class RenderThread : IDisposable
                 {
                     // Passe de composição + saídas via CompositionRenderer.
                     var outputList = _outputs
-                        .Select(o => (o.Rtv, o.Monitor.Width, o.Monitor.Height))
+                        .Select(o => (o.Rtv, o.Monitor.Width, o.Monitor.Height, ResolveScreen(o.Monitor.DeviceName, o.Monitor.Width, o.Monitor.Height)))
                         .ToList();
                     _compositionRenderer.Render(_gfx.Context, _compositionData, _layers, outputList);
                 }
@@ -185,10 +188,31 @@ public sealed class RenderThread : IDisposable
             case SetMasterOpacity(var opacity):
                 OnSetMasterOpacity(opacity);
                 break;
+            case SyncOutputSetup(var setup):
+                _outputSetup = setup.Clone();
+                Log.Information("OutputSetup sincronizado com {N} telas configuradas.", _outputSetup.Screens.Count);
+                break;
             default:
                 Log.Warning("Comando não tratado: {Command}", command);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Resolve a configuração de fatiamento (Fase 4) de um monitor ativo. Sem OutputSetup
+    /// configurado (ou sem tela correspondente/desabilitada), cai no comportamento padrão:
+    /// um slice único esticando a composição inteira no monitor — o mesmo de antes da Fase 4.
+    /// </summary>
+    private Core.Model.Screen ResolveScreen(string monitorDeviceName, int monitorWidth, int monitorHeight)
+    {
+        var compW = _compositionData?.Width ?? monitorWidth;
+        var compH = _compositionData?.Height ?? monitorHeight;
+
+        var screen = _outputSetup?.Screens.FirstOrDefault(s => s.MonitorDeviceName == monitorDeviceName);
+        if (screen is not null && screen.Enabled && screen.Slices.Count > 0)
+            return screen;
+
+        return Core.Model.OutputSetup.CreateFullscreenScreen(monitorDeviceName, compW, compH, monitorWidth, monitorHeight);
     }
 
     private void SyncComp(Core.Model.Composition data)
