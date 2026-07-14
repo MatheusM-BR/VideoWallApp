@@ -53,10 +53,10 @@ public sealed class HapDecodeWorker : IDisposable
 
                 if (!demuxer.TryReadNext(packet))
                 {
-                    // EOF: loop sem frame preto — volta ao início e continua.
-                    demuxer.Seek(0);
-                    Interlocked.Increment(ref _generation);
-                    _queue.Clear();
+                    // EOF: o transporte é do ClipPlayer — espera o próximo seek em vez
+                    // de loopar sozinho (mesmo fix do VideoDecodeWorker).
+                    while (!ct.IsCancellationRequested && !_seekPending)
+                        Thread.Sleep(5);
                     continue;
                 }
 

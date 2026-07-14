@@ -19,7 +19,6 @@ public sealed class VideoDecodeWorker : IDisposable
     private int _generation; // Interlocked
     private volatile bool _seekPending;
     private double _seekTarget;
-    private bool _loop = true;
 
     // Estatísticas expostas para o snapshot da UI.
     private long _decodedFrames;
@@ -78,17 +77,14 @@ public sealed class VideoDecodeWorker : IDisposable
 
                 if (!decoder.TryDecodeNext(frame))
                 {
-                    // EOF.
+                    // EOF: quem manda no transporte é o ClipPlayer (Loop = ele pede o
+                    // seek; Hold/Once = ninguém pede). Loopar aqui sozinho fazia o clip
+                    // em Hold "re-rodar" na velocidade do render (~20x) e atropelava o
+                    // áudio — o worker agora só espera o próximo seek.
                     _queue.Return(frame);
-                    if (_loop)
-                    {
-                        // Loop sem frame preto: seek + continuar.
-                        decoder.Seek(0);
-                        Interlocked.Increment(ref _generation);
-                        _queue.Clear();
-                        continue;
-                    }
-                    break; // modo não-loop: sair da thread
+                    while (!ct.IsCancellationRequested && !_seekPending)
+                        Thread.Sleep(5);
+                    continue;
                 }
 
                 // Atualizar estatísticas de fps.

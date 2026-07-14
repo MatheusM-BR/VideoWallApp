@@ -15,6 +15,12 @@ public partial class ImageEditorWindow : Window
     private SKRect? _liveCropRect;
     private (SKPoint A, SKPoint B)? _liveShape;
 
+    // Interação com o quadro de corte depois de criado: mover (arrastar por dentro)
+    // ou redimensionar (arrastar um canto). Fora do quadro = começa seleção nova.
+    private enum CropDragMode { None, Create, Move, Resize }
+    private CropDragMode _cropMode;
+    private SKPoint _cropAnchor; // Resize: canto oposto fixo · Move: offset do clique ao canto sup-esq.
+
     public ImageEditorWindow(ImageEditorViewModel viewModel)
     {
         // _vm ANTES do InitializeComponent: eventos de XAML podem disparar durante o parse.
@@ -59,8 +65,7 @@ public partial class ImageEditorWindow : Window
         switch (_vm.Tool)
         {
             case EditorTool.Crop:
-                _dragStart = pt;
-                _liveCropRect = new SKRect(pt.X, pt.Y, pt.X, pt.Y);
+                BeginCropDrag(pt);
                 break;
             case EditorTool.Brush:
             case EditorTool.Eraser:
@@ -89,13 +94,9 @@ public partial class ImageEditorWindow : Window
         if (e.LeftButton != MouseButtonState.Pressed) return;
         var pt = ToImageSpace(e.GetPosition(Canvas));
 
-        if (_vm.Tool == EditorTool.Crop && _dragStart is { } start)
+        if (_vm.Tool == EditorTool.Crop && _cropMode != CropDragMode.None)
         {
-            float w = pt.X - start.X;
-            float h = pt.Y - start.Y;
-            if (_vm.SelectedPreset?.Ratio is { } ratio)
-                h = Math.Sign(h == 0 ? 1 : h) * Math.Abs(w) / (float)ratio;
-            _liveCropRect = new SKRect(start.X, start.Y, start.X + w, start.Y + h);
+            ContinueCropDrag(pt);
             Canvas.InvalidateVisual();
         }
         else if (_vm.Tool is EditorTool.Brush or EditorTool.Eraser && _lastPaintPoint is { } last)
@@ -124,8 +125,93 @@ public partial class ImageEditorWindow : Window
         _dragStart = null;
         _lastPaintPoint = null;
         _liveShape = null;
+        _cropMode = CropDragMode.None; // o quadro de corte permanece, editável
         Canvas.InvalidateVisual();
     }
+
+    // ── Quadro de corte: criar, mover e redimensionar ──────────────────────────
+
+    private double CanvasScale()
+    {
+        var bmp = _vm.Bitmap;
+        return Math.Min(Canvas.ActualWidth / bmp.Width, Canvas.ActualHeight / bmp.Height);
+    }
+
+    private SKRect? NormalizedCrop() => _liveCropRect is { } r
+        ? new SKRect(Math.Min(r.Left, r.Right), Math.Min(r.Top, r.Bottom),
+                     Math.Max(r.Left, r.Right), Math.Max(r.Top, r.Bottom))
+        : null;
+
+    private void BeginCropDrag(SKPoint pt)
+    {
+        float tolerance = (float)(14 / Math.Max(CanvasScale(), 0.01)); // ~14px de tela
+
+        if (NormalizedCrop() is { } rect)
+        {
+            // Perto de um canto → redimensiona (o canto oposto fica fixo).
+            SKPoint[] corners =
+            [
+                new(rect.Left, rect.Top), new(rect.Right, rect.Top),
+                new(rect.Left, rect.Bottom), new(rect.Right, rect.Bottom),
+            ];
+            for (int i = 0; i < corners.Length; i++)
+            {
+                if (SKPoint.Distance(pt, corners[i]) <= tolerance)
+                {
+                    _cropMode = CropDragMode.Resize;
+                    _cropAnchor = corners[3 - i]; // canto oposto
+                    ContinueCropDrag(pt);
+                    return;
+                }
+            }
+
+            // Dentro do quadro → move inteiro.
+            if (rect.Contains(pt.X, pt.Y))
+            {
+                _cropMode = CropDragMode.Move;
+                _cropAnchor = new SKPoint(pt.X - rect.Left, pt.Y - rect.Top);
+                return;
+            }
+        }
+
+        // Fora → começa uma seleção nova.
+        _cropMode = CropDragMode.Create;
+        _dragStart = pt;
+        _liveCropRect = new SKRect(pt.X, pt.Y, pt.X, pt.Y);
+    }
+
+    private void ContinueCropDrag(SKPoint pt)
+    {
+        switch (_cropMode)
+        {
+            case CropDragMode.Create when _dragStart is { } start:
+                _liveCropRect = new SKRect(start.X, start.Y,
+                    start.X + WidthFor(pt.X - start.X),
+                    start.Y + HeightFor(pt.X - start.X, pt.Y - start.Y));
+                break;
+
+            case CropDragMode.Resize:
+                float w = pt.X - _cropAnchor.X;
+                _liveCropRect = new SKRect(_cropAnchor.X, _cropAnchor.Y,
+                    _cropAnchor.X + WidthFor(w),
+                    _cropAnchor.Y + HeightFor(w, pt.Y - _cropAnchor.Y));
+                break;
+
+            case CropDragMode.Move when NormalizedCrop() is { } rect:
+                var bmp = _vm.Bitmap;
+                float left = Math.Clamp(pt.X - _cropAnchor.X, 0, Math.Max(bmp.Width - rect.Width, 0));
+                float top = Math.Clamp(pt.Y - _cropAnchor.Y, 0, Math.Max(bmp.Height - rect.Height, 0));
+                _liveCropRect = new SKRect(left, top, left + rect.Width, top + rect.Height);
+                break;
+        }
+    }
+
+    private static float WidthFor(float w) => w;
+
+    private float HeightFor(float w, float h)
+        => _vm.SelectedPreset?.Ratio is { } ratio
+            ? Math.Sign(h == 0 ? 1 : h) * Math.Abs(w) / (float)ratio
+            : h;
 
     private void OnApplyCrop(object sender, RoutedEventArgs e)
     {
@@ -160,6 +246,12 @@ public partial class ImageEditorWindow : Window
             var b = ToScreen(new SKPoint(Math.Max(crop.Left, crop.Right), Math.Max(crop.Top, crop.Bottom)));
             using var paint = new SKPaint { Color = SKColors.Lime, Style = SKPaintStyle.Stroke, StrokeWidth = 2 };
             canvas.DrawRect(new SKRect(a.X, a.Y, b.X, b.Y), paint);
+
+            // Alças nos cantos: arrastar redimensiona; arrastar por dentro move.
+            using var handle = new SKPaint { Color = SKColors.Lime, Style = SKPaintStyle.Fill };
+            const float hs = 5;
+            foreach (var c in new[] { a, new SKPoint(b.X, a.Y), new SKPoint(a.X, b.Y), b })
+                canvas.DrawRect(new SKRect(c.X - hs, c.Y - hs, c.X + hs, c.Y + hs), handle);
         }
 
         if (_liveShape is { } shape)

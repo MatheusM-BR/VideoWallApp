@@ -48,6 +48,14 @@ public sealed class ClipPlayer : IDisposable
         switch (_clip.PlayMode)
         {
             case PlayMode.Loop:
+                // Autopilot também vale para clips em Loop (o padrão da grade): cada
+                // volta completa conta como "fim" — se ninguém trocar o clip (autopilot
+                // da layer OFF ou ação None), o loop segue e avisa de novo na próxima volta.
+                if (_clip.Autopilot != AutopilotAction.None)
+                {
+                    RaiseEndReached();
+                    _ended = false;
+                }
                 Playhead = Wrap(Playhead, inPoint, outPoint);
                 _source.Seek(Playhead);
                 break;

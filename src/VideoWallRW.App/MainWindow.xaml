@@ -32,10 +32,10 @@
                       FontWeight="Bold" FontSize="13" ToolTip="Mute geral do áudio (o programa abre mutado)">
           <ToggleButton.Style>
             <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
-              <Setter Property="Content" Value="🔊 SOM" />
+              <Setter Property="Content" Value="🔊 SOM LIGADO" />
               <Style.Triggers>
                 <Trigger Property="IsChecked" Value="True">
-                  <Setter Property="Content" Value="🔇 MUTE" />
+                  <Setter Property="Content" Value="🔇 MUTADO" />
                   <Setter Property="Background" Value="{StaticResource AccentDim}" />
                   <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
                 </Trigger>
