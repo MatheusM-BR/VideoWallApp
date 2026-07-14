@@ -37,8 +37,8 @@ Regras de progressão:
 | 1 | Player de vídeo (FFmpeg SW) | implementada — DoD manual pendente |
 | 2 | Grade layers × colunas | implementada — DoD manual pendente |
 | 3 | Transporte, atalhos, autopilot | implementada (T3.6 áudio incluído) — DoD manual pendente |
-| 4 | Advanced Output (slices) | pendente |
-| 5 | Fontes ao vivo (NDI + captura) | pendente |
+| 4 | Advanced Output (slices) | implementada (editor com campos numéricos, não drag-and-drop) — DoD manual pendente |
+| 5 | Fontes ao vivo (NDI + captura) | **pulada por decisão do usuário** — requer NDI SDK/hardware; retomar quando disponível |
 | 6 | Performance (HW decode, HAP, preroll) | pendente |
 | 7 | Persistência e operação | pendente |
 | 8 | Modo instalação fixa | pendente |
