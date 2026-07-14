@@ -12,9 +12,9 @@
       <TextBlock Text="DPI" VerticalAlignment="Center" Margin="0,0,4,0" />
       <TextBox Text="{Binding Dpi, UpdateSourceTrigger=PropertyChanged}" Width="50" Margin="0,0,16,0" />
       <Button Content="Exportar página" Command="{Binding ExportPageCommand}" Padding="10,4" />
-      <TextBlock Text="{Binding StatusText}" Foreground="#666" VerticalAlignment="Center" Margin="10,0,0,0" />
+      <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" Margin="10,0,0,0" />
     </StackPanel>
-    <Border BorderBrush="#CCC" BorderThickness="1" Background="#EEE">
+    <Border BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Background="{StaticResource InputBg}">
       <skia:SKElement x:Name="PreviewElement" PaintSurface="OnPaintSurface" />
     </Border>
   </DockPanel>

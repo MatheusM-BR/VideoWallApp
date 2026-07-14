@@ -109,7 +109,7 @@ public partial class ImageEditorWindow : Window
     private void OnPaintSurface(object? sender, SkiaSharp.Views.Desktop.SKPaintSurfaceEventArgs e)
     {
         var canvas = e.Surface.Canvas;
-        canvas.Clear(new SKColor(0xDD, 0xDD, 0xDD));
+        canvas.Clear(new SKColor(0x17, 0x17, 0x1A)); // mesmo InputBg do tema escuro
         var bmp = _vm.Bitmap;
 
         double scale = Math.Min(e.Info.Width / (double)bmp.Width, e.Info.Height / (double)bmp.Height);

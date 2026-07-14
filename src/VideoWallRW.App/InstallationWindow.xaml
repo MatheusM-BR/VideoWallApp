@@ -6,7 +6,7 @@
   <DockPanel Margin="10">
     <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,10">
       <CheckBox Content="Iniciar com o Windows (--kiosk)" IsChecked="{Binding AutostartEnabled}" VerticalAlignment="Center" />
-      <TextBlock Text="{Binding StatusText}" Foreground="#666" Margin="16,0,0,0" VerticalAlignment="Center" />
+      <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" Margin="16,0,0,0" VerticalAlignment="Center" />
     </StackPanel>
 
     <TabControl>
@@ -42,7 +42,7 @@
           <ListBox ItemsSource="{Binding Rules}">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,6" Padding="6" Background="#FAFAFA">
+                <Border BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Margin="0,0,0,6" Padding="6" Background="{StaticResource CellBg}">
                   <StackPanel>
                     <DockPanel Margin="0,0,0,4">
                       <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Enabled}" VerticalAlignment="Center" Margin="0,0,8,0" />

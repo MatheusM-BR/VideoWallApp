@@ -36,9 +36,9 @@
       <Button Content="Salvar e enviar para célula" Command="{Binding SaveAndSendToCellCommand}" Padding="8,4" />
     </StackPanel>
 
-    <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Foreground="#666" Margin="0,6,0,0" />
+    <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" Margin="0,6,0,0" />
 
-    <Border BorderBrush="#888" BorderThickness="1" Background="#DDD" ClipToBounds="True">
+    <Border BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Background="{StaticResource InputBg}" ClipToBounds="True">
       <skia:SKElement x:Name="Canvas" PaintSurface="OnPaintSurface"
                        MouseDown="OnMouseDown" MouseMove="OnMouseMove" MouseUp="OnMouseUp" />
     </Border>

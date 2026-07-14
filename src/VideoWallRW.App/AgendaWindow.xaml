@@ -9,7 +9,7 @@
       <Button DockPanel.Dock="Left" Content="Hoje" Command="{Binding TodayCommand}" Padding="8,4" Margin="0,0,4,0" />
       <Button DockPanel.Dock="Left" Content="▶" Command="{Binding NextDayCommand}" Padding="8,4" Margin="0,0,10,0" />
       <TextBlock DockPanel.Dock="Left" Text="{Binding Date, StringFormat=dd/MM/yyyy}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,16,0" />
-      <TextBlock Text="{Binding StatusText}" Foreground="#666" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </DockPanel>
 
     <Grid>
@@ -25,7 +25,7 @@
             <DataTemplate>
               <StackPanel Margin="2">
                 <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="#666" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" />
               </StackPanel>
             </DataTemplate>
           </ListBox.ItemTemplate>
@@ -33,7 +33,7 @@
       </DockPanel>
 
       <DockPanel Grid.Column="1" DataContext="{Binding Details}">
-        <TextBlock DockPanel.Dock="Top" Text="Selecione um leilão à esquerda." Foreground="#888"
+        <TextBlock DockPanel.Dock="Top" Text="Selecione um leilão à esquerda." Foreground="{StaticResource FgDim}"
                    Visibility="{Binding Converter={StaticResource NullToVisibilityConverter}}" />
         <StackPanel Visibility="{Binding Converter={StaticResource NotNullToVisibilityConverter}}">
           <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="16" Margin="0,0,0,10" TextWrapping="Wrap" />

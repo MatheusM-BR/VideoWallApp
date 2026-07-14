@@ -4,7 +4,7 @@
         Title="Converter para HAP" Height="480" Width="640"
         WindowStartupLocation="CenterOwner">
   <DockPanel Margin="10">
-    <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}" Foreground="#666" Margin="0,0,0,8" TextWrapping="Wrap" />
+    <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" Margin="0,0,0,8" TextWrapping="Wrap" />
 
     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
       <Button DockPanel.Dock="Left" Content="+ Adicionar arquivos..." Command="{Binding AddFilesCommand}" Padding="8,4" Margin="0,0,6,0" />

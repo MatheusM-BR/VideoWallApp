@@ -6,8 +6,8 @@
         PreviewKeyDown="OnPreviewKeyDown">
   <DockPanel Margin="10">
     <TextBlock DockPanel.Dock="Top" Text="Clique em 'Redefinir' e aperte a nova combinação de teclas."
-               TextWrapping="Wrap" Margin="0,0,0,8" Foreground="#666" />
-    <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}" Foreground="Green" Margin="0,0,0,8" />
+               TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{StaticResource FgDim}" />
+    <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}" Foreground="{StaticResource Accent}" Margin="0,0,0,8" />
 
     <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
       <Button DockPanel.Dock="Left" Content="Restaurar padrão" Command="{Binding ResetToDefaultCommand}" Padding="8,4" Margin="0,0,6,0" />
@@ -28,14 +28,14 @@
               <TextBlock.Style>
                 <Style TargetType="TextBlock">
                   <Setter Property="Text" Value="{Binding Gesture}" />
-                  <Setter Property="Foreground" Value="Black" />
+                  <Setter Property="Foreground" Value="{StaticResource Fg}" />
                   <Style.Triggers>
                     <DataTrigger Binding="{Binding IsCapturing}" Value="True">
                       <Setter Property="Text" Value="Pressione uma tecla..." />
-                      <Setter Property="Foreground" Value="Blue" />
+                      <Setter Property="Foreground" Value="{StaticResource Accent}" />
                     </DataTrigger>
                     <DataTrigger Binding="{Binding HasConflict}" Value="True">
-                      <Setter Property="Foreground" Value="Red" />
+                      <Setter Property="Foreground" Value="#FF7070" />
                     </DataTrigger>
                   </Style.Triggers>
                 </Style>

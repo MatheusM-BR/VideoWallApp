@@ -15,7 +15,7 @@
       <Button DockPanel.Dock="Left" Content="Salvar" Command="{Binding SavePresetCommand}" Padding="8,4" Margin="0,0,4,0" />
       <Button DockPanel.Dock="Left" Content="Carregar" Command="{Binding LoadPresetCommand}" Padding="8,4" Margin="0,0,4,0" />
       <Button DockPanel.Dock="Left" Content="Excluir" Command="{Binding DeletePresetCommand}" Padding="8,4" Margin="0,0,16,0" />
-      <TextBlock Text="{Binding StatusText}" Foreground="#666" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+      <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </DockPanel>
 
     <!-- Painel esquerdo: lista de telas -->
@@ -33,7 +33,7 @@
     <!-- Painel direito: detalhes da tela selecionada -->
     <ScrollViewer DataContext="{Binding ElementName=ScreenList, Path=SelectedItem}" VerticalScrollBarVisibility="Auto">
       <StackPanel>
-        <TextBlock Text="Selecione uma tela à esquerda." Foreground="#888"
+        <TextBlock Text="Selecione uma tela à esquerda." Foreground="{StaticResource FgDim}"
                    Visibility="{Binding Converter={StaticResource NullToVisibilityConverter}}" />
 
         <StackPanel Visibility="{Binding Converter={StaticResource NotNullToVisibilityConverter}}">
@@ -41,7 +41,7 @@
             <TextBlock DockPanel.Dock="Left" Text="Nome" VerticalAlignment="Center" Width="70" />
             <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="200" HorizontalAlignment="Left" />
             <CheckBox Content="Habilitada" IsChecked="{Binding Enabled}" Margin="16,0,0,0" VerticalAlignment="Center" />
-            <TextBlock Text="{Binding MonitorDeviceName, StringFormat=' — {0}'}" Foreground="#888" VerticalAlignment="Center" Margin="10,0,0,0" />
+            <TextBlock Text="{Binding MonitorDeviceName, StringFormat=' — {0}'}" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" Margin="10,0,0,0" />
           </DockPanel>
 
           <TextBlock Text="Correção de cor" FontWeight="Bold" Margin="0,0,0,4" />
@@ -71,7 +71,7 @@
           <ItemsControl ItemsSource="{Binding Slices}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
-                <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,8" Padding="8" Background="#FAFAFA">
+                <Border BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Margin="0,0,0,8" Padding="8" Background="{StaticResource CellBg}">
                   <StackPanel>
                     <DockPanel Margin="0,0,0,6">
                       <TextBox DockPanel.Dock="Left" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="160" />
