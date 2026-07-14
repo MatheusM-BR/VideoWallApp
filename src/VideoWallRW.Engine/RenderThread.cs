@@ -33,6 +33,7 @@ public sealed class RenderThread : IDisposable
 
     // ── Fase 4: fatiamento de saída ────────────────────────────────────────────
     private Core.Model.OutputSetup? _outputSetup;
+    private bool _identify;
 
     /// <summary>Publicado ~2x/segundo, na render thread.</summary>
     public event Action<EngineStats>? StatsUpdated;
@@ -103,7 +104,7 @@ public sealed class RenderThread : IDisposable
                     var outputList = _outputs
                         .Select(o => (o.Rtv, o.Monitor.Width, o.Monitor.Height, ResolveScreen(o.Monitor.DeviceName, o.Monitor.Width, o.Monitor.Height)))
                         .ToList();
-                    _compositionRenderer.Render(_gfx.Context, _compositionData, _layers, outputList);
+                    _compositionRenderer.Render(_gfx.Context, _compositionData, _layers, outputList, _identify);
                 }
                 else
                 {
@@ -191,6 +192,9 @@ public sealed class RenderThread : IDisposable
             case SyncOutputSetup(var setup):
                 _outputSetup = setup.Clone();
                 Log.Information("OutputSetup sincronizado com {N} telas configuradas.", _outputSetup.Screens.Count);
+                break;
+            case SetIdentify(var enabled):
+                _identify = enabled;
                 break;
             default:
                 Log.Warning("Comando não tratado: {Command}", command);

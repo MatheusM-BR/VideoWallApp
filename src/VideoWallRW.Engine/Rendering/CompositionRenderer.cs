@@ -35,6 +35,7 @@ public sealed class CompositionRenderer : IDisposable
     private readonly ID3D11PixelShader _slicePs;
     private readonly ID3D11Buffer _sliceCbuffer;
     private readonly ID3D11SamplerState _sliceSampler;
+    private readonly IdentityCardRenderer _identityCards;
 
     // Blend States. Null state atua como pre-mul default opaco ou normal alpha estrito sob pre-mul.
     // Usaremos as flags equivalentes solicitadas pela interface.
@@ -117,6 +118,7 @@ public sealed class CompositionRenderer : IDisposable
         {
             BorderColor = new Color4(0, 0, 0, 1f)
         });
+        _identityCards = new IdentityCardRenderer(gfx);
 
         // Blend States definition
         _blendNormal = CreateBlendState(Blend.One, Blend.InverseSourceAlpha);
@@ -158,7 +160,8 @@ public sealed class CompositionRenderer : IDisposable
         ID3D11DeviceContext ctx,
         Composition composition,
         IReadOnlyList<LayerRenderer> activeLayers,
-        IReadOnlyList<(ID3D11RenderTargetView Rtv, int Width, int Height, Screen Screen)> outputs)
+        IReadOnlyList<(ID3D11RenderTargetView Rtv, int Width, int Height, Screen Screen)> outputs,
+        bool identify = false)
     {
         ctx.ClearRenderTargetView(_compRtv, new Color4(0, 0, 0, 1));
         ctx.OMSetRenderTargets(_compRtv);
@@ -203,10 +206,24 @@ public sealed class CompositionRenderer : IDisposable
         ctx.OMSetBlendState(null);
 
         // ── Passe 2: saídas fatiadas por slice (Fase 4) ─────────────────────
+        var neutralColor = new ColorCorrection();
         foreach (var (rtv, w, h, screen) in outputs)
         {
             ctx.OMSetRenderTargets(rtv);
             ctx.RSSetViewport(new Viewport(0, 0, w, h));
+
+            if (identify)
+            {
+                // Modo identify substitui os slices por um cartão fullscreen com nome/
+                // device/resolução — não mexe no estado da grade, só na apresentação.
+                var cardSrv = _identityCards.GetOrCreate(screen.MonitorDeviceName, screen.Name, screen.Slices.Count, w, h);
+                var fullscreenRect = new RectF(0, 0, w, h);
+                var positionM = SliceMath.ComputePosition(fullscreenRect, w, h);
+                var uvM = SliceMath.ComputeUv(new Slice { InputRect = fullscreenRect }, w, h);
+                DrawSlice(ctx, cardSrv, positionM, uvM, neutralColor, 1.0f);
+                continue;
+            }
+
             foreach (var slice in screen.Slices)
             {
                 var (positionM, uvM) = SliceMath.Compute(slice, composition.Width, composition.Height, w, h);
@@ -311,6 +328,7 @@ public sealed class CompositionRenderer : IDisposable
         _sliceCbuffer.Dispose();
         _slicePs.Dispose();
         _sliceVs.Dispose();
+        _identityCards.Dispose();
         _compSrv.Dispose();
         _compRtv.Dispose();
         _compTexture.Dispose();

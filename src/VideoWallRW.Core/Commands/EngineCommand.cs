@@ -24,3 +24,4 @@ public sealed record SetMasterOpacity(double Opacity) : EngineCommand;
 
 // ── Fase 4: Advanced Output (fatiamento de saída) ─────────────────────────────
 public sealed record SyncOutputSetup(VideoWallRW.Core.Model.OutputSetup Data) : EngineCommand;
+public sealed record SetIdentify(bool Enabled) : EngineCommand;
