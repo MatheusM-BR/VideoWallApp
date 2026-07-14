@@ -67,6 +67,13 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenHapConverter()
+    {
+        var window = new HapConverterWindow(new HapConverterViewModel()) { Owner = Application.Current.MainWindow };
+        window.ShowDialog();
+    }
+
+    [RelayCommand]
     private void OpenVideo()
     {
         var dlg = new OpenFileDialog

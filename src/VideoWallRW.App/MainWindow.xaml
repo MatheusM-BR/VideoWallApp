@@ -17,6 +17,7 @@
           <Button DockPanel.Dock="Left" Content="+ Layer" Command="{Binding Grid.AddLayerCommand}" Padding="10,4" Margin="0,0,6,0" />
           <Button DockPanel.Dock="Left" Content="+ Coluna" Command="{Binding Grid.AddColumnCommand}" Padding="10,4" Margin="0,0,6,0" />
           <Button DockPanel.Dock="Left" Content="🖥 Advanced Output..." Command="{Binding OpenOutputSetupCommand}" Padding="10,4" Margin="0,0,6,0" />
+          <Button DockPanel.Dock="Left" Content="⚡ Converter para HAP..." Command="{Binding OpenHapConverterCommand}" Padding="10,4" Margin="0,0,6,0" />
           <TextBlock Text="{Binding StatusText}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontSize="11" Foreground="#555" />
         </DockPanel>
 
