@@ -1,0 +1,134 @@
+<Window x:Class="VideoWallRW.App.OutputSetupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Advanced Output" Height="640" Width="980"
+        WindowStartupLocation="CenterOwner">
+  <DockPanel Margin="10">
+
+    <!-- Barra superior: identify + presets -->
+    <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+      <Button DockPanel.Dock="Left" Content="{Binding Identify, Converter={StaticResource IdentifyLabelConverter}, FallbackValue='Identify: OFF'}"
+              Command="{Binding ToggleIdentifyCommand}" Padding="10,4" Margin="0,0,16,0" />
+      <TextBlock DockPanel.Dock="Left" Text="Preset:" VerticalAlignment="Center" Margin="0,0,4,0" />
+      <ComboBox DockPanel.Dock="Left" Width="140" Text="{Binding PresetName, UpdateSourceTrigger=PropertyChanged}"
+                ItemsSource="{Binding PresetNames}" IsEditable="True" Margin="0,0,6,0" />
+      <Button DockPanel.Dock="Left" Content="Salvar" Command="{Binding SavePresetCommand}" Padding="8,4" Margin="0,0,4,0" />
+      <Button DockPanel.Dock="Left" Content="Carregar" Command="{Binding LoadPresetCommand}" Padding="8,4" Margin="0,0,4,0" />
+      <Button DockPanel.Dock="Left" Content="Excluir" Command="{Binding DeletePresetCommand}" Padding="8,4" Margin="0,0,16,0" />
+      <TextBlock Text="{Binding StatusText}" Foreground="#666" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+    </DockPanel>
+
+    <!-- Painel esquerdo: lista de telas -->
+    <DockPanel DockPanel.Dock="Left" Width="220" Margin="0,0,10,0">
+      <TextBlock DockPanel.Dock="Top" Text="Telas" FontWeight="Bold" Margin="0,0,0,4" />
+      <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+        <ComboBox x:Name="MonitorPicker" DockPanel.Dock="Top" ItemsSource="{Binding AvailableMonitors}"
+                  DisplayMemberPath="DeviceName" Margin="0,0,0,4" />
+        <Button DockPanel.Dock="Top" Content="+ Adicionar tela" Padding="6,4"
+                Command="{Binding AddScreenCommand}" CommandParameter="{Binding ElementName=MonitorPicker, Path=SelectedItem}" />
+      </DockPanel>
+      <ListBox x:Name="ScreenList" ItemsSource="{Binding Screens}" DisplayMemberPath="Name" />
+    </DockPanel>
+
+    <!-- Painel direito: detalhes da tela selecionada -->
+    <ScrollViewer DataContext="{Binding ElementName=ScreenList, Path=SelectedItem}" VerticalScrollBarVisibility="Auto">
+      <StackPanel>
+        <TextBlock Text="Selecione uma tela à esquerda." Foreground="#888"
+                   Visibility="{Binding Converter={StaticResource NullToVisibilityConverter}}" />
+
+        <StackPanel Visibility="{Binding Converter={StaticResource NotNullToVisibilityConverter}}">
+          <DockPanel Margin="0,0,0,10">
+            <TextBlock DockPanel.Dock="Left" Text="Nome" VerticalAlignment="Center" Width="70" />
+            <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="200" HorizontalAlignment="Left" />
+            <CheckBox Content="Habilitada" IsChecked="{Binding Enabled}" Margin="16,0,0,0" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding MonitorDeviceName, StringFormat=' — {0}'}" Foreground="#888" VerticalAlignment="Center" Margin="10,0,0,0" />
+          </DockPanel>
+
+          <TextBlock Text="Correção de cor" FontWeight="Bold" Margin="0,0,0,4" />
+          <Grid Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" /><ColumnDefinition Width="140" /><ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" /><ColumnDefinition Width="140" /><ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" /><ColumnDefinition Width="140" /><ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Brilho" VerticalAlignment="Center" Margin="0,0,4,0" />
+            <Slider Grid.Column="1" Minimum="-1" Maximum="1" Value="{Binding Brightness}" />
+            <TextBlock Grid.Column="2" Text="{Binding Brightness, StringFormat=F2}" Width="36" Margin="4,0,10,0" />
+            <TextBlock Grid.Column="3" Text="Contraste" VerticalAlignment="Center" Margin="0,0,4,0" />
+            <Slider Grid.Column="4" Minimum="0" Maximum="2" Value="{Binding Contrast}" />
+            <TextBlock Grid.Column="5" Text="{Binding Contrast, StringFormat=F2}" Width="36" Margin="4,0,10,0" />
+            <TextBlock Grid.Column="6" Text="Gamma" VerticalAlignment="Center" Margin="0,0,4,0" />
+            <Slider Grid.Column="7" Minimum="0.1" Maximum="3" Value="{Binding Gamma}" />
+            <TextBlock Grid.Column="8" Text="{Binding Gamma, StringFormat=F2}" Width="36" Margin="4,0,0,0" />
+          </Grid>
+
+          <DockPanel Margin="0,0,0,4">
+            <TextBlock DockPanel.Dock="Left" Text="Slices" FontWeight="Bold" VerticalAlignment="Center" />
+            <Button DockPanel.Dock="Right" Content="+ Slice" Padding="8,2" HorizontalAlignment="Right"
+                    Command="{Binding AddSliceCommand}" />
+          </DockPanel>
+
+          <ItemsControl ItemsSource="{Binding Slices}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border BorderBrush="#DDD" BorderThickness="1" Margin="0,0,0,8" Padding="8" Background="#FAFAFA">
+                  <StackPanel>
+                    <DockPanel Margin="0,0,0,6">
+                      <TextBox DockPanel.Dock="Left" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Width="160" />
+                      <ComboBox DockPanel.Dock="Left" Width="80" Margin="8,0,0,0"
+                                ItemsSource="{Binding DataContext.Rotations, RelativeSource={RelativeSource AncestorType=Window}}"
+                                SelectedItem="{Binding Rotation}" />
+                      <CheckBox DockPanel.Dock="Left" Content="FlipH" IsChecked="{Binding FlipH}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                      <CheckBox DockPanel.Dock="Left" Content="FlipV" IsChecked="{Binding FlipV}" Margin="8,0,0,0" VerticalAlignment="Center" />
+                      <Button DockPanel.Dock="Right" Content="Duplicar" Padding="6,2" HorizontalAlignment="Right"
+                              Command="{Binding DataContext.DuplicateSliceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                              CommandParameter="{Binding}" Margin="4,0,0,0" />
+                      <Button DockPanel.Dock="Right" Content="Remover" Padding="6,2" HorizontalAlignment="Right"
+                              Command="{Binding DataContext.RemoveSliceCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                              CommandParameter="{Binding}" />
+                    </DockPanel>
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" /><ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="70" /><ColumnDefinition Width="70" /><ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="20" />
+                        <ColumnDefinition Width="Auto" /><ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="70" /><ColumnDefinition Width="70" /><ColumnDefinition Width="70" />
+                      </Grid.ColumnDefinitions>
+                      <Grid.RowDefinitions>
+                        <RowDefinition /><RowDefinition />
+                      </Grid.RowDefinitions>
+                      <TextBlock Text="Input (comp.)" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,4,2" />
+                      <TextBlock Text="X" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Center" FontSize="9" />
+                      <TextBlock Text="Y" Grid.Row="1" Grid.Column="2" HorizontalAlignment="Center" FontSize="9" />
+                      <TextBlock Text="W" Grid.Row="1" Grid.Column="3" HorizontalAlignment="Center" FontSize="9" />
+                      <TextBlock Text="H" Grid.Row="1" Grid.Column="4" HorizontalAlignment="Center" FontSize="9" />
+                      <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding InputX, UpdateSourceTrigger=PropertyChanged}" />
+                      <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding InputY, UpdateSourceTrigger=PropertyChanged}" />
+                      <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding InputWidth, UpdateSourceTrigger=PropertyChanged}" />
+                      <TextBox Grid.Row="0" Grid.Column="4" Text="{Binding InputHeight, UpdateSourceTrigger=PropertyChanged}" />
+
+                      <TextBlock Text="Output (monitor)" Grid.Row="0" Grid.Column="6" VerticalAlignment="Center" Margin="0,0,4,2" />
+                      <TextBlock Text="X" Grid.Row="1" Grid.Column="7" HorizontalAlignment="Center" FontSize="9" />
+                      <TextBlock Text="Y" Grid.Row="1" Grid.Column="8" HorizontalAlignment="Center" FontSize="9" />
+                      <TextBlock Text="W" Grid.Row="1" Grid.Column="9" HorizontalAlignment="Center" FontSize="9" />
+                      <TextBlock Text="H" Grid.Row="1" Grid.Column="10" HorizontalAlignment="Center" FontSize="9" />
+                      <TextBox Grid.Row="0" Grid.Column="7" Text="{Binding OutputX, UpdateSourceTrigger=PropertyChanged}" />
+                      <TextBox Grid.Row="0" Grid.Column="8" Text="{Binding OutputY, UpdateSourceTrigger=PropertyChanged}" />
+                      <TextBox Grid.Row="0" Grid.Column="9" Text="{Binding OutputWidth, UpdateSourceTrigger=PropertyChanged}" />
+                      <TextBox Grid.Row="0" Grid.Column="10" Text="{Binding OutputHeight, UpdateSourceTrigger=PropertyChanged}" />
+                    </Grid>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Button Content="Remover esta tela" HorizontalAlignment="Left" Padding="8,4" Margin="0,10,0,0"
+                  Command="{Binding DataContext.RemoveScreenCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                  CommandParameter="{Binding}" />
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

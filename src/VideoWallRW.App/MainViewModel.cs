@@ -58,6 +58,15 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenOutputSetup()
+    {
+        var vm = new OutputSetupViewModel(_render, MonitorEnumerator.Enumerate(_gfx),
+            () => Grid.Model.Width, () => Grid.Model.Height);
+        var window = new OutputSetupWindow(vm) { Owner = Application.Current.MainWindow };
+        window.ShowDialog();
+    }
+
+    [RelayCommand]
     private void OpenVideo()
     {
         var dlg = new OpenFileDialog
