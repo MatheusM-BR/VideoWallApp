@@ -25,3 +25,9 @@ public sealed record SetMasterOpacity(double Opacity) : EngineCommand;
 // ── Fase 4: Advanced Output (fatiamento de saída) ─────────────────────────────
 public sealed record SyncOutputSetup(VideoWallRW.Core.Model.OutputSetup Data) : EngineCommand;
 public sealed record SetIdentify(bool Enabled) : EngineCommand;
+
+// ── Fase 7: persistência e operação ───────────────────────────────────────────
+public sealed record SetBlackout(bool Enabled) : EngineCommand;
+public sealed record LoadProject(VideoWallRW.Core.Persistence.ProjectFile Project) : EngineCommand;
+public sealed record SyncScenes(System.Collections.Generic.List<VideoWallRW.Core.Persistence.SceneSnapshot> Scenes) : EngineCommand;
+public sealed record TriggerScene(System.Guid SceneId) : EngineCommand;

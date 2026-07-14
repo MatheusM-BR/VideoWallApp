@@ -16,6 +16,19 @@ public partial class MainWindow : Window
         DataContext = vm;
         _vm = vm;
         InitializeComponent();
+
+        _vm.KeymapChanged += () => _keymap.Reload();
+        Closing += OnClosing;
+    }
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_vm.CanCloseWithoutPrompt())
+        {
+            e.Cancel = true;
+            return;
+        }
+        _vm.OnClosing();
     }
 
     private void OnClipDrop(object sender, DragEventArgs e)
@@ -52,6 +65,9 @@ public partial class MainWindow : Window
                 case "ClearAll": _vm.Grid.ClearAll(); break;
                 case "Blackout": _vm.ToggleBlackout(); break;
                 case "ToggleOutputs": _vm.ToggleOutputs(); break;
+                case "SaveProject": _vm.SaveProjectCommand.Execute(null); break;
+                case "OpenProject": _vm.OpenProjectCommand.Execute(null); break;
+                case "NewProject": _vm.NewProjectCommand.Execute(null); break;
                 default: return;
             }
         }

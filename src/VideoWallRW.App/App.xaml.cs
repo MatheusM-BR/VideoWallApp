@@ -9,6 +9,7 @@ using VideoWallRW.Media;
 using VideoWallRW.Media.Audio;
 using VideoWallRW.Media.Hap;
 using VideoWallRW.Media.Sources;
+using VideoWallRW.Core.Persistence;
 
 namespace VideoWallRW.App;
 
@@ -26,6 +27,10 @@ public partial class App : Application
         // O painel não tem nada pesado para desenhar (o vídeo vai pelas janelas de saída,
         // não pelo WPF), então cair para software aqui não tem custo perceptível.
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+
+        // T7.3: sentinela de sessão — se ainda existir no próximo start, o
+        // encerramento anterior não foi limpo (crash), e a UI oferece recuperação.
+        AutosaveService.MarkSessionStart();
 
         var logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -131,6 +136,7 @@ public partial class App : Application
         _render?.Stop();
         _audio?.Dispose();
         _gfx?.Dispose();
+        AutosaveService.MarkSessionClean();
         Log.Information("VideoWallRW encerrado");
         Log.CloseAndFlush();
     }

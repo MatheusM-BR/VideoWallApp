@@ -6,7 +6,15 @@ public sealed class Composition
     public int Height { get; set; } = 1080;
     
     public double DefaultImageDuration { get; set; } = 10.0;
+
+    /// <summary>Master fader (0..1) — independente do blackout (Fase 7 T7.6).</summary>
     public double MasterOpacity { get; set; } = 1.0;
+
+    /// <summary>
+    /// Blackout: escurece a SAÍDA sem alterar <see cref="MasterOpacity"/> — reversível,
+    /// o fader volta exatamente de onde estava ao desligar o blackout.
+    /// </summary>
+    public bool Blackout { get; set; }
 
     /// <summary>Layers de baixo (fundo) para cima. O Índice 0 é desenhado primeiro.</summary>
     public List<Layer> Layers { get; set; } = [];
@@ -52,6 +60,7 @@ public sealed class Composition
             Height = Height,
             DefaultImageDuration = DefaultImageDuration,
             MasterOpacity = MasterOpacity,
+            Blackout = Blackout,
             ColumnCount = ColumnCount
         };
 

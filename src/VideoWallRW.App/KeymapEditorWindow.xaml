@@ -1,0 +1,50 @@
+<Window x:Class="VideoWallRW.App.KeymapEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Atalhos de teclado" Height="520" Width="420"
+        WindowStartupLocation="CenterOwner"
+        PreviewKeyDown="OnPreviewKeyDown">
+  <DockPanel Margin="10">
+    <TextBlock DockPanel.Dock="Top" Text="Clique em 'Redefinir' e aperte a nova combinação de teclas."
+               TextWrapping="Wrap" Margin="0,0,0,8" Foreground="#666" />
+    <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}" Foreground="Green" Margin="0,0,0,8" />
+
+    <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+      <Button DockPanel.Dock="Left" Content="Restaurar padrão" Command="{Binding ResetToDefaultCommand}" Padding="8,4" Margin="0,0,6,0" />
+      <Button DockPanel.Dock="Right" Content="Salvar" Command="{Binding SaveCommand}" Padding="12,4" HorizontalAlignment="Right" />
+    </DockPanel>
+
+    <ListBox ItemsSource="{Binding Entries}">
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <Grid Margin="0,3">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="160" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="{Binding Action}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="6,0">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Text" Value="{Binding Gesture}" />
+                  <Setter Property="Foreground" Value="Black" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsCapturing}" Value="True">
+                      <Setter Property="Text" Value="Pressione uma tecla..." />
+                      <Setter Property="Foreground" Value="Blue" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding HasConflict}" Value="True">
+                      <Setter Property="Foreground" Value="Red" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <Button Grid.Column="2" Content="Redefinir" Padding="6,2" Command="{Binding StartCaptureCommand}" />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+  </DockPanel>
+</Window>

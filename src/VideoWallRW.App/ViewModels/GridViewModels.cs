@@ -16,6 +16,7 @@ public sealed partial class ClipViewModel : ObservableObject
     private readonly RenderThread _render;
     private readonly Action<ClipViewModel> _select;
     private readonly Action<ClipViewModel> _changed;
+    private readonly Action<ClipViewModel>? _triggered;
     private bool _updatingFromModel;
 
     public int LayerIndex => _layerIndex;
@@ -37,7 +38,7 @@ public sealed partial class ClipViewModel : ObservableObject
     public Clip? Model { get; private set; }
 
     public ClipViewModel(Clip? model, int layerIndex, int colIndex, RenderThread render,
-        Action<ClipViewModel> select, Action<ClipViewModel> changed)
+        Action<ClipViewModel> select, Action<ClipViewModel> changed, Action<ClipViewModel>? triggered = null)
     {
         Model = model;
         _layerIndex = layerIndex;
@@ -45,7 +46,8 @@ public sealed partial class ClipViewModel : ObservableObject
         _render = render;
         _select = select;
         _changed = changed;
-        
+        _triggered = triggered;
+
         UpdateFromModel();
     }
 
@@ -79,6 +81,7 @@ public sealed partial class ClipViewModel : ObservableObject
         _select(this);
         if (!HasMedia) return;
         _render.Post(new TriggerClip(_layerIndex, _colIndex));
+        _triggered?.Invoke(this);
     }
 
     partial void OnNameChanged(string value) => ApplyEdits();
@@ -151,7 +154,14 @@ public sealed partial class LayerViewModel : ObservableObject
     [ObservableProperty] private bool _bypass;
     [ObservableProperty] private bool _solo;
     [ObservableProperty] private double _transitionSeconds;
-    
+
+    /// <summary>
+    /// Última coluna disparada nesta layer pela UI — usado para capturar cenas
+    /// (T7.5). Reflete apenas triggers vindos do painel (sem MIDI/OSC ainda,
+    /// então é uma fonte de verdade confiável por enquanto).
+    /// </summary>
+    [ObservableProperty] private int _lastTriggeredColumn = -1;
+
     private double _opacity = 1.0;
     public double Opacity
     {
@@ -186,9 +196,12 @@ public sealed partial class LayerViewModel : ObservableObject
 
         for (int i = 0; i < model.Clips.Length; i++)
         {
-            Clips.Add(new ClipViewModel(model.Clips[i], layerIndex, i, render, _selectClip, _clipChanged));
+            Clips.Add(new ClipViewModel(model.Clips[i], layerIndex, i, render, _selectClip, _clipChanged,
+                clip => LastTriggeredColumn = clip.ColumnIndex));
         }
     }
+
+    public void AddClip(ClipViewModel clip) => Clips.Add(clip);
 
     [RelayCommand]
     private void Clear()
@@ -225,6 +238,9 @@ public sealed partial class CompositionViewModel : ObservableObject
 
     [ObservableProperty] private ClipViewModel? _selectedClip;
 
+    /// <summary>Mudanças estruturais (clip definido, layer/coluna adicionada) — usado para marcar o projeto como não salvo (T7.2).</summary>
+    public event Action? Changed;
+
     public CompositionViewModel(Composition model, RenderThread render)
     {
         Model = model;
@@ -236,6 +252,40 @@ public sealed partial class CompositionViewModel : ObservableObject
         {
             Layers.Add(CreateLayerViewModel(model.Layers[i], i));
         }
+    }
+
+    /// <summary>Reconstrói toda a árvore de ViewModels a partir de um novo Composition (abrir projeto — T7.2).</summary>
+    public void ReplaceModel(Composition newModel)
+    {
+        Layers.Clear();
+        Columns.Clear();
+        SelectedClip = null;
+
+        Model.Width = newModel.Width;
+        Model.Height = newModel.Height;
+        Model.DefaultImageDuration = newModel.DefaultImageDuration;
+        Model.MasterOpacity = newModel.MasterOpacity;
+        Model.Blackout = newModel.Blackout;
+        Model.ColumnCount = newModel.ColumnCount;
+        Model.Layers = newModel.Layers;
+
+        for (int i = 0; i < Model.ColumnCount; i++) Columns.Add(i);
+        for (int i = 0; i < Model.Layers.Count; i++) Layers.Add(CreateLayerViewModel(Model.Layers[i], i));
+
+        SyncToEngine();
+    }
+
+    /// <summary>Estado atual da grade para capturar uma cena (T7.5): coluna e opacidade ativas por layer.</summary>
+    public (Dictionary<Guid, int> ActiveColumns, Dictionary<Guid, double> Opacities) CaptureSceneState()
+    {
+        var columns = new Dictionary<Guid, int>();
+        var opacities = new Dictionary<Guid, double>();
+        foreach (var layer in Layers)
+        {
+            columns[layer.Model.Id] = layer.LastTriggeredColumn;
+            opacities[layer.Model.Id] = layer.Opacity;
+        }
+        return (columns, opacities);
     }
 
     [RelayCommand]
@@ -273,6 +323,7 @@ public sealed partial class CompositionViewModel : ObservableObject
         Layers[layerIndex].Clips[columnIndex].SetModel(clip);
         SelectedClip = Layers[layerIndex].Clips[columnIndex];
         _render.Post(new UpdateClip(layerIndex, columnIndex, clip));
+        Changed?.Invoke();
     }
 
     private LayerViewModel CreateLayerViewModel(Layer layer, int layerIndex)
@@ -312,6 +363,7 @@ public sealed partial class CompositionViewModel : ObservableObject
         Model.AddLayer(layer);
         Layers.Add(CreateLayerViewModel(layer, Layers.Count));
         SyncToEngine();
+        Changed?.Invoke();
     }
 
     [RelayCommand]
@@ -320,8 +372,9 @@ public sealed partial class CompositionViewModel : ObservableObject
         Model.ColumnCount++;
         Columns.Add(Model.ColumnCount - 1);
         foreach (var layer in Layers)
-            layer.Clips.Add(new ClipViewModel(null, layer.LayerIndex, Model.ColumnCount - 1, _render,
-                SelectClip, OnClipChanged));
+            layer.AddClip(new ClipViewModel(null, layer.LayerIndex, Model.ColumnCount - 1, _render,
+                SelectClip, OnClipChanged, clip => layer.LastTriggeredColumn = clip.ColumnIndex));
         SyncToEngine();
+        Changed?.Invoke();
     }
 }

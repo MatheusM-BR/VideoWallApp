@@ -206,6 +206,9 @@ public sealed class CompositionRenderer : IDisposable
         ctx.OMSetBlendState(null);
 
         // ── Passe 2: saídas fatiadas por slice (Fase 4) ─────────────────────
+        // Blackout escurece só a saída (aqui), nunca o master fader guardado —
+        // desligar o blackout devolve o fader exatamente de onde estava (T7.6).
+        float effectiveMasterOpacity = composition.Blackout ? 0f : (float)composition.MasterOpacity;
         var neutralColor = new ColorCorrection();
         foreach (var (rtv, w, h, screen) in outputs)
         {
@@ -227,7 +230,7 @@ public sealed class CompositionRenderer : IDisposable
             foreach (var slice in screen.Slices)
             {
                 var (positionM, uvM) = SliceMath.Compute(slice, composition.Width, composition.Height, w, h);
-                DrawSlice(ctx, _compSrv, positionM, uvM, screen.Color, (float)composition.MasterOpacity);
+                DrawSlice(ctx, _compSrv, positionM, uvM, screen.Color, effectiveMasterOpacity);
             }
         }
     }

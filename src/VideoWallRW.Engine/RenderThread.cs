@@ -36,6 +36,9 @@ public sealed class RenderThread : IDisposable
     private Core.Model.OutputSetup? _outputSetup;
     private bool _identify;
 
+    // ── Fase 7: cenas ───────────────────────────────────────────────────────────
+    private List<Core.Persistence.SceneSnapshot> _scenes = [];
+
     /// <summary>Publicado ~2x/segundo, na render thread.</summary>
     public event Action<EngineStats>? StatsUpdated;
 
@@ -198,6 +201,19 @@ public sealed class RenderThread : IDisposable
             case SetIdentify(var enabled):
                 _identify = enabled;
                 break;
+            case SetBlackout(var enabled):
+                if (_compositionData is not null)
+                    _compositionData.Blackout = enabled;
+                break;
+            case LoadProject(var project):
+                OnLoadProject(project);
+                break;
+            case SyncScenes(var scenes):
+                _scenes = scenes;
+                break;
+            case TriggerScene(var sceneId):
+                OnTriggerScene(sceneId);
+                break;
             default:
                 Log.Warning("Comando não tratado: {Command}", command);
                 break;
@@ -238,6 +254,48 @@ public sealed class RenderThread : IDisposable
         }
         
         Log.Information("Composition Sincronizada com {N} camadas no Motor.", _layers.Count);
+    }
+
+    /// <summary>
+    /// Aplica um projeto carregado inteiro de uma vez: composição (nova grade,
+    /// engine reconstruído do zero — nenhum clip fica "no ar" automaticamente,
+    /// carregar projeto é sempre um estado parado), output setup e cenas.
+    /// </summary>
+    private void OnLoadProject(Core.Persistence.ProjectFile project)
+    {
+        SyncComp(project.Composition);
+        _outputSetup = project.Output.Clone();
+        _scenes = [.. project.Snapshots];
+        Log.Information("Projeto carregado: {Layers} layers, {Scenes} cenas.", _layers.Count, _scenes.Count);
+    }
+
+    /// <summary>
+    /// Dispara uma cena salva: aplica o clip ativo e a opacidade de cada layer e o
+    /// master fader de uma vez. Cada layer usa seu próprio crossfade (se configurado)
+    /// — nunca aparece um buraco preto mesmo trocando várias layers juntas.
+    /// </summary>
+    private void OnTriggerScene(Guid sceneId)
+    {
+        var scene = _scenes.FirstOrDefault(s => s.Id == sceneId);
+        if (scene is null || _compositionData is null)
+            return;
+
+        for (int i = 0; i < _compositionData.Layers.Count; i++)
+        {
+            var layer = _compositionData.Layers[i];
+            if (scene.ActiveColumns.TryGetValue(layer.Id, out int column))
+            {
+                if (column < 0)
+                    OnClearLayer(i);
+                else
+                    OnTriggerClip(i, column);
+            }
+            if (scene.LayerOpacities.TryGetValue(layer.Id, out double opacity))
+                OnSetLayerOpacity(i, opacity);
+        }
+
+        _compositionData.MasterOpacity = Math.Clamp(scene.MasterFader, 0.0, 1.0);
+        Log.Information("Cena disparada: {Name}", scene.Name);
     }
 
     private void OnTriggerClip(int layerIdx, int colIdx)

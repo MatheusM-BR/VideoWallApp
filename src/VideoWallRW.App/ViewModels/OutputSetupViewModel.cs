@@ -144,6 +144,9 @@ public sealed partial class OutputSetupViewModel : ObservableObject
         }
     }
 
+    /// <summary>Snapshot atual do editor como <see cref="OutputSetup"/> — usado ao fechar a janela para o chamador guardar no projeto (T7.2).</summary>
+    public OutputSetup ToModel() => BuildModel();
+
     private OutputSetup BuildModel()
     {
         var setup = new OutputSetup();

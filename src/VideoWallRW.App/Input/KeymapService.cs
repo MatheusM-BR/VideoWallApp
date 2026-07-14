@@ -9,22 +9,27 @@ namespace VideoWallRW.App.Input;
 /// <summary>Carrega atalhos editáveis pelo usuário e compara-os no PreviewKeyDown central.</summary>
 public sealed class KeymapService
 {
+    public static string FilePath { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VideoWallRW", "keymap.json");
+
     private readonly Dictionary<string, KeyGesture> _gestures = [];
 
-    public KeymapService()
-    {
-        string directory = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VideoWallRW");
-        Directory.CreateDirectory(directory);
-        string path = Path.Combine(directory, "keymap.json");
+    public KeymapService() => Reload();
 
-        var configured = LoadOrCreate(path);
+    /// <summary>Recarrega do disco — chamado depois que o editor de atalhos (T7.7) salva mudanças.</summary>
+    public void Reload()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        var configured = LoadOrCreate(FilePath);
         var converter = new KeyGestureConverter();
+
+        _gestures.Clear();
         foreach (var (action, gestureText) in configured)
         {
             try
             {
-                if (converter.ConvertFromInvariantString(gestureText) is KeyGesture gesture)
+                if (!string.IsNullOrWhiteSpace(gestureText) &&
+                    converter.ConvertFromInvariantString(gestureText) is KeyGesture gesture)
                     _gestures[action] = gesture;
             }
             catch (NotSupportedException)
@@ -50,7 +55,7 @@ public sealed class KeymapService
         return false;
     }
 
-    private static Dictionary<string, string> LoadOrCreate(string path)
+    public static Dictionary<string, string> LoadOrCreate(string path)
     {
         if (File.Exists(path))
         {
@@ -65,11 +70,17 @@ public sealed class KeymapService
         }
 
         var defaults = Defaults();
-        File.WriteAllText(path, JsonSerializer.Serialize(defaults, new JsonSerializerOptions { WriteIndented = true }));
+        Save(path, defaults);
         return defaults;
     }
 
-    private static Dictionary<string, string> Defaults()
+    public static void Save(string path, Dictionary<string, string> map)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, JsonSerializer.Serialize(map, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    public static Dictionary<string, string> Defaults()
     {
         var defaults = new Dictionary<string, string>
         {
@@ -77,7 +88,10 @@ public sealed class KeymapService
             ["ClearLayer"] = "X",
             ["ClearAll"] = "Ctrl+X",
             ["Blackout"] = "B",
-            ["ToggleOutputs"] = "F"
+            ["ToggleOutputs"] = "F",
+            ["SaveProject"] = "Ctrl+S",
+            ["OpenProject"] = "Ctrl+O",
+            ["NewProject"] = "Ctrl+N",
         };
 
         for (int column = 1; column <= 8; column++)
