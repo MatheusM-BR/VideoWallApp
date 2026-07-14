@@ -27,6 +27,22 @@
 
         <ToggleButton DockPanel.Dock="Right" Content="BLACKOUT" IsChecked="{Binding Blackout}"
                       Style="{StaticResource BlackoutButton}" Padding="14,4" Margin="10,0,0,0" />
+        <!-- Play/Pause global em evidência (tecla Espaço) -->
+        <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding MasterPaused}" Padding="16,4" Margin="10,0,0,0"
+                      FontWeight="Bold" FontSize="13" ToolTip="Pausa/retoma todas as layers (Espaço)">
+          <ToggleButton.Style>
+            <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+              <Setter Property="Content" Value="⏸ PAUSE" />
+              <Style.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                  <Setter Property="Content" Value="▶ PLAY" />
+                  <Setter Property="Background" Value="{StaticResource AccentDim}" />
+                  <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                </Trigger>
+              </Style.Triggers>
+            </Style>
+          </ToggleButton.Style>
+        </ToggleButton>
         <Slider DockPanel.Dock="Right" Width="140" Minimum="0" Maximum="1" Value="{Binding MasterFader}"
                 VerticalAlignment="Center" ToolTip="Master fader" />
         <TextBlock DockPanel.Dock="Right" Text="MASTER" Foreground="{StaticResource FgDim}" FontSize="10"
@@ -183,6 +199,8 @@
           <Button Content="📂 Carregar mídia" Command="{Binding OpenVideoCommand}" Margin="0,0,3,0" />
           <Button Content="+ Layer" Command="{Binding Grid.AddLayerCommand}" Margin="0,0,3,0" />
           <Button Content="+ Coluna" Command="{Binding Grid.AddColumnCommand}" Margin="0,0,3,0" />
+          <Button Content="↶ Desfazer" Command="{Binding Grid.UndoGridCommand}" IsEnabled="{Binding Grid.CanUndoGrid}"
+                  Margin="0,0,3,0" ToolTip="Restaura a grade ao estado anterior à última ação" />
           <TextBlock Text="  arraste arquivos para as células" Foreground="{StaticResource FgDim}"
                      FontSize="11" VerticalAlignment="Center" />
         </StackPanel>
@@ -203,7 +221,19 @@
                             Content="{Binding Converter={StaticResource IncrementConverter}}"
                             Command="{Binding DataContext.Grid.TriggerColumnCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                             CommandParameter="{Binding}"
-                            ToolTip="Disparar coluna inteira" />
+                            ToolTip="Clique dispara a coluna · botão direito para opções">
+                      <Button.ContextMenu>
+                        <ContextMenu>
+                          <MenuItem Header="Limpar coluna (tirar as mídias)" Click="OnColumnClear" />
+                          <MenuItem Header="Clonar coluna" Click="OnColumnClone" />
+                          <Separator />
+                          <MenuItem Header="Adicionar coluna antes" Click="OnColumnInsertBefore" />
+                          <MenuItem Header="Adicionar coluna depois" Click="OnColumnInsertAfter" />
+                          <Separator />
+                          <MenuItem Header="Remover coluna" Click="OnColumnRemove" />
+                        </ContextMenu>
+                      </Button.ContextMenu>
+                    </Button>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
@@ -218,6 +248,12 @@
                     <!-- Painel da layer (nome, X, B/S, blend, V, transição) -->
                     <Border DockPanel.Dock="Left" Width="150" Margin="2,0" Background="{StaticResource CellBg}"
                             BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="5">
+                      <Border.ContextMenu>
+                        <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                          <MenuItem Header="Duplicar layer" Click="OnLayerDuplicate" />
+                          <MenuItem Header="Limpar layer (tirar do ar)" Command="{Binding ClearCommand}" />
+                        </ContextMenu>
+                      </Border.ContextMenu>
                       <StackPanel>
                         <DockPanel Margin="0,0,0,4">
                           <Button DockPanel.Dock="Right" Content="✕" Command="{Binding ClearCommand}"
@@ -260,6 +296,7 @@
                                   AllowDrop="True" Drop="OnClipDrop">
                             <Border.ContextMenu>
                               <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                                <MenuItem Header="Limpar célula" Click="OnCellClear" />
                                 <MenuItem Header="Editar imagem..." Click="OnEditImageClick" />
                               </ContextMenu>
                             </Border.ContextMenu>

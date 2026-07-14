@@ -20,7 +20,6 @@ public sealed partial class MainViewModel : ObservableObject
 {
     private readonly GraphicsDevice _gfx;
     private readonly RenderThread _render;
-    private bool _masterPaused;
     private string? _currentProjectPath;
     private bool _isDirty;
     private OutputSetup _outputSetup = new();
@@ -37,6 +36,9 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _blackout;
     [ObservableProperty] private string _windowTitle = "VideoWallRW — Novo projeto";
     [ObservableProperty] private bool _sequencerRunning;
+
+    /// <summary>Pausa global (todas as layers) — botão ⏸/▶ em evidência + tecla Espaço.</summary>
+    [ObservableProperty] private bool _masterPaused;
 
     public CompositionViewModel Grid { get; }
     public FileBrowserViewModel FileBrowser { get; }
@@ -617,11 +619,12 @@ public sealed partial class MainViewModel : ObservableObject
         });
     }
 
-    public void ToggleMasterPause()
+    public void ToggleMasterPause() => MasterPaused = !MasterPaused;
+
+    partial void OnMasterPausedChanged(bool value)
     {
-        _masterPaused = !_masterPaused;
-        _render.Post(new SetMasterPaused(_masterPaused));
-        StatusText = _masterPaused ? "Pausa global ativa" : "Pausa global desativada";
+        _render.Post(new SetMasterPaused(value));
+        StatusText = value ? "⏸ Pausado (Espaço retoma)" : "▶ Tocando";
     }
 
     public void ToggleBlackout() => Blackout = !Blackout;

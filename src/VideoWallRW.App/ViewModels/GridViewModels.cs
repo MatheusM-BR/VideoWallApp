@@ -212,6 +212,14 @@ public sealed partial class ClipViewModel : ObservableObject
         UpdateFromModel();
     }
 
+    /// <summary>Limpa o conteúdo da célula (menu "Limpar célula" / limpar coluna).</summary>
+    public void ClearModel()
+    {
+        Model = null;
+        IsActive = false;
+        UpdateFromModel();
+    }
+
     /// <summary>Clique no preview (estilo Resolume): seleciona E coloca no ar.</summary>
     [RelayCommand]
     private void Trigger()
@@ -502,6 +510,7 @@ public sealed partial class CompositionViewModel : ObservableObject
             columnIndex < 0 || columnIndex >= Model.ColumnCount)
             throw new ArgumentOutOfRangeException();
 
+        SnapshotForUndo(); // sobrescrever uma célula é desfazível
         Model.Layers[layerIndex].Clips[columnIndex] = clip;
         Layers[layerIndex].Clips[columnIndex].SetModel(clip);
         SelectClip(Layers[layerIndex].Clips[columnIndex]);
@@ -511,6 +520,122 @@ public sealed partial class CompositionViewModel : ObservableObject
 
     private LayerViewModel CreateLayerViewModel(Layer layer, int layerIndex)
         => new(layer, layerIndex, _render, SelectClip, OnClipChanged);
+
+    // ── Desfazer (grade): snapshot da composição antes de cada operação destrutiva ──
+    private readonly Stack<Composition> _gridUndoStack = new();
+    private const int MaxGridUndo = 10;
+
+    public bool CanUndoGrid => _gridUndoStack.Count > 0;
+
+    private void SnapshotForUndo()
+    {
+        _gridUndoStack.Push(Model.Clone());
+        while (_gridUndoStack.Count > MaxGridUndo)
+        {
+            var arr = _gridUndoStack.ToArray();
+            _gridUndoStack.Clear();
+            for (int i = arr.Length - 2; i >= 0; i--) _gridUndoStack.Push(arr[i]);
+        }
+        OnPropertyChanged(nameof(CanUndoGrid));
+    }
+
+    /// <summary>Restaura a grade ao estado anterior à última ação (limpar/remover/
+    /// clonar coluna, duplicar layer, definir/limpar célula...).</summary>
+    [RelayCommand]
+    private void UndoGrid()
+    {
+        if (_gridUndoStack.Count == 0) return;
+        ReplaceModel(_gridUndoStack.Pop());
+        OnPropertyChanged(nameof(CanUndoGrid));
+        Changed?.Invoke();
+    }
+
+    // ── Operações de coluna (menu de contexto no cabeçalho) ─────────────────────
+
+    /// <summary>Limpa o conteúdo (imagens/vídeos) de todas as células da coluna.</summary>
+    public void ClearColumn(int col)
+    {
+        if (col < 0 || col >= Model.ColumnCount) return;
+        SnapshotForUndo();
+        for (int l = 0; l < Model.Layers.Count; l++)
+            ClearCellInternal(l, col);
+        Changed?.Invoke();
+    }
+
+    public void RemoveColumn(int col)
+    {
+        if (col < 0 || col >= Model.ColumnCount || Model.ColumnCount <= 1) return;
+        SnapshotForUndo();
+        Model.ColumnCount--;
+        foreach (var layer in Model.Layers)
+        {
+            var clips = layer.Clips.ToList();
+            clips.RemoveAt(col);
+            layer.Clips = [.. clips];
+        }
+        ReplaceModel(Model);
+        Changed?.Invoke();
+    }
+
+    public void CloneColumn(int col) => InsertColumnInternal(col + 1, cloneFrom: col);
+
+    public void InsertColumnBefore(int col) => InsertColumnInternal(col, cloneFrom: null);
+
+    public void InsertColumnAfter(int col) => InsertColumnInternal(col + 1, cloneFrom: null);
+
+    private void InsertColumnInternal(int index, int? cloneFrom)
+    {
+        index = System.Math.Clamp(index, 0, Model.ColumnCount);
+        SnapshotForUndo();
+        Model.ColumnCount++;
+        foreach (var layer in Model.Layers)
+        {
+            var clips = layer.Clips.ToList();
+            clips.Insert(index, cloneFrom is { } src ? layer.Clips[src]?.Clone() : null);
+            layer.Clips = [.. clips];
+        }
+        ReplaceModel(Model);
+        Changed?.Invoke();
+    }
+
+    // ── Layer: duplicar ─────────────────────────────────────────────────────────
+
+    public void DuplicateLayer(int layerIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Model.Layers.Count) return;
+        SnapshotForUndo();
+        var clone = Model.Layers[layerIndex].Clone();
+        clone.Name = $"{Model.Layers[layerIndex].Name} (cópia)";
+        Model.Layers.Insert(layerIndex + 1, clone);
+        ReplaceModel(Model);
+        Changed?.Invoke();
+    }
+
+    // ── Célula: limpar conteúdo ─────────────────────────────────────────────────
+
+    public void ClearCell(int layerIndex, int columnIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Model.Layers.Count ||
+            columnIndex < 0 || columnIndex >= Model.ColumnCount) return;
+        SnapshotForUndo();
+        ClearCellInternal(layerIndex, columnIndex);
+        Changed?.Invoke();
+    }
+
+    private void ClearCellInternal(int layerIndex, int columnIndex)
+    {
+        // Se a célula limpa era a que estava no ar, tira a layer do ar também.
+        bool wasActive = Layers[layerIndex].LastTriggeredColumn == columnIndex;
+
+        Model.Layers[layerIndex].Clips[columnIndex] = null;
+        Layers[layerIndex].Clips[columnIndex].ClearModel();
+        _render.Post(new UpdateClip(layerIndex, columnIndex, null));
+        if (wasActive)
+        {
+            _render.Post(new ClearLayer(layerIndex));
+            Layers[layerIndex].LastTriggeredColumn = -1;
+        }
+    }
 
     // ── Copy/paste de clip entre células (Ctrl+C / Ctrl+V com uma célula selecionada) ──
     private Clip? _clipboardClip;

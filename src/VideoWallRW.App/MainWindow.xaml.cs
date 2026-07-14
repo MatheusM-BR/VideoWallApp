@@ -78,8 +78,62 @@ public partial class MainWindow : Window
         _vm.EditCellImage(clipVm.LayerIndex, clipVm.ColumnIndex, img.Path);
     }
 
+    private void OnCellClear(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: ViewModels.ClipViewModel clipVm })
+            _vm.Grid.ClearCell(clipVm.LayerIndex, clipVm.ColumnIndex);
+    }
+
+    private void OnLayerDuplicate(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: ViewModels.LayerViewModel layerVm })
+            _vm.Grid.DuplicateLayer(layerVm.LayerIndex);
+    }
+
+    // ── Menu de contexto do cabeçalho de coluna ──
+    private static int? ColumnFromMenu(object sender)
+        => sender is MenuItem { Parent: ContextMenu { PlacementTarget: FrameworkElement { DataContext: int col } } }
+            ? col : null;
+
+    private void OnColumnClear(object sender, RoutedEventArgs e)
+    {
+        if (ColumnFromMenu(sender) is { } col) _vm.Grid.ClearColumn(col);
+    }
+
+    private void OnColumnClone(object sender, RoutedEventArgs e)
+    {
+        if (ColumnFromMenu(sender) is { } col) _vm.Grid.CloneColumn(col);
+    }
+
+    private void OnColumnInsertBefore(object sender, RoutedEventArgs e)
+    {
+        if (ColumnFromMenu(sender) is { } col) _vm.Grid.InsertColumnBefore(col);
+    }
+
+    private void OnColumnInsertAfter(object sender, RoutedEventArgs e)
+    {
+        if (ColumnFromMenu(sender) is { } col) _vm.Grid.InsertColumnAfter(col);
+    }
+
+    private void OnColumnRemove(object sender, RoutedEventArgs e)
+    {
+        if (ColumnFromMenu(sender) is not { } col) return;
+        var confirm = MessageBox.Show($"Remover a coluna {col + 1} inteira (todas as layers)?",
+            "VideoWallRW", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm == MessageBoxResult.Yes)
+            _vm.Grid.RemoveColumn(col);
+    }
+
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Espaço fora de um TextBox: Play/Pause global (todas as layers).
+        if (e.Key == Key.Space && Keyboard.FocusedElement is not TextBoxBase)
+        {
+            _vm.ToggleMasterPause();
+            e.Handled = true;
+            return;
+        }
+
         // Ctrl+C/Ctrl+V fora de um TextBox: copiar/colar CLIP entre células.
         // Dentro de um TextBox o comportamento nativo de clipboard continua intacto.
         if (Keyboard.FocusedElement is not TextBoxBase && Keyboard.Modifiers == ModifierKeys.Control)
