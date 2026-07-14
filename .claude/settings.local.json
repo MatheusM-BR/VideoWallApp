@@ -16,7 +16,8 @@
       "Bash(powershell -NoProfile -Command '& { $env:DOTNET_ROOT = \"$env:LOCALAPPDATA\\\\Microsoft\\\\dotnet\"; $env:PATH = \"$env:DOTNET_ROOT;$env:PATH\"; dotnet build VideoWallRW.sln -warnaserror --nologo -v minimal }')",
       "Bash(powershell -NoProfile -Command '& { $env:DOTNET_ROOT = \"$env:LOCALAPPDATA\\\\Microsoft\\\\dotnet\"; $env:PATH = \"$env:DOTNET_ROOT;$env:PATH\"; dotnet test tests/VideoWallRW.Core.Tests --nologo -v minimal --no-build }')",
       "Bash(git add *)",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(powershell -NoProfile -Command '& { $env:DOTNET_ROOT = \"$env:LOCALAPPDATA\\\\Microsoft\\\\dotnet\"; $env:PATH = \"$env:DOTNET_ROOT;$env:PATH\"; dotnet script inspect.csx 2>&1 | Select-Object -First 60 }')"
     ]
   }
 }
