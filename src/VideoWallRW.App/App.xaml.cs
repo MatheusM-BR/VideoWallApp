@@ -18,6 +18,7 @@ public partial class App : Application
     private GraphicsDevice? _gfx;
     private RenderThread? _render;
     private AudioEngine? _audio;
+    private HeartbeatClient? _heartbeat;
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
@@ -97,6 +98,7 @@ public partial class App : Application
         });
 
         _render.Start();
+        _heartbeat = new HeartbeatClient();
 
         bool kiosk = e.Args.Any(a => a.Equals("--kiosk", StringComparison.OrdinalIgnoreCase));
         var vm = new MainViewModel(_gfx, _render, kiosk);
@@ -162,6 +164,7 @@ public partial class App : Application
     {
         // Ordem importa: parar a thread (que descarta as saídas) antes do device;
         // o áudio pode ser encerrado a qualquer momento, é independente do D3D11.
+        _heartbeat?.Dispose();
         _render?.Stop();
         _audio?.Dispose();
         _gfx?.Dispose();

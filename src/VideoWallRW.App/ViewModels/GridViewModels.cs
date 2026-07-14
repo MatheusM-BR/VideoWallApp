@@ -356,6 +356,25 @@ public sealed partial class CompositionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Fase 8 T8.6: adiciona um arquivo (de uma pasta monitorada) na primeira coluna
+    /// vazia da layer; se não houver, cria uma coluna nova. Usado pelo watch-folder —
+    /// nunca sobrescreve um clip já configurado manualmente.
+    /// </summary>
+    public void AddFileAutoColumn(int layerIndex, string path)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count)
+            return;
+
+        int column = Array.FindIndex(Model.Layers[layerIndex].Clips, c => c is null);
+        if (column < 0)
+        {
+            AddColumn();
+            column = Model.ColumnCount - 1;
+        }
+        SetFiles(layerIndex, column, [path]);
+    }
+
     [RelayCommand]
     private void AddLayer()
     {

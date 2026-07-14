@@ -12,6 +12,9 @@
       <Button DockPanel.Dock="Left" Content="Salvar" Command="{Binding SaveProjectCommand}" Padding="8,4" Margin="0,0,4,0" />
       <Button DockPanel.Dock="Left" Content="Salvar como..." Command="{Binding SaveProjectAsCommand}" Padding="8,4" Margin="0,0,14,0" />
       <Button DockPanel.Dock="Left" Content="⌨ Atalhos..." Command="{Binding OpenKeymapEditorCommand}" Padding="8,4" Margin="0,0,4,0" />
+      <Button DockPanel.Dock="Left" Content="⚙ Instalação..." Command="{Binding OpenInstallationCommand}" Padding="8,4" Margin="0,0,4,0" />
+      <ToggleButton DockPanel.Dock="Left" Content="▶ Sequenciador" IsChecked="{Binding SequencerRunning}"
+                    Padding="8,4" Margin="0,0,4,0" />
       <ToggleButton DockPanel.Dock="Right" Content="BLACKOUT" IsChecked="{Binding Blackout}" Padding="10,4" Margin="10,0,0,0"
                     Background="#CC0000" Foreground="White" FontWeight="Bold" />
       <TextBlock DockPanel.Dock="Right" Text="Master:" VerticalAlignment="Center" Margin="10,0,4,0" />

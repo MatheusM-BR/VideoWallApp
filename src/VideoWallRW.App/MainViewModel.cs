@@ -27,6 +27,7 @@ public sealed partial class MainViewModel : ObservableObject
     private InstallationConfig _installation = new();
     private readonly DispatcherTimer _autosaveTimer;
     private readonly DispatcherTimer _runtimeStateTimer;
+    private readonly WatchFolderManager _watchFolders;
 
     public ObservableCollection<MonitorViewModel> Monitors { get; } = [];
     public ObservableCollection<SceneViewModel> Scenes { get; } = [];
@@ -55,6 +56,7 @@ public sealed partial class MainViewModel : ObservableObject
         Grid = new CompositionViewModel(compModel, _render);
         Grid.SyncToEngine();
         Grid.Changed += MarkDirty;
+        _watchFolders = new WatchFolderManager(Grid, Dispatcher.CurrentDispatcher);
 
         _render.StatsUpdated += OnStatsUpdated;
         _render.EngineFailed += OnEngineFailed;
@@ -143,6 +145,14 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenInstallation()
+    {
+        var vm = new InstallationViewModel(_installation, UpdateInstallation);
+        var window = new InstallationWindow(vm) { Owner = Application.Current.MainWindow };
+        window.ShowDialog();
+    }
+
+    [RelayCommand]
     private void OpenHapConverter()
     {
         var window = new HapConverterWindow(new HapConverterViewModel()) { Owner = Application.Current.MainWindow };
@@ -195,6 +205,7 @@ public sealed partial class MainViewModel : ObservableObject
         _render.Post(new SyncScenes([]));
         _installation = new InstallationConfig();
         _render.Post(new SyncInstallation(_installation));
+        _watchFolders.Clear();
         SequencerRunning = false;
         _currentProjectPath = null;
         MasterFader = 1.0;
@@ -247,6 +258,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _installation = project.Installation;
         _render.Post(new SyncInstallation(_installation));
+        _watchFolders.Apply(_installation.WatchFolders);
         SequencerRunning = false;
 
         MasterFader = project.Composition.MasterOpacity;
@@ -371,15 +383,14 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _installation = config;
         _render.Post(new SyncInstallation(_installation));
+        _watchFolders.Apply(_installation.WatchFolders);
         MarkDirty();
     }
 
-    [RelayCommand]
-    private void ToggleSequencer()
-    {
-        SequencerRunning = !SequencerRunning;
-        _render.Post(new SetSequencerRunning(SequencerRunning));
-    }
+    public void ToggleSequencer() => SequencerRunning = !SequencerRunning;
+
+    partial void OnSequencerRunningChanged(bool value)
+        => _render.Post(new SetSequencerRunning(value));
 
     private void Autosave()
     {
