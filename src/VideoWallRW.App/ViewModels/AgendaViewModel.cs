@@ -24,6 +24,7 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
     private readonly Func<string> _projectFolder;
     private readonly Action<string, string> _openImageEditor; // (path, suggestedClipName)
     private readonly Action<string> _openPdfImporter;
+    private readonly Action<string, string> _sendToCell; // (path, clipName)
 
     [ObservableProperty] private DateOnly _date = DateOnly.FromDateTime(DateTime.Now);
     [ObservableProperty] private bool _loading;
@@ -35,11 +36,13 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<AgendaEventViewModel> Events { get; } = [];
 
-    public AgendaViewModel(Func<string> projectFolder, Action<string, string> openImageEditor, Action<string> openPdfImporter)
+    public AgendaViewModel(Func<string> projectFolder, Action<string, string> openImageEditor,
+        Action<string> openPdfImporter, Action<string, string> sendToCell)
     {
         _projectFolder = projectFolder;
         _openImageEditor = openImageEditor;
         _openPdfImporter = openPdfImporter;
+        _sendToCell = sendToCell;
         _ = LoadAsync();
     }
 
@@ -118,13 +121,18 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
             System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 
-    [RelayCommand]
-    private async Task SaveBanner() => await SaveBannerInternal(edit: false);
+    private enum AfterSave { Nothing, Edit, SendToCell }
 
     [RelayCommand]
-    private async Task SaveBannerAndEdit() => await SaveBannerInternal(edit: true);
+    private async Task SaveBanner() => await SaveBannerInternal(AfterSave.Nothing);
 
-    private async Task SaveBannerInternal(bool edit)
+    [RelayCommand]
+    private async Task SaveBannerAndEdit() => await SaveBannerInternal(AfterSave.Edit);
+
+    [RelayCommand]
+    private async Task SaveBannerAndSend() => await SaveBannerInternal(AfterSave.SendToCell);
+
+    private async Task SaveBannerInternal(AfterSave then)
     {
         if (Details?.BannerUrl is not { } bannerUrl) return;
         bool lowRes = Details.BannerPreviewUrl is null;
@@ -138,11 +146,19 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
             await _client.DownloadFileAsync(bannerUrl, dest, new Progress<double>(p => DownloadProgress = p), CancellationToken.None);
             WriteMeta(folder, bannerUrl);
             StatusText = lowRes
-                ? "Banner salvo (aviso: baixa resolução — o evento não tinha banner em alta)."
-                : "Banner salvo em alta resolução.";
+                ? $"Banner salvo (baixa resolução — o evento não tinha alta): {dest}"
+                : $"Banner salvo: {dest}";
 
-            if (edit)
-                _openImageEditor(dest, Details.Title);
+            switch (then)
+            {
+                case AfterSave.Edit:
+                    _openImageEditor(dest, Details.Title);
+                    break;
+                case AfterSave.SendToCell:
+                    _sendToCell(dest, Details.Title);
+                    StatusText = $"Banner salvo e enviado para a grade: {dest}";
+                    break;
+            }
         }
         catch (Exception ex)
         {

@@ -45,6 +45,8 @@
                     Command="{Binding DataContext.SaveBannerCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
             <Button Content="Salvar banner e editar" Padding="10,4" Margin="0,0,6,0"
                     Command="{Binding DataContext.SaveBannerAndEditCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <Button Content="Salvar e enviar p/ célula" Padding="10,4"
+                    Command="{Binding DataContext.SaveBannerAndSendCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
           </StackPanel>
 
           <ItemsControl ItemsSource="{Binding Downloads}">

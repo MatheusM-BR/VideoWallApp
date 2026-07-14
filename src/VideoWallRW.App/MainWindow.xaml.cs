@@ -46,6 +46,31 @@ public partial class MainWindow : Window
         }
     }
 
+    // ── Painel FILES: duplo-clique envia, arrastar solta nas células (FileDrop) ──
+    private Point _fileDragStart;
+
+    private void OnFileListMouseDown(object sender, MouseButtonEventArgs e)
+        => _fileDragStart = e.GetPosition(null);
+
+    private void OnFileListMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        var pos = e.GetPosition(null);
+        if (Math.Abs(pos.X - _fileDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _fileDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        if (FileList.SelectedItem is ViewModels.FileBrowserItem { IsFolder: false } item)
+            DragDrop.DoDragDrop(FileList,
+                new DataObject(DataFormats.FileDrop, new[] { item.FullPath }), DragDropEffects.Copy);
+    }
+
+    private void OnFileListDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (FileList.SelectedItem is ViewModels.FileBrowserItem item)
+            _vm.FileBrowser.Open(item);
+    }
+
     private void OnEditImageClick(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuItem { DataContext: ViewModels.ClipViewModel clipVm }) return;
@@ -55,6 +80,14 @@ public partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Ctrl+C/Ctrl+V fora de um TextBox: copiar/colar CLIP entre células.
+        // Dentro de um TextBox o comportamento nativo de clipboard continua intacto.
+        if (Keyboard.FocusedElement is not TextBoxBase && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            if (e.Key == Key.C && _vm.Grid.CopySelectedClip()) { e.Handled = true; return; }
+            if (e.Key == Key.V && _vm.Grid.PasteClipboardClip()) { e.Handled = true; return; }
+        }
+
         if (Keyboard.FocusedElement is TextBoxBase || !_keymap.TryGetAction(e, out var action))
             return;
 

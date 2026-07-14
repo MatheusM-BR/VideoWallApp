@@ -12,8 +12,8 @@ public partial class PdfImportWindow : Window
 
     public PdfImportWindow(PdfImportViewModel viewModel)
     {
+        _vm = viewModel; // antes do InitializeComponent — eventos de XAML podem disparar no parse
         InitializeComponent();
-        _vm = viewModel;
         DataContext = viewModel;
         viewModel.PropertyChanged += OnVmPropertyChanged;
     }

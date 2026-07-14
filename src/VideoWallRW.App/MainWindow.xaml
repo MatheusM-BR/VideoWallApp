@@ -1,6 +1,7 @@
 <Window x:Class="VideoWallRW.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:VideoWallRW.App.Controls"
         Title="{Binding WindowTitle}" Height="860" Width="1180"
         WindowStartupLocation="CenterScreen" PreviewKeyDown="OnPreviewKeyDown"
         Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
@@ -109,6 +110,7 @@
           <RowDefinition Height="Auto" />
           <RowDefinition Height="Auto" />
           <RowDefinition Height="Auto" />
+          <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <TextBlock Grid.ColumnSpan="7" Text="CLIP" Foreground="{StaticResource FgDim}" FontSize="10"
@@ -147,12 +149,25 @@
           <Slider Width="110" Minimum="0" Maximum="1" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
           <CheckBox Content="Mute" IsChecked="{Binding Mute, Mode=TwoWay}" Margin="10,0,0,0" />
         </StackPanel>
+
+        <!-- Trim estilo Resolume: barra da duração inteira, alças arrastáveis de In/Out -->
+        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Trim" Margin="0,8,6,0" />
+        <controls:TrimBar Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="6" Height="26" Margin="0,8,0,0"
+                          Duration="{Binding Duration}"
+                          InPoint="{Binding TrimIn, Mode=TwoWay}"
+                          OutPoint="{Binding TrimOut, Mode=TwoWay}" />
       </Grid>
     </Border>
 
-    <!-- ═══ Área central: a grade (colunas × layers), coração do layout Resolume ═══ -->
-    <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
-            Padding="6">
+    <!-- ═══ Área central: grade (esq.) + dock Files/Preview (dir.), como no Resolume ═══ -->
+    <Grid>
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="250" />
+      </Grid.ColumnDefinitions>
+
+    <Border Grid.Column="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
+            BorderThickness="1" Padding="6">
       <DockPanel>
         <!-- Mini-toolbar da composição -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
@@ -303,6 +318,66 @@
         </ScrollViewer>
       </DockPanel>
     </Border>
+
+    <!-- ═══ Dock direito: FILES (navegador de pastas) + PREVIEW do clip selecionado ═══ -->
+    <DockPanel Grid.Column="1" Margin="6,0,0,0">
+
+      <!-- PREVIEW (embaixo) -->
+      <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
+              BorderThickness="1" Padding="6" Margin="0,6,0,0" DataContext="{Binding Grid.SelectedClip}">
+        <StackPanel>
+          <TextBlock Text="PREVIEW" Foreground="{StaticResource FgDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,4" />
+          <Border Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
+                  Height="128" ClipToBounds="True">
+            <Image Source="{Binding ThumbnailPath}" Stretch="Uniform" />
+          </Border>
+          <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,0"
+                     TextTrimming="CharacterEllipsis" />
+          <TextBlock FontSize="10" Foreground="{StaticResource FgDim}">
+            <Run Text="Duração: " /><Run Text="{Binding Duration, Mode=OneWay, StringFormat={}{0:F1}s}" />
+            <Run Text="   In/Out: " /><Run Text="{Binding TrimIn, Mode=OneWay, StringFormat={}{0:F1}}" />
+            <Run Text=" → " /><Run Text="{Binding TrimOut, Mode=OneWay, StringFormat={}{0:F1}}" />
+          </TextBlock>
+        </StackPanel>
+      </Border>
+
+      <!-- FILES (preenche) -->
+      <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
+              Padding="6">
+        <DockPanel>
+          <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
+            <TextBlock DockPanel.Dock="Left" Text="FILES" Foreground="{StaticResource FgDim}" FontSize="10"
+                       FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <Button DockPanel.Dock="Right" Content="↻" Command="{Binding FileBrowser.RefreshCommand}"
+                    Padding="5,1" FontSize="10" ToolTip="Atualizar" />
+            <Button DockPanel.Dock="Right" Content="⬆" Command="{Binding FileBrowser.NavigateUpCommand}"
+                    Padding="5,1" FontSize="10" Margin="0,0,3,0" ToolTip="Pasta acima" />
+            <Button DockPanel.Dock="Right" Content="📂" Command="{Binding FileBrowser.BrowseCommand}"
+                    Padding="5,1" FontSize="10" Margin="0,0,3,0" ToolTip="Escolher pasta..." />
+            <Border />
+          </DockPanel>
+          <TextBlock DockPanel.Dock="Top" Text="{Binding FileBrowser.CurrentFolder}" FontSize="9"
+                     Foreground="{StaticResource FgDim}" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
+                     ToolTip="{Binding FileBrowser.CurrentFolder}" />
+          <TextBlock DockPanel.Dock="Bottom" Text="duplo-clique envia p/ célula · arraste p/ grade" FontSize="9"
+                     Foreground="{StaticResource FgDim}" Margin="0,4,0,0" />
+          <ListBox x:Name="FileList" ItemsSource="{Binding FileBrowser.Items}"
+                   MouseDoubleClick="OnFileListDoubleClick"
+                   PreviewMouseLeftButtonDown="OnFileListMouseDown"
+                   PreviewMouseMove="OnFileListMouseMove">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="{Binding Icon}" FontSize="11" Margin="0,0,5,0" />
+                  <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+    </DockPanel>
+    </Grid>
 
   </DockPanel>
 </Window>

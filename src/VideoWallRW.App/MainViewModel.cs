@@ -39,6 +39,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _sequencerRunning;
 
     public CompositionViewModel Grid { get; }
+    public FileBrowserViewModel FileBrowser { get; }
 
     private readonly bool _kiosk;
 
@@ -57,6 +58,7 @@ public sealed partial class MainViewModel : ObservableObject
         Grid.SyncToEngine();
         Grid.Changed += MarkDirty;
         _watchFolders = new WatchFolderManager(Grid, Dispatcher.CurrentDispatcher);
+        FileBrowser = new FileBrowserViewModel(SendFileToSelectedCell);
 
         _render.StatsUpdated += OnStatsUpdated;
         _render.EngineFailed += OnEngineFailed;
@@ -147,7 +149,7 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenAgenda()
     {
-        var vm = new ViewModels.AgendaViewModel(GetProjectFolder, OpenImageEditorForFile, OpenPdfImporter);
+        var vm = new ViewModels.AgendaViewModel(GetProjectFolder, OpenImageEditorForFile, OpenPdfImporter, SendImageToCell);
         var window = new AgendaWindow(vm) { Owner = Application.Current.MainWindow };
         window.Show();
     }
@@ -171,6 +173,19 @@ public sealed partial class MainViewModel : ObservableObject
         var vm = new PdfImportViewModel(pdfPath, (imagePath, name) => OpenImageEditorForFile(imagePath, name));
         var window = new PdfImportWindow(vm) { Owner = Application.Current.MainWindow };
         window.Show();
+    }
+
+    /// <summary>Painel Files (duplo-clique): arquivo vai pra célula selecionada; sem
+    /// seleção, primeira célula vazia da layer 0.</summary>
+    private void SendFileToSelectedCell(string path)
+    {
+        int layerIndex = Grid.SelectedClip?.LayerIndex ?? 0;
+        int columnIndex = Grid.SelectedClip?.ColumnIndex ?? -1;
+        if (columnIndex < 0)
+            Grid.AddFileAutoColumn(layerIndex, path);
+        else
+            Grid.SetFiles(layerIndex, columnIndex, [path]);
+        StatusText = $"Enviado para a grade: {Path.GetFileName(path)}";
     }
 
     /// <summary>Manda a imagem editada pra célula selecionada na grade; sem seleção,

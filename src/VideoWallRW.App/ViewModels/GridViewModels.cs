@@ -38,6 +38,9 @@ public sealed partial class ClipViewModel : ObservableObject
     [ObservableProperty] private AutopilotAction _autopilot;
     [ObservableProperty] private string _inPointText = string.Empty;
     [ObservableProperty] private string _outPointText = string.Empty;
+
+    /// <summary>Duração total do arquivo (s); 0 = desconhecida/não é vídeo. Alimenta a TrimBar.</summary>
+    [ObservableProperty] private double _duration;
     [ObservableProperty] private string _imageDurationText = string.Empty;
     [ObservableProperty] private ResizeMode? _resize;
     [ObservableProperty] private double _volume = 1.0;
@@ -76,6 +79,63 @@ public sealed partial class ClipViewModel : ObservableObject
         _updatingFromModel = false;
 
         RequestThumbnail();
+        ProbeDurationIfNeeded();
+    }
+
+    /// <summary>Ponte pro TrimBar: In efetivo em segundos (campo vazio = 0).</summary>
+    public double TrimIn
+    {
+        get => TryParseOptional(InPointText, out double? v) && v is { } x ? x : 0;
+        set => InPointText = value.ToString("0.##", CultureInfo.CurrentCulture);
+    }
+
+    /// <summary>Ponte pro TrimBar: Out efetivo em segundos (campo vazio = duração total).</summary>
+    public double TrimOut
+    {
+        get => TryParseOptional(OutPointText, out double? v) && v is { } x ? x : Duration;
+        set => OutPointText = value.ToString("0.##", CultureInfo.CurrentCulture);
+    }
+
+    /// <summary>
+    /// Sonda a duração do vídeo uma vez (persistida no Clip) e, quando conhecida,
+    /// mostra os tempos inicial/final nos campos In/Out — o operador vê 0 e a duração
+    /// total imediatamente, como no Resolume, em vez de campos vazios.
+    /// </summary>
+    private async void ProbeDurationIfNeeded()
+    {
+        if (Model?.Source is not FileVideoSource video)
+        {
+            Duration = 0;
+            return;
+        }
+
+        if (Model.DurationSeconds is { } known)
+        {
+            Duration = known;
+            EnsureTrimDefaults();
+            return;
+        }
+
+        string path = video.Path;
+        double? probed = await Task.Run(() => VideoWallRW.Media.MediaProbe.TryGetDuration(path));
+        if (probed is not { } duration || MediaPathOf(Model) != path || Model is null)
+            return;
+
+        Model.DurationSeconds = duration;
+        Duration = duration;
+        EnsureTrimDefaults();
+        _changed(this); // persiste DurationSeconds no engine/projeto mesmo sem edição manual
+    }
+
+    private void EnsureTrimDefaults()
+    {
+        if (Duration <= 0) return;
+        if (string.IsNullOrWhiteSpace(InPointText))
+            InPointText = "0";
+        if (string.IsNullOrWhiteSpace(OutPointText))
+            OutPointText = Duration.ToString("0.##", CultureInfo.CurrentCulture);
+        OnPropertyChanged(nameof(TrimIn));
+        OnPropertyChanged(nameof(TrimOut));
     }
 
     private static string? MediaPathOf(Clip? model) => model?.Source switch
@@ -126,8 +186,19 @@ public sealed partial class ClipViewModel : ObservableObject
     partial void OnPlayModeChanged(PlayMode value) => ApplyEdits();
     partial void OnSpeedChanged(double value) => ApplyEdits();
     partial void OnAutopilotChanged(AutopilotAction value) => ApplyEdits();
-    partial void OnInPointTextChanged(string value) => ApplyEdits();
-    partial void OnOutPointTextChanged(string value) => ApplyEdits();
+    partial void OnDurationChanged(double value) => OnPropertyChanged(nameof(TrimOut));
+
+    partial void OnInPointTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(TrimIn));
+        ApplyEdits();
+    }
+
+    partial void OnOutPointTextChanged(string value)
+    {
+        OnPropertyChanged(nameof(TrimOut));
+        ApplyEdits();
+    }
     partial void OnImageDurationTextChanged(string value) => ApplyEdits();
     partial void OnResizeChanged(ResizeMode? value) => ApplyEdits();
     partial void OnVolumeChanged(double value) => ApplyEdits();
@@ -393,6 +464,27 @@ public sealed partial class CompositionViewModel : ObservableObject
 
     private LayerViewModel CreateLayerViewModel(Layer layer, int layerIndex)
         => new(layer, layerIndex, _render, SelectClip, OnClipChanged);
+
+    // ── Copy/paste de clip entre células (Ctrl+C / Ctrl+V com uma célula selecionada) ──
+    private Clip? _clipboardClip;
+
+    public bool CopySelectedClip()
+    {
+        if (SelectedClip?.Model is not { } model)
+            return false;
+        _clipboardClip = model.Copy();
+        return true;
+    }
+
+    public bool PasteClipboardClip()
+    {
+        if (_clipboardClip is null || SelectedClip is null)
+            return false;
+        // Clone() gera um Id novo — célula colada é um clip independente (retrigger
+        // e autopilot não confundem as duas cópias).
+        SetClip(SelectedClip.LayerIndex, SelectedClip.ColumnIndex, _clipboardClip.Clone());
+        return true;
+    }
 
     private void SelectClip(ClipViewModel clip)
     {

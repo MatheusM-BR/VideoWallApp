@@ -15,8 +15,10 @@ public partial class ImageEditorWindow : Window
 
     public ImageEditorWindow(ImageEditorViewModel viewModel)
     {
-        InitializeComponent();
+        // _vm ANTES do InitializeComponent: o ComboBox de cor tem IsSelected=True no
+        // primeiro item e dispara OnColorChanged ainda durante o parse do XAML.
         _vm = viewModel;
+        InitializeComponent();
         DataContext = viewModel;
         viewModel.BitmapChanged += () => Dispatcher.Invoke(() => Canvas.InvalidateVisual());
         Closed += (_, _) => viewModel.Dispose();
@@ -24,6 +26,7 @@ public partial class ImageEditorWindow : Window
 
     private void OnColorChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
+        if (_vm is null) return; // evento pode disparar durante o InitializeComponent
         if (ColorPicker.SelectedItem is System.Windows.Controls.ComboBoxItem { Tag: string name })
             _vm.BrushColor = name switch
             {

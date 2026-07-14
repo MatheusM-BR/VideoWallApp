@@ -11,6 +11,10 @@ public sealed class Clip
     public double? InPoint { get; set; }
     public double? OutPoint { get; set; }
     public double? ImageDuration { get; set; }
+
+    /// <summary>Duração total do arquivo em segundos (sondada uma vez no import,
+    /// persistida no projeto) — alimenta a barra de trim e os defaults de In/Out.</summary>
+    public double? DurationSeconds { get; set; }
     
     public ResizeMode? Resize { get; set; } // null = herda da Layer
     
@@ -36,6 +40,7 @@ public sealed class Clip
             InPoint = InPoint,
             OutPoint = OutPoint,
             ImageDuration = ImageDuration,
+            DurationSeconds = DurationSeconds,
             Resize = Resize,
             Volume = Volume,
             Mute = Mute,
@@ -55,6 +60,7 @@ public sealed class Clip
             InPoint = InPoint,
             OutPoint = OutPoint,
             ImageDuration = ImageDuration,
+            DurationSeconds = DurationSeconds,
             Resize = Resize,
             Volume = Volume,
             Mute = Mute,
