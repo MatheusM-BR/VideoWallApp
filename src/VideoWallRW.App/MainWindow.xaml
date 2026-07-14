@@ -254,21 +254,43 @@
                                 </Style.Triggers>
                               </Style>
                             </Border.Style>
-                            <Button Command="{Binding TriggerCommand}" Background="Transparent" BorderThickness="0">
-                              <TextBlock Text="{Binding Name}" FontSize="10" TextAlignment="Center"
-                                         TextWrapping="Wrap" TextTrimming="CharacterEllipsis" Padding="4" MaxHeight="70">
-                                <TextBlock.Style>
-                                  <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="{StaticResource FgDim}" />
+                            <DockPanel>
+                              <!-- Barra de nome (embaixo): clique SELECIONA o clip sem colocar no ar -->
+                              <Button DockPanel.Dock="Bottom" Height="19" Command="{Binding SelectCommand}"
+                                      AllowDrop="True" Padding="3,0" BorderThickness="0,1,0,0"
+                                      ToolTip="Selecionar para edição (não coloca no ar)">
+                                <Button.Style>
+                                  <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                    <Setter Property="Background" Value="{StaticResource InputBg}" />
                                     <Style.Triggers>
-                                      <DataTrigger Binding="{Binding HasMedia}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource Fg}" />
+                                      <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                        <Setter Property="Background" Value="{StaticResource AccentDim}" />
                                       </DataTrigger>
                                     </Style.Triggers>
                                   </Style>
-                                </TextBlock.Style>
-                              </TextBlock>
-                            </Button>
+                                </Button.Style>
+                                <TextBlock Text="{Binding Name}" FontSize="9" TextTrimming="CharacterEllipsis">
+                                  <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                      <Setter Property="Foreground" Value="{StaticResource FgDim}" />
+                                      <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasMedia}" Value="True">
+                                          <Setter Property="Foreground" Value="{StaticResource Fg}" />
+                                        </DataTrigger>
+                                      </Style.Triggers>
+                                    </Style>
+                                  </TextBlock.Style>
+                                </TextBlock>
+                              </Button>
+                              <!-- Preview (em cima): clique COLOCA NO AR -->
+                              <Button Command="{Binding TriggerCommand}" AllowDrop="True"
+                                      Background="Transparent" BorderThickness="0" Padding="0"
+                                      ToolTip="Disparar (colocar no ar)">
+                                <Grid ClipToBounds="True">
+                                  <Image Source="{Binding ThumbnailPath}" Stretch="UniformToFill" />
+                                </Grid>
+                              </Button>
+                            </DockPanel>
                           </Border>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>

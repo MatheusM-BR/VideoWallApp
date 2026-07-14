@@ -28,6 +28,10 @@ public sealed partial class ClipViewModel : ObservableObject
     /// <summary>Esta célula é a "conectada" da layer (última disparada) — destaque
     /// visual estilo Resolume. Mantido pela LayerViewModel via LastTriggeredColumn.</summary>
     [ObservableProperty] private bool _isActive;
+
+    /// <summary>Célula selecionada para edição (clique no nome) — não confundir com
+    /// <see cref="IsActive"/> (no ar). Mantido pela CompositionViewModel.</summary>
+    [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private string? _thumbnailPath;
     [ObservableProperty] private PlayMode _playMode;
     [ObservableProperty] private double _speed = 1.0;
@@ -70,6 +74,31 @@ public sealed partial class ClipViewModel : ObservableObject
         Volume = Model?.Volume ?? 1.0;
         Mute = Model?.Mute ?? false;
         _updatingFromModel = false;
+
+        RequestThumbnail();
+    }
+
+    private static string? MediaPathOf(Clip? model) => model?.Source switch
+    {
+        FileVideoSource v => v.Path,
+        FileImageSource i => i.Path,
+        _ => null,
+    };
+
+    private void RequestThumbnail()
+    {
+        string? path = MediaPathOf(Model);
+        ThumbnailPath = null;
+        if (path is null)
+            return;
+
+        ThumbnailProvider.Request(path, thumb =>
+        {
+            // O usuário pode ter trocado a mídia da célula enquanto a miniatura era
+            // gerada — só aplica se o clip ainda aponta pro mesmo arquivo.
+            if (MediaPathOf(Model) == path)
+                ThumbnailPath = thumb;
+        });
     }
 
     // Usado p/ injetar novo Model caso Drag&Drop ocorra
@@ -79,6 +108,7 @@ public sealed partial class ClipViewModel : ObservableObject
         UpdateFromModel();
     }
 
+    /// <summary>Clique no preview (estilo Resolume): seleciona E coloca no ar.</summary>
     [RelayCommand]
     private void Trigger()
     {
@@ -87,6 +117,10 @@ public sealed partial class ClipViewModel : ObservableObject
         _render.Post(new TriggerClip(_layerIndex, _colIndex));
         _triggered?.Invoke(this);
     }
+
+    /// <summary>Clique no nome (estilo Resolume): só seleciona para edição, sem tocar.</summary>
+    [RelayCommand]
+    private void Select() => _select(this);
 
     partial void OnNameChanged(string value) => ApplyEdits();
     partial void OnPlayModeChanged(PlayMode value) => ApplyEdits();
@@ -272,6 +306,8 @@ public sealed partial class CompositionViewModel : ObservableObject
     {
         Layers.Clear();
         Columns.Clear();
+        if (SelectedClip is not null)
+            SelectedClip.IsSelected = false;
         SelectedClip = null;
 
         Model.Width = newModel.Width;
@@ -350,7 +386,7 @@ public sealed partial class CompositionViewModel : ObservableObject
 
         Model.Layers[layerIndex].Clips[columnIndex] = clip;
         Layers[layerIndex].Clips[columnIndex].SetModel(clip);
-        SelectedClip = Layers[layerIndex].Clips[columnIndex];
+        SelectClip(Layers[layerIndex].Clips[columnIndex]);
         _render.Post(new UpdateClip(layerIndex, columnIndex, clip));
         Changed?.Invoke();
     }
@@ -358,7 +394,13 @@ public sealed partial class CompositionViewModel : ObservableObject
     private LayerViewModel CreateLayerViewModel(Layer layer, int layerIndex)
         => new(layer, layerIndex, _render, SelectClip, OnClipChanged);
 
-    private void SelectClip(ClipViewModel clip) => SelectedClip = clip;
+    private void SelectClip(ClipViewModel clip)
+    {
+        if (SelectedClip is not null)
+            SelectedClip.IsSelected = false;
+        SelectedClip = clip;
+        clip.IsSelected = true;
+    }
 
     private void OnClipChanged(ClipViewModel clip)
     {
