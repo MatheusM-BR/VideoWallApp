@@ -378,6 +378,20 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>Config atual do modo instalação (Fase 8), exposta para a janela de edição.</summary>
     public InstallationConfig Installation => _installation;
 
+    /// <summary>Usado pelo OscService (T9.4) para resolver "/vwrw/scene/{nome}/trigger".</summary>
+    public Guid? ResolveSceneByName(string name)
+        => Scenes.FirstOrDefault(s => s.Name == name)?.Model.Id;
+
+    /// <summary>Snapshot leve pro controle remoto web (T9.5) — só nomes, sem thumbs.</summary>
+    public object BuildRemoteSnapshot() => new
+    {
+        layers = Grid.Model.Layers.Select(l => new
+        {
+            name = l.Name,
+            clips = l.Clips.Select(c => c?.Name).ToArray(),
+        }),
+    };
+
     /// <summary>Chamado pela janela de Instalação depois de editar sequenciador/agenda/watch-folders.</summary>
     public void UpdateInstallation(InstallationConfig config)
     {

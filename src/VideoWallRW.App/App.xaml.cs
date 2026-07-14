@@ -19,6 +19,8 @@ public partial class App : Application
     private RenderThread? _render;
     private AudioEngine? _audio;
     private HeartbeatClient? _heartbeat;
+    private Input.OscService? _osc;
+    private Remote.RemoteWebService? _remoteWeb;
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
@@ -105,6 +107,12 @@ public partial class App : Application
         if (kiosk)
             ApplyKiosk(vm);
 
+        _osc = new Input.OscService(_render, vm.ResolveSceneByName);
+        _osc.Start();
+
+        _remoteWeb = new Remote.RemoteWebService(_render, vm.BuildRemoteSnapshot);
+        _ = _remoteWeb.StartAsync();
+
         var window = new MainWindow(vm);
         MainWindow = window;
         if (kiosk)
@@ -165,6 +173,8 @@ public partial class App : Application
         // Ordem importa: parar a thread (que descarta as saídas) antes do device;
         // o áudio pode ser encerrado a qualquer momento, é independente do D3D11.
         _heartbeat?.Dispose();
+        _osc?.Dispose();
+        try { _remoteWeb?.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2)); } catch { /* melhor esforço no fechamento */ }
         _render?.Stop();
         _audio?.Dispose();
         _gfx?.Dispose();

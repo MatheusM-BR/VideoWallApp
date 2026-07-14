@@ -5,7 +5,16 @@
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Máquinas com só um runtime .NET mais novo instalado (sem o 8.x exato) ainda
+         conseguem rodar — evita a falha silenciosa de resolução de host observada em
+         ambientes com .NET 8 Desktop mas sem o ASP.NET Core 8 Runtime específico. -->
+    <RollForward>LatestMajor</RollForward>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- T9.5: controle remoto web (Kestrel embutido) -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\VideoWallRW.Core\VideoWallRW.Core.csproj" />
