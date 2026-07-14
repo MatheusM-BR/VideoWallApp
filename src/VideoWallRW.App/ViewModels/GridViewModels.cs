@@ -24,6 +24,10 @@ public sealed partial class ClipViewModel : ObservableObject
 
     [ObservableProperty] private string _name = "Empty";
     [ObservableProperty] private bool _hasMedia;
+
+    /// <summary>Esta célula é a "conectada" da layer (última disparada) — destaque
+    /// visual estilo Resolume. Mantido pela LayerViewModel via LastTriggeredColumn.</summary>
+    [ObservableProperty] private bool _isActive;
     [ObservableProperty] private string? _thumbnailPath;
     [ObservableProperty] private PlayMode _playMode;
     [ObservableProperty] private double _speed = 1.0;
@@ -207,6 +211,15 @@ public sealed partial class LayerViewModel : ObservableObject
     private void Clear()
     {
         _render.Post(new ClearLayer(_layerIndex));
+        // Consistência: sem isso, capturar uma cena depois de limpar a layer ainda
+        // gravava a coluna antiga como ativa.
+        LastTriggeredColumn = -1;
+    }
+
+    partial void OnLastTriggeredColumnChanged(int value)
+    {
+        foreach (var clip in Clips)
+            clip.IsActive = clip.ColumnIndex == value;
     }
 
     partial void OnBlendChanged(BlendMode value) => UpdateLayerState();
@@ -291,9 +304,11 @@ public sealed partial class CompositionViewModel : ObservableObject
     [RelayCommand]
     private void TriggerColumn(int colIndex)
     {
+        if (colIndex < 0 || colIndex >= Model.ColumnCount) return;
         _render.Post(new TriggerColumn(colIndex));
+        MarkColumnTriggered(colIndex);
     }
-    
+
     public void SyncToEngine()
     {
         _render.Post(new SyncComposition(Model));
@@ -301,8 +316,22 @@ public sealed partial class CompositionViewModel : ObservableObject
 
     public void TriggerColumnFromShortcut(int columnIndex)
     {
-        if (columnIndex >= 0 && columnIndex < Model.ColumnCount)
-            _render.Post(new TriggerColumn(columnIndex));
+        if (columnIndex < 0 || columnIndex >= Model.ColumnCount) return;
+        _render.Post(new TriggerColumn(columnIndex));
+        MarkColumnTriggered(columnIndex);
+    }
+
+    /// <summary>
+    /// Consistência: o engine, ao disparar uma coluna, toca o slot com mídia e limpa
+    /// os vazios — o rastreio da UI (LastTriggeredColumn, usado por cenas e pelo
+    /// destaque de célula ativa) precisa espelhar exatamente isso. Antes, disparos
+    /// por coluna/atalho não atualizavam o rastreio e a cena capturada saía errada.
+    /// </summary>
+    private void MarkColumnTriggered(int colIndex)
+    {
+        foreach (var layer in Layers)
+            layer.LastTriggeredColumn =
+                layer.Model.Clips[colIndex]?.Source is null ? -1 : colIndex;
     }
 
     public void ClearSelectedLayer()

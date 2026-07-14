@@ -5,10 +5,16 @@
              Startup="OnStartup"
              Exit="OnExit">
   <Application.Resources>
-    <local:IdentifyLabelConverter x:Key="IdentifyLabelConverter" />
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Themes/Dark.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+      <local:IdentifyLabelConverter x:Key="IdentifyLabelConverter" />
     <local:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
     <local:NotNullToVisibilityConverter x:Key="NotNullToVisibilityConverter" />
-    <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-    <local:EnumBoolConverter x:Key="EnumBoolConverter" />
+      <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+      <local:EnumBoolConverter x:Key="EnumBoolConverter" />
+      <local:IncrementConverter x:Key="IncrementConverter" />
+    </ResourceDictionary>
   </Application.Resources>
 </Application>

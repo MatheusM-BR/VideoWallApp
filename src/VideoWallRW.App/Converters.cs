@@ -31,6 +31,17 @@ public sealed class NotNullToVisibilityConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>Índice 0-based → rótulo 1-based (cabeçalho de colunas — o operador conta
+/// a partir de 1, igual aos atalhos de teclado).</summary>
+public sealed class IncrementConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object parameter, CultureInfo culture)
+        => value is int i ? (i + 1).ToString(culture) : "";
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>Liga um ToggleButton.IsChecked a um valor específico de enum (ex.: ferramenta
 /// atual do editor de imagem) — ConverterParameter é o valor do enum representado por
 /// esse botão.</summary>
