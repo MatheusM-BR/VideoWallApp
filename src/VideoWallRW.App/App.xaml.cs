@@ -7,6 +7,7 @@ using VideoWallRW.Engine;
 using VideoWallRW.Engine.Graphics;
 using VideoWallRW.Media;
 using VideoWallRW.Media.Audio;
+using VideoWallRW.Media.Hap;
 using VideoWallRW.Media.Sources;
 
 namespace VideoWallRW.App;
@@ -81,7 +82,7 @@ public partial class App : Application
         {
             return clip.Source switch
             {
-                Core.Model.FileVideoSource v => new VideoFileSource(gfxRef, v.Path, audioRef),
+                Core.Model.FileVideoSource v => CreateVideoSource(gfxRef, audioRef, v.Path),
                 Core.Model.FileImageSource i => new ImageFileSource(gfxRef, i.Path)
                 {
                     Duration = clip.ImageDuration ?? defaultImageDuration
@@ -95,6 +96,32 @@ public partial class App : Application
         var window = new MainWindow(new MainViewModel(_gfx, _render));
         MainWindow = window;
         window.Show();
+    }
+
+    /// <summary>
+    /// HAP é transparente pro operador: mesmo tipo de clip (FileVideoSource), a
+    /// fábrica decide o caminho de decode olhando o fourcc do codec. Hap1/Hap5 vão
+    /// pelo caminho DXT direto na GPU (Fase 6); qualquer outra coisa (incluindo
+    /// HapQ, ainda não suportado) cai no decode normal por FFmpeg.
+    /// </summary>
+    private static IPlayableSource CreateVideoSource(GraphicsDevice gfx, AudioEngine? audio, string path)
+    {
+        string? fourCc = Path.GetExtension(path).Equals(".mov", StringComparison.OrdinalIgnoreCase)
+            ? HapDemuxer.TryDetectFourCc(path)
+            : null;
+
+        if (fourCc is "Hap1" or "Hap5")
+        {
+            try
+            {
+                return new HapVideoSource(gfx, path);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Falha ao abrir '{Path}' como HAP — caindo para decode normal.", path);
+            }
+        }
+        return new VideoFileSource(gfx, path, audio);
     }
 
     private void OnExit(object sender, ExitEventArgs e)
