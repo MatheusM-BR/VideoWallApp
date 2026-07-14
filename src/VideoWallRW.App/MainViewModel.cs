@@ -24,7 +24,9 @@ public sealed partial class MainViewModel : ObservableObject
     private string? _currentProjectPath;
     private bool _isDirty;
     private OutputSetup _outputSetup = new();
+    private InstallationConfig _installation = new();
     private readonly DispatcherTimer _autosaveTimer;
+    private readonly DispatcherTimer _runtimeStateTimer;
 
     public ObservableCollection<MonitorViewModel> Monitors { get; } = [];
     public ObservableCollection<SceneViewModel> Scenes { get; } = [];
@@ -33,13 +35,17 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private double _masterFader = 1.0;
     [ObservableProperty] private bool _blackout;
     [ObservableProperty] private string _windowTitle = "VideoWallRW — Novo projeto";
+    [ObservableProperty] private bool _sequencerRunning;
 
     public CompositionViewModel Grid { get; }
 
-    public MainViewModel(GraphicsDevice gfx, RenderThread render)
+    private readonly bool _kiosk;
+
+    public MainViewModel(GraphicsDevice gfx, RenderThread render, bool kiosk = false)
     {
         _gfx = gfx;
         _render = render;
+        _kiosk = kiosk;
 
         var compModel = new Composition { ColumnCount = 8 };
         compModel.AddLayer(new Layer { Name = "Layer 3" });
@@ -59,7 +65,56 @@ public sealed partial class MainViewModel : ObservableObject
         _autosaveTimer.Tick += (_, _) => Autosave();
         _autosaveTimer.Start();
 
-        CheckCrashRecovery();
+        // T8.1: estado de runtime a cada 5s, para o modo kiosk retomar sozinho após reinício.
+        _runtimeStateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+        _runtimeStateTimer.Tick += (_, _) => SaveRuntimeState();
+        _runtimeStateTimer.Start();
+
+        if (!_kiosk)
+            CheckCrashRecovery();
+    }
+
+    /// <summary>Usado pelo modo <c>--kiosk</c>: carrega sem os diálogos interativos
+    /// (confirmação de descarte, mídia ausente) — não há operador presente.</summary>
+    public void LoadProjectSilently(string path)
+    {
+        var project = ProjectSerializer.Load(path);
+        ApplyProject(project);
+        _currentProjectPath = path;
+        _isDirty = false;
+        UpdateWindowTitle();
+    }
+
+    private void SaveRuntimeState()
+    {
+        try
+        {
+            var (columns, _) = Grid.CaptureSceneState();
+            RuntimeStateService.Save(new RuntimeState
+            {
+                ProjectPath = _currentProjectPath,
+                ActiveColumns = columns,
+                MasterFader = MasterFader,
+                SequencerRunning = SequencerRunning,
+            });
+        }
+        catch { /* melhor esforço — não deve derrubar a UI */ }
+    }
+
+    /// <summary>Aplica o RuntimeState salvo (Fase 8 T8.1): usado pelo modo <c>--kiosk</c>
+    /// para restaurar exatamente o que estava no ar antes de reiniciar.</summary>
+    public void ApplyRuntimeState(RuntimeState state)
+    {
+        foreach (var (layerId, column) in state.ActiveColumns)
+        {
+            int idx = Grid.Layers.ToList().FindIndex(l => l.Model.Id == layerId);
+            if (idx < 0) continue;
+            if (column < 0) _render.Post(new ClearLayer(idx));
+            else _render.Post(new TriggerClip(idx, column));
+        }
+        MasterFader = state.MasterFader;
+        if (state.SequencerRunning)
+            ToggleSequencer();
     }
 
     [RelayCommand]
@@ -138,6 +193,9 @@ public sealed partial class MainViewModel : ObservableObject
         _render.Post(new SyncOutputSetup(_outputSetup));
         Scenes.Clear();
         _render.Post(new SyncScenes([]));
+        _installation = new InstallationConfig();
+        _render.Post(new SyncInstallation(_installation));
+        SequencerRunning = false;
         _currentProjectPath = null;
         MasterFader = 1.0;
         Blackout = false;
@@ -186,6 +244,10 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var scene in project.Snapshots)
             Scenes.Add(new SceneViewModel(scene, _render, RemoveSceneInternal));
         _render.Post(new SyncScenes(project.Snapshots));
+
+        _installation = project.Installation;
+        _render.Post(new SyncInstallation(_installation));
+        SequencerRunning = false;
 
         MasterFader = project.Composition.MasterOpacity;
         Blackout = project.Composition.Blackout;
@@ -297,7 +359,26 @@ public sealed partial class MainViewModel : ObservableObject
             Composition = Grid.Model,
             Output = _outputSetup,
             Snapshots = Scenes.Select(s => s.Model).ToList(),
+            Installation = _installation,
         };
+    }
+
+    /// <summary>Config atual do modo instalação (Fase 8), exposta para a janela de edição.</summary>
+    public InstallationConfig Installation => _installation;
+
+    /// <summary>Chamado pela janela de Instalação depois de editar sequenciador/agenda/watch-folders.</summary>
+    public void UpdateInstallation(InstallationConfig config)
+    {
+        _installation = config;
+        _render.Post(new SyncInstallation(_installation));
+        MarkDirty();
+    }
+
+    [RelayCommand]
+    private void ToggleSequencer()
+    {
+        SequencerRunning = !SequencerRunning;
+        _render.Post(new SetSequencerRunning(SequencerRunning));
     }
 
     private void Autosave()

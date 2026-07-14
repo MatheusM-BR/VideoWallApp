@@ -42,4 +42,5 @@ public sealed class ProjectFile
     public OutputSetup Output { get; set; } = new();
     public List<SceneSnapshot> Snapshots { get; set; } = [];
     public ProjectMeta Meta { get; set; } = new();
+    public InstallationConfig Installation { get; set; } = new();
 }

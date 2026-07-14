@@ -98,9 +98,38 @@ public partial class App : Application
 
         _render.Start();
 
-        var window = new MainWindow(new MainViewModel(_gfx, _render));
+        bool kiosk = e.Args.Any(a => a.Equals("--kiosk", StringComparison.OrdinalIgnoreCase));
+        var vm = new MainViewModel(_gfx, _render, kiosk);
+        if (kiosk)
+            ApplyKiosk(vm);
+
+        var window = new MainWindow(vm);
         MainWindow = window;
+        if (kiosk)
+            window.WindowState = WindowState.Maximized;
         window.Show();
+    }
+
+    /// <summary>
+    /// T8.1: modo instalação — abre sem diálogo de recuperação (recupera sozinho) e
+    /// retoma o último projeto + estado de runtime salvo, para reiniciar sem operador
+    /// presente (watchdog reinicia o processo, kiosk retoma o que estava no ar).
+    /// </summary>
+    private static void ApplyKiosk(MainViewModel vm)
+    {
+        try
+        {
+            var runtime = RuntimeStateService.TryLoad();
+            if (runtime?.ProjectPath is { } path && File.Exists(path))
+            {
+                vm.LoadProjectSilently(path);
+                vm.ApplyRuntimeState(runtime);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao retomar estado em modo kiosk");
+        }
     }
 
     /// <summary>

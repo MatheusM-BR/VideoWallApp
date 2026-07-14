@@ -39,6 +39,14 @@ public sealed class RenderThread : IDisposable
     // ── Fase 7: cenas ───────────────────────────────────────────────────────────
     private List<Core.Persistence.SceneSnapshot> _scenes = [];
 
+    // ── Fase 8: modo instalação fixa (sequenciador + agendador) ───────────────
+    private Core.Model.InstallationConfig _installation = new();
+    private bool _sequencerRunning;
+    private int _sequencerStep;
+    private double _sequencerElapsed;
+    private double _schedulerAccum;
+    public event Action<int, bool>? SequencerStepChanged; // (stepIndex, running) — para a UI acompanhar
+
     /// <summary>Publicado ~2x/segundo, na render thread.</summary>
     public event Action<EngineStats>? StatsUpdated;
 
@@ -101,6 +109,15 @@ public sealed class RenderThread : IDisposable
                 {
                     foreach (var layer in _layers)
                         layer.Tick(dt);
+                    if (_sequencerRunning)
+                        TickSequencer(dt);
+                }
+
+                _schedulerAccum += dt;
+                if (_schedulerAccum >= 10.0)
+                {
+                    _schedulerAccum = 0;
+                    EvaluateSchedule();
                 }
 
                 if (_compositionRenderer != null && _compositionData != null)
@@ -214,6 +231,12 @@ public sealed class RenderThread : IDisposable
             case TriggerScene(var sceneId):
                 OnTriggerScene(sceneId);
                 break;
+            case SyncInstallation(var installation):
+                _installation = installation.Clone();
+                break;
+            case SetSequencerRunning(var running):
+                OnSetSequencerRunning(running);
+                break;
             default:
                 Log.Warning("Comando não tratado: {Command}", command);
                 break;
@@ -266,7 +289,121 @@ public sealed class RenderThread : IDisposable
         SyncComp(project.Composition);
         _outputSetup = project.Output.Clone();
         _scenes = [.. project.Snapshots];
+        _installation = project.Installation.Clone();
+        _sequencerRunning = false;
+        _sequencerStep = 0;
+        _sequencerElapsed = 0;
         Log.Information("Projeto carregado: {Layers} layers, {Scenes} cenas.", _layers.Count, _scenes.Count);
+    }
+
+    /// <summary>
+    /// Liga/desliga o sequenciador (Fase 8 T8.4). Ao ligar, dispara o passo atual
+    /// imediatamente (não espera a duração do passo para o primeiro clipe aparecer).
+    /// </summary>
+    private void OnSetSequencerRunning(bool running)
+    {
+        _sequencerRunning = running;
+        if (!running)
+        {
+            SequencerStepChanged?.Invoke(_sequencerStep, false);
+            return;
+        }
+        if (_installation.Sequencer.Steps.Count == 0)
+        {
+            _sequencerRunning = false;
+            return;
+        }
+        _sequencerStep = 0;
+        _sequencerElapsed = 0;
+        OnTriggerColumn(_installation.Sequencer.Steps[0].Column);
+        SequencerStepChanged?.Invoke(_sequencerStep, true);
+    }
+
+    private void TickSequencer(double dt)
+    {
+        var steps = _installation.Sequencer.Steps;
+        if (steps.Count == 0)
+        {
+            _sequencerRunning = false;
+            return;
+        }
+
+        _sequencerElapsed += dt;
+        double duration = steps[_sequencerStep].Seconds;
+        if (_sequencerElapsed < duration)
+            return;
+
+        _sequencerElapsed = 0;
+        int next = _sequencerStep + 1;
+        if (next >= steps.Count)
+        {
+            if (!_installation.Sequencer.Loop)
+            {
+                _sequencerRunning = false;
+                SequencerStepChanged?.Invoke(_sequencerStep, false);
+                return;
+            }
+            next = 0;
+        }
+
+        _sequencerStep = next;
+        OnTriggerColumn(steps[_sequencerStep].Column);
+        SequencerStepChanged?.Invoke(_sequencerStep, true);
+    }
+
+    /// <summary>
+    /// Avaliador do agendador (Fase 8 T8.5), chamado a cada ~10s. Casa dia da semana +
+    /// hora:minuto; <see cref="ScheduleRule.LastRunDate"/> evita disparar de novo no
+    /// mesmo dia (a janela de 10s pode cair várias vezes dentro do mesmo minuto).
+    /// </summary>
+    private void EvaluateSchedule()
+    {
+        if (_installation.ScheduleRules.Count == 0)
+            return;
+
+        var now = DateTime.Now;
+        var today = DateOnly.FromDateTime(now);
+        var nowMinute = new TimeOnly(now.Hour, now.Minute);
+
+        foreach (var rule in _installation.ScheduleRules)
+        {
+            if (!rule.Enabled || rule.LastRunDate == today)
+                continue;
+            if (Array.IndexOf(rule.Days, now.DayOfWeek) < 0)
+                continue;
+            if (new TimeOnly(rule.Time.Hour, rule.Time.Minute) != nowMinute)
+                continue;
+
+            ApplyScheduleAction(rule);
+            rule.LastRunDate = today;
+            Log.Information("Regra de agenda disparada: {Name}", rule.Name);
+        }
+    }
+
+    private void ApplyScheduleAction(Core.Model.ScheduleRule rule)
+    {
+        switch (rule.Action)
+        {
+            case Core.Model.ScheduleActionType.TriggerColumn:
+                OnTriggerColumn(rule.ColumnOrParam);
+                break;
+            case Core.Model.ScheduleActionType.TriggerScene:
+                if (rule.SceneId is { } sceneId)
+                    OnTriggerScene(sceneId);
+                break;
+            case Core.Model.ScheduleActionType.StartSequencer:
+                OnSetSequencerRunning(true);
+                break;
+            case Core.Model.ScheduleActionType.StopSequencer:
+                OnSetSequencerRunning(false);
+                break;
+            case Core.Model.ScheduleActionType.BlackoutOn:
+                if (_compositionData is not null) _compositionData.Blackout = true;
+                break;
+            case Core.Model.ScheduleActionType.BlackoutOff:
+                if (_compositionData is not null) _compositionData.Blackout = false;
+                break;
+        }
     }
 
     /// <summary>

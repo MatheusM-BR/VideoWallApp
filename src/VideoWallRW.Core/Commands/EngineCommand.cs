@@ -31,3 +31,7 @@ public sealed record SetBlackout(bool Enabled) : EngineCommand;
 public sealed record LoadProject(VideoWallRW.Core.Persistence.ProjectFile Project) : EngineCommand;
 public sealed record SyncScenes(System.Collections.Generic.List<VideoWallRW.Core.Persistence.SceneSnapshot> Scenes) : EngineCommand;
 public sealed record TriggerScene(System.Guid SceneId) : EngineCommand;
+
+// ── Fase 8: modo instalação fixa ──────────────────────────────────────────────
+public sealed record SyncInstallation(VideoWallRW.Core.Model.InstallationConfig Data) : EngineCommand;
+public sealed record SetSequencerRunning(bool Running) : EngineCommand;
