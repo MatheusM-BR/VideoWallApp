@@ -37,9 +37,9 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _windowTitle = "VideoWallRW — Novo projeto";
     [ObservableProperty] private bool _sequencerRunning;
 
-    /// <summary>Pausa da SEQUÊNCIA (autopilot/sequenciador; os vídeos continuam tocando)
-    /// — botão ⏸/▶ em evidência + tecla Espaço.</summary>
-    [ObservableProperty] private bool _masterPaused;
+    /// <summary>Autopilot global: liga/desliga o autopilot de TODAS as layers de uma
+    /// vez (envia um comando por layer) — botão em evidência + tecla Espaço.</summary>
+    [ObservableProperty] private bool _autopilotAll = true;
 
     /// <summary>Mute geral do áudio — o programa SEMPRE abre mutado (padrão da operação).</summary>
     [ObservableProperty] private bool _masterMuted = true;
@@ -665,14 +665,18 @@ public sealed partial class MainViewModel : ObservableObject
         });
     }
 
-    public void ToggleMasterPause() => MasterPaused = !MasterPaused;
+    /// <summary>Mantém o nome antigo por compatibilidade com o keymap ("ToggleMasterPause"
+    /// e a tecla Espaço) — hoje alterna o autopilot global.</summary>
+    public void ToggleMasterPause() => AutopilotAll = !AutopilotAll;
 
-    partial void OnMasterPausedChanged(bool value)
+    partial void OnAutopilotAllChanged(bool value)
     {
-        _render.Post(new SetMasterPaused(value));
+        // "Envia comando para todos": o toggle global dirige o toggle de cada layer.
+        foreach (var layer in Grid.Layers)
+            layer.AutopilotEnabled = value;
         StatusText = value
-            ? "⏸ Sequência pausada — vídeos continuam tocando; autopilot/sequenciador segurados (Espaço retoma)"
-            : "▶ Sequência liberada";
+            ? "▶ Autopilot LIGADO em todas as layers"
+            : "⏸ Autopilot DESLIGADO — cada clip segura onde está (Espaço religa)";
     }
 
     partial void OnMasterMutedChanged(bool value)

@@ -248,6 +248,10 @@ public sealed class RenderThread : IDisposable
             case SetSequencerRunning(var running):
                 OnSetSequencerRunning(running);
                 break;
+            case SetLayerAutopilot(var layerIdx, var enabled):
+                if (_compositionData is not null && layerIdx >= 0 && layerIdx < _compositionData.Layers.Count)
+                    _compositionData.Layers[layerIdx].AutopilotEnabled = enabled;
+                break;
             case ReloadClip(var layerIdx, var colIdx):
                 // Reabre a fonte do zero (o ClipFactory lê o arquivo do disco de novo) —
                 // o editor de imagem (Fase 10) salva em cima do arquivo e chama isso pra
@@ -580,6 +584,10 @@ public sealed class RenderThread : IDisposable
 
         if (_compositionData is null || layerIdx < 0 || layerIdx >= _layers.Count ||
             _layers[layerIdx].ActiveClip?.Id != endedClip.Id)
+            return;
+
+        // Autopilot da layer desligado: clip que terminou segura no último frame.
+        if (!_compositionData.Layers[layerIdx].AutopilotEnabled)
             return;
 
         int currentColumn = Array.FindIndex(_compositionData.Layers[layerIdx].Clips,

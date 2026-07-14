@@ -38,3 +38,6 @@ public sealed record SetSequencerRunning(bool Running) : EngineCommand;
 
 // ── Fase 10: módulo Agenda (editor de imagem → recarregar clip do disco) ──────
 public sealed record ReloadClip(int LayerIndex, int ColumnIndex) : EngineCommand;
+
+// ── Autopilot ON/OFF por layer (o toggle global da UI envia um por layer) ─────
+public sealed record SetLayerAutopilot(int LayerIndex, bool Enabled) : EngineCommand;

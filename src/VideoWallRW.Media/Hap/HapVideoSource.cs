@@ -86,13 +86,35 @@ public sealed class HapVideoSource : IPlayableSource
             filePath, Width, Height, Duration, hapFormat);
     }
 
+    // Preroll (mesmo padrão do VideoFileSource): segura a entrada até N frames no
+    // buffer e congela o relógio durante o refill do seek/loop.
+    private const int PrerollFrames = 3;
+    private volatile bool _refilling = true;
+
     public void Start() => _state = SourceState.Playing;
     public void Stop() => _state = SourceState.Ready;
-    public void Seek(double seconds) => _worker.RequestSeek(seconds);
+
+    public void Seek(double seconds)
+    {
+        _refilling = true;
+        if (_state == SourceState.Playing)
+            _state = SourceState.Arming;
+        _worker.RequestSeek(seconds);
+    }
+
     public double DecodeFps => 0;
 
     public ID3D11ShaderResourceView? AcquireFrame(double playheadSeconds)
     {
+        if (_refilling)
+        {
+            if (_queue.Count < PrerollFrames)
+                return _lastSrv;
+            _refilling = false;
+            if (_state == SourceState.Arming)
+                _state = SourceState.Playing;
+        }
+
         var frame = _queue.TryConsume(playheadSeconds);
         if (frame != null)
         {

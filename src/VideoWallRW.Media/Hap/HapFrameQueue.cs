@@ -27,6 +27,12 @@ public sealed class HapFrameQueue : IDisposable
     private readonly SemaphoreSlim _space = new(Capacity, Capacity);
     private bool _disposed;
 
+    /// <summary>Frames prontos aguardando consumo — usado pelo preroll da fonte.</summary>
+    public int Count
+    {
+        get { lock (_lock) return _frames.Count; }
+    }
+
     public bool TryOffer(HapFrame frame, int currentGeneration, CancellationToken ct)
     {
         if (frame.Generation != currentGeneration)

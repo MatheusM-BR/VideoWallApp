@@ -331,6 +331,10 @@ public sealed partial class LayerViewModel : ObservableObject
     /// layer de uma vez (o operador monta a playlist sem abrir clip por clip).</summary>
     [ObservableProperty] private AutopilotAction _layerAutopilot;
 
+    /// <summary>Autopilot ON/OFF da layer: OFF = o que estiver no ar segura (fim de
+    /// clip não avança nada). O toggle global da barra liga/desliga todas as layers.</summary>
+    [ObservableProperty] private bool _autopilotEnabled = true;
+
     private double _opacity = 1.0;
     public double Opacity
     {
@@ -364,6 +368,7 @@ public sealed partial class LayerViewModel : ObservableObject
         TransitionSeconds = model.TransitionSeconds;
         // Reflete o autopilot atual se todos os clips da layer concordam (sem disparar aplicação).
         _layerAutopilot = model.Clips.FirstOrDefault(c => c is not null)?.Autopilot ?? AutopilotAction.None;
+        _autopilotEnabled = model.AutopilotEnabled;
 
         for (int i = 0; i < model.Clips.Length; i++)
         {
@@ -397,6 +402,12 @@ public sealed partial class LayerViewModel : ObservableObject
         foreach (var clip in Clips)
             if (clip.Model is not null)
                 clip.Autopilot = value; // dispara ApplyEdits → UpdateClip no engine, clip a clip
+    }
+
+    partial void OnAutopilotEnabledChanged(bool value)
+    {
+        Model.AutopilotEnabled = value;
+        _render.Post(new SetLayerAutopilot(_layerIndex, value));
     }
 
     partial void OnBlendChanged(BlendMode value) => UpdateLayerState();

@@ -45,6 +45,13 @@ public sealed class FrameQueue : IDisposable
         return true;
     }
 
+    /// <summary>Frames prontos aguardando consumo — usado pelo preroll (a fonte só
+    /// libera reprodução com N frames no buffer, evitando enrosco no início/loop).</summary>
+    public int Count
+    {
+        get { lock (_lock) return _frames.Count; }
+    }
+
     // ──────────────────────────────────────────────────────── Consumidor (render thread)
 
     /// <summary>

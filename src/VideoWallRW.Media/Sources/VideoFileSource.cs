@@ -88,10 +88,25 @@ public sealed class VideoFileSource : IPlayableSource, IAudioControllable
         Log.Debug("VideoFileSource criado: {File} {W}×{H} {Dur:F2}s", filePath, Width, Height, Duration);
     }
 
+    // Preroll: só libera a reprodução com N frames no buffer — sem isso o clip entra
+    // no ar com 1 frame decodificado e engasga nos primeiros instantes (e a cada
+    // volta do loop, porque o seek esvazia a fila).
+    private const int PrerollFrames = 3;
+    private volatile bool _refilling = true;
+
     public void Start() => _state = SourceState.Playing;
     public void Stop() => _state = SourceState.Ready;
 
-    public void Seek(double seconds) => _worker.RequestSeek(seconds);
+    public void Seek(double seconds)
+    {
+        // Congela o relógio do ClipPlayer (que pula Tick em Arming) enquanto a fila
+        // reabastece — em vez de o playhead avançar sobre frames que ainda não
+        // existem e "pular" quando eles chegam.
+        _refilling = true;
+        if (_state == SourceState.Playing)
+            _state = SourceState.Arming;
+        _worker.RequestSeek(seconds);
+    }
 
     public double DecodeFps => _worker.DecodeFps;
 
@@ -104,6 +119,15 @@ public sealed class VideoFileSource : IPlayableSource, IAudioControllable
     /// </summary>
     public ID3D11ShaderResourceView? AcquireFrame(double playheadSeconds)
     {
+        if (_refilling)
+        {
+            if (_queue.Count < PrerollFrames)
+                return _lastSrv; // segurando: repete o frame atual (null antes do 1º = não desenha)
+            _refilling = false;
+            if (_state == SourceState.Arming)
+                _state = SourceState.Playing; // libera o relógio do ClipPlayer
+        }
+
         var frame = _queue.TryConsume(playheadSeconds);
         if (frame != null)
         {

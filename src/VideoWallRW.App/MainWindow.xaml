@@ -43,16 +43,16 @@
             </Style>
           </ToggleButton.Style>
         </ToggleButton>
-        <!-- Pausa da SEQUÊNCIA (autopilot/sequenciador); os vídeos continuam (Espaço) -->
-        <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding MasterPaused}" Padding="16,4" Margin="10,0,0,0"
+        <!-- Autopilot global: liga/desliga o autopilot de TODAS as layers (Espaço) -->
+        <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding AutopilotAll}" Padding="16,4" Margin="10,0,0,0"
                       FontWeight="Bold" FontSize="13"
-                      ToolTip="Pausa a troca automática de clipes (autopilot/sequenciador) — os vídeos continuam tocando (Espaço)">
+                      ToolTip="Autopilot geral: liga/desliga a troca automática de clipes em todas as layers — os vídeos continuam tocando (Espaço)">
           <ToggleButton.Style>
             <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
-              <Setter Property="Content" Value="⏸ PAUSE" />
+              <Setter Property="Content" Value="⏸ AUTOPILOT OFF" />
               <Style.Triggers>
                 <Trigger Property="IsChecked" Value="True">
-                  <Setter Property="Content" Value="▶ PLAY" />
+                  <Setter Property="Content" Value="▶ AUTOPILOT ON" />
                   <Setter Property="Background" Value="{StaticResource AccentDim}" />
                   <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
                 </Trigger>
@@ -283,10 +283,24 @@
                                    VerticalAlignment="Center" BorderThickness="0" Background="Transparent"
                                    Margin="0,0,4,0" ToolTip="Nome da layer (clique para editar)" />
                         </DockPanel>
-                        <!-- Autopilot rápido: aplica a todos os clips da layer -->
+                        <!-- Autopilot da layer: ON/OFF + ação aplicada a todos os clips -->
                         <DockPanel Margin="0,0,0,4">
-                          <TextBlock DockPanel.Dock="Left" Text="Auto" FontSize="10" Width="28"
-                                     Foreground="{StaticResource FgDim}" VerticalAlignment="Center" />
+                          <ToggleButton DockPanel.Dock="Left" IsChecked="{Binding AutopilotEnabled}" Padding="5,1"
+                                        FontSize="10" Margin="0,0,3,0"
+                                        ToolTip="Autopilot desta layer: OFF = clip que termina segura no último frame">
+                            <ToggleButton.Style>
+                              <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+                                <Setter Property="Content" Value="⏸" />
+                                <Style.Triggers>
+                                  <Trigger Property="IsChecked" Value="True">
+                                    <Setter Property="Content" Value="▶" />
+                                    <Setter Property="Background" Value="{StaticResource AccentDim}" />
+                                    <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                  </Trigger>
+                                </Style.Triggers>
+                              </Style>
+                            </ToggleButton.Style>
+                          </ToggleButton>
                           <ComboBox FontSize="10" ToolTip="Autopilot da layer inteira: o que fazer quando cada clip termina (aplica a todos os clips)"
                                     ItemsSource="{Binding DataContext.Grid.AutopilotActions, RelativeSource={RelativeSource AncestorType=Window}}"
                                     SelectedItem="{Binding LayerAutopilot, Mode=TwoWay}" />

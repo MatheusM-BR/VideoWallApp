@@ -19,6 +19,7 @@ public partial class App : Application
     private RenderThread? _render;
     private AudioEngine? _audio;
     private HeartbeatClient? _heartbeat;
+    private Mutex? _singleInstanceMutex;
     private Input.OscService? _osc;
     private Remote.RemoteWebService? _remoteWeb;
 
@@ -30,6 +31,20 @@ public partial class App : Application
         // O painel não tem nada pesado para desenhar (o vídeo vai pelas janelas de saída,
         // não pelo WPF), então cair para software aqui não tem custo perceptível.
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
+
+        // Instância única: duas cópias do programa brigam pelas saídas e tocam áudio
+        // em dobro (som "picotado" e mute que parece não funcionar — cada instância
+        // tem sua própria sessão WASAPI).
+        _singleInstanceMutex = new Mutex(true, @"Global\VideoWallRW-SingleInstance", out bool createdNew);
+        if (!createdNew)
+        {
+            MessageBox.Show(
+                "O VideoWallRW já está aberto. Use a janela existente —\n" +
+                "duas cópias ao mesmo tempo brigam pelas saídas e pelo áudio.",
+                "VideoWallRW", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Shutdown(0);
+            return;
+        }
 
         // T7.3: sentinela de sessão — se ainda existir no próximo start, o
         // encerramento anterior não foi limpo (crash), e a UI oferece recuperação.

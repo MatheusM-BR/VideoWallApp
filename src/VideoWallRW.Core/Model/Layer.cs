@@ -4,17 +4,21 @@ public sealed class Layer
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;
-    
+
     public BlendMode Blend { get; set; } = BlendMode.Normal;
     public double Opacity { get; set; } = 1.0;
     public bool Bypass { get; set; }
     public bool Solo { get; set; }
-    
+
     public double TransitionSeconds { get; set; } = 0.0;
     public ResizeMode DefaultResize { get; set; } = ResizeMode.Fit;
 
+    /// <summary>Autopilot da layer LIGADO/DESLIGADO: desligado, os clips que terminam
+    /// seguram no último frame (loop continua loopando) e nada avança sozinho.</summary>
+    public bool AutopilotEnabled { get; set; } = true;
+
     /// <summary>
-    /// Matriz de clipes. O tamanho do array deve ser mantido sempre igual ao ColumnCount 
+    /// Matriz de clipes. O tamanho do array deve ser mantido sempre igual ao ColumnCount
     /// definido na composição owner. Array null significa célula vazia.
     /// </summary>
     public Clip?[] Clips { get; set; } = [];
@@ -31,6 +35,7 @@ public sealed class Layer
             Solo = Solo,
             TransitionSeconds = TransitionSeconds,
             DefaultResize = DefaultResize,
+            AutopilotEnabled = AutopilotEnabled,
             Clips = new Clip?[Clips.Length]
         };
         for (int i = 0; i < Clips.Length; i++)
@@ -51,6 +56,7 @@ public sealed class Layer
             Solo = Solo,
             TransitionSeconds = TransitionSeconds,
             DefaultResize = DefaultResize,
+            AutopilotEnabled = AutopilotEnabled,
             Clips = new Clip?[Clips.Length]
         };
         for (int i = 0; i < Clips.Length; i++)
