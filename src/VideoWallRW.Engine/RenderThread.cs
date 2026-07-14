@@ -24,6 +24,7 @@ public sealed class RenderThread : IDisposable
     private readonly Dictionary<string, int> _frameCounts = [];
     private Thread? _thread;
     private volatile bool _running;
+    private int _dropCount; // T6.7: frames com frametime > 1.5x o alvo (~60fps), acumulado entre publicações de stats
 
     // ── Fase 2: estado de playback compositado ────────────────────────────────
     private Core.Model.Composition? _compositionData;
@@ -90,6 +91,7 @@ public sealed class RenderThread : IDisposable
                 double time = clock.Elapsed.TotalSeconds;
                 double dt = time - lastTime;
                 lastTime = time;
+                if (dt > 1.0 / 40.0) _dropCount++; // frametime > 1.5x o alvo de 60fps (~16.7ms)
                 if (dt > 0.1) dt = 0.1; // cap: evitar salto grande após pausa do debugger
 
                 if (!_masterPaused)
@@ -453,6 +455,8 @@ public sealed class RenderThread : IDisposable
                 firstLayer.ActivePlayer.State, decodeFps);
         }
 
-        StatsUpdated?.Invoke(new EngineStats(outputs, clipShot));
+        int activeClips = _layers.Count(l => l.ActivePlayer is not null);
+        StatsUpdated?.Invoke(new EngineStats(outputs, clipShot, _dropCount, activeClips));
+        _dropCount = 0;
     }
 }

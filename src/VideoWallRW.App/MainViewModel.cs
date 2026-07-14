@@ -105,13 +105,11 @@ public sealed partial class MainViewModel : ObservableObject
                 monitor.FpsText = output is null ? "" : $"{output.Fps:F1} fps";
             }
 
-            if (stats.Outputs.Count > 0)
-                StatusText = string.Join("   |   ",
-                    stats.Outputs.Select(o => $"{o.MonitorDeviceName}: {o.Fps:F1} fps"));
-            else
-                StatusText = "Nenhuma saída ativa";
-
-            // (Opcional) Poderíamos monitorar o stats.Clip para o painel de propriedades...
+            string outputsText = stats.Outputs.Count > 0
+                ? string.Join("   |   ", stats.Outputs.Select(o => $"{o.MonitorDeviceName}: {o.Fps:F1} fps"))
+                : "Nenhuma saída ativa";
+            string dropsText = stats.DroppedFrames > 0 ? $"   |   ⚠ {stats.DroppedFrames} drops" : "";
+            StatusText = $"{outputsText}   |   {stats.ActiveClipCount} clip(s) ativo(s){dropsText}";
         });
     }
 

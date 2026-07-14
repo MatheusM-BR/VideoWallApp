@@ -25,6 +25,7 @@ public sealed class LayerRenderer : IDisposable
     private bool _cutPending;
     private double _transitionElapsed;
     private readonly List<Frame> _frames = [];
+    private readonly Stopwatch _triggerLatency = new();
 
     public LayerRenderer(Layer model)
     {
@@ -58,6 +59,7 @@ public sealed class LayerRenderer : IDisposable
         PendingClip = clip;
         _cutPending = cut;
         PendingPlayer.SetAudioFade(0);
+        _triggerLatency.Restart();
     }
 
     public void Tick(double dt)
@@ -100,6 +102,7 @@ public sealed class LayerRenderer : IDisposable
             var pendingFrame = PendingPlayer.Source.AcquireFrame(PendingPlayer.Playhead);
             if (pendingFrame is not null)
             {
+                Log.Debug("Trigger→ar: {Ms}ms ({Name})", _triggerLatency.ElapsedMilliseconds, PendingClip?.Name);
                 var previous = ActivePlayer;
                 var previousClip = ActiveClip;
                 ActivePlayer = PendingPlayer;
