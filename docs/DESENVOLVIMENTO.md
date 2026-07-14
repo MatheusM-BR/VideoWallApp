@@ -39,7 +39,7 @@ Regras de progressão:
 | 3 | Transporte, atalhos, autopilot | implementada (T3.6 áudio incluído) — DoD manual pendente |
 | 4 | Advanced Output (slices) | implementada (editor com campos numéricos, não drag-and-drop) — DoD manual pendente |
 | 5 | Fontes ao vivo (NDI + captura) | **pulada por decisão do usuário** — requer NDI SDK/hardware; retomar quando disponível |
-| 6 | Performance (HW decode, HAP, preroll) | pendente |
+| 6 | Performance (HW decode, HAP, preroll) | HAP (T6.4/T6.5) + telemetria básica implementados; **D3D11VA (T6.1-T6.3) pulado** — alto risco, precisa hardware/driver real para validar |
 | 7 | Persistência e operação | pendente |
 | 8 | Modo instalação fixa | pendente |
 | 9 | Extras | pendente |
