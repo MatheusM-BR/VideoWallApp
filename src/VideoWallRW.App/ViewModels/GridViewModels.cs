@@ -94,6 +94,12 @@ public sealed partial class ClipViewModel : ObservableObject
     [ObservableProperty] private double _volume = 1.0;
     [ObservableProperty] private bool _mute;
 
+    // ── Transform manual (painel CLIP interativo — TransformGizmo) ──────────────
+    [ObservableProperty] private double _positionX;
+    [ObservableProperty] private double _positionY;
+    [ObservableProperty] private double _scaleX = 1.0;
+    [ObservableProperty] private double _scaleY = 1.0;
+
     public Clip? Model { get; private set; }
 
     public ClipViewModel(Clip? model, int layerIndex, int colIndex, RenderThread render,
@@ -124,6 +130,10 @@ public sealed partial class ClipViewModel : ObservableObject
         Resize = Model?.Resize;
         Volume = Model?.Volume ?? 1.0;
         Mute = Model?.Mute ?? false;
+        PositionX = Model?.PositionX ?? 0.0;
+        PositionY = Model?.PositionY ?? 0.0;
+        ScaleX = Model?.ScaleX ?? 1.0;
+        ScaleY = Model?.ScaleY ?? 1.0;
         _updatingFromModel = false;
 
         RequestThumbnail();
@@ -259,6 +269,17 @@ public sealed partial class ClipViewModel : ObservableObject
     partial void OnResizeChanged(ResizeMode? value) => ApplyEdits();
     partial void OnVolumeChanged(double value) => ApplyEdits();
     partial void OnMuteChanged(bool value) => ApplyEdits();
+    partial void OnPositionXChanged(double value) => ApplyEdits();
+    partial void OnPositionYChanged(double value) => ApplyEdits();
+    partial void OnScaleXChanged(double value) => ApplyEdits();
+    partial void OnScaleYChanged(double value) => ApplyEdits();
+
+    /// <summary>Botão "Redefinir posição/escala" do gizmo.</summary>
+    [RelayCommand]
+    private void ResetTransform()
+    {
+        PositionX = 0; PositionY = 0; ScaleX = 1; ScaleY = 1;
+    }
 
     private void ApplyEdits()
     {
@@ -280,6 +301,10 @@ public sealed partial class ClipViewModel : ObservableObject
         Model.Resize = Resize;
         Model.Volume = Math.Clamp(Volume, 0.0, 1.0);
         Model.Mute = Mute;
+        Model.PositionX = Math.Clamp(PositionX, -2.0, 2.0);
+        Model.PositionY = Math.Clamp(PositionY, -2.0, 2.0);
+        Model.ScaleX = Math.Clamp(ScaleX, 0.05, 8.0);
+        Model.ScaleY = Math.Clamp(ScaleY, 0.05, 8.0);
         _changed(this);
     }
 

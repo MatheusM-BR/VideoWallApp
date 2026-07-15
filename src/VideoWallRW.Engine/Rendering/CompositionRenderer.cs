@@ -185,6 +185,7 @@ public sealed class CompositionRenderer : IDisposable
             var rect = ResizeMath.Compute(resizeMode,
                 layer.ActivePlayer.Source.Width, layer.ActivePlayer.Source.Height,
                 composition.Width, composition.Height);
+            rect = ApplyClipTransform(rect, layer.ActiveClip, composition.Width, composition.Height);
             var uvTransform = ComputeTransform(rect,
                 layer.ActivePlayer.Source.Width, layer.ActivePlayer.Source.Height,
                 composition.Width, composition.Height);
@@ -343,7 +344,24 @@ public sealed class CompositionRenderer : IDisposable
     }
 
     /// <summary>
-    /// Computa matriz de translação escalonada baseada na janela dada. 
+    /// Painel CLIP interativo: aplica o transform manual do clip (posição X/Y, escala
+    /// X/Y) POR CIMA do retângulo que o Resize já calculou — escala em torno do
+    /// próprio centro do retângulo, depois desloca em frações da composição.
+    /// </summary>
+    private static RectF ApplyClipTransform(RectF rect, Core.Model.Clip? clip, float compW, float compH)
+    {
+        if (clip is null || (clip.PositionX == 0 && clip.PositionY == 0 && clip.ScaleX == 1 && clip.ScaleY == 1))
+            return rect;
+
+        float newW = rect.Width * (float)clip.ScaleX;
+        float newH = rect.Height * (float)clip.ScaleY;
+        float centerX = rect.X + rect.Width / 2f + (float)clip.PositionX * compW;
+        float centerY = rect.Y + rect.Height / 2f + (float)clip.PositionY * compH;
+        return new RectF(centerX - newW / 2f, centerY - newH / 2f, newW, newH);
+    }
+
+    /// <summary>
+    /// Computa matriz de translação escalonada baseada na janela dada.
     /// O Quad base no shader vai de [0,1], sendo renderizado na sua projeção máxima da Composition.
     /// Para limitar o escopo, enviamos as margens de UV que em teoria projetam a pintura no local correto.
     /// Como o cbuffer inverte a operação no shader (Scale + Translate em -UV bounds e clamp), usamos isso.
