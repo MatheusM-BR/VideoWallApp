@@ -46,6 +46,11 @@ public sealed class Clip
     /// <summary>Escala vertical aplicada sobre o retângulo do Resize (1 = tamanho normal).</summary>
     public double ScaleY { get; set; } = 1.0;
 
+    /// <summary>Grupo de troca (T20): células com o mesmo Id aqui trocam juntas — editar
+    /// uma (mídia, duração, resize, autopilot, transform...) propaga pras outras do
+    /// grupo. Null = célula independente, comportamento normal.</summary>
+    public Guid? LinkGroupId { get; set; }
+
     public Clip(SourceDescriptor source)
     {
         Source = source;
@@ -72,6 +77,7 @@ public sealed class Clip
             PositionY = PositionY,
             ScaleX = ScaleX,
             ScaleY = ScaleY,
+            LinkGroupId = LinkGroupId,
         };
     }
 
@@ -96,6 +102,7 @@ public sealed class Clip
             PositionY = PositionY,
             ScaleX = ScaleX,
             ScaleY = ScaleY,
+            LinkGroupId = LinkGroupId,
         };
     }
 }

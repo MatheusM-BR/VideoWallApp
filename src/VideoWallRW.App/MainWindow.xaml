@@ -197,7 +197,9 @@
                 <TextBox Width="60" Text="{Binding InPointText, UpdateSourceTrigger=LostFocus}" />
                 <TextBlock Text=" / " VerticalAlignment="Center" />
                 <TextBox Width="60" Text="{Binding OutPointText, UpdateSourceTrigger=LostFocus}" />
-                <TextBlock Text="Duração" VerticalAlignment="Center" Margin="16,0,6,0" />
+              </StackPanel>
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="Duração" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <TextBox Width="60" Text="{Binding ImageDurationText, UpdateSourceTrigger=LostFocus}"
                          ToolTip="Duração no ar (imagem) ou trim (vídeo) — aplica aos dois tipos de mídia" />
               </StackPanel>
@@ -243,6 +245,9 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
               <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="CLIP" Foreground="{StaticResource FgDim}" FontSize="10"
                          FontWeight="Bold" Margin="0,0,0,6" />
@@ -250,18 +255,42 @@
               <ComboBox Grid.Row="1" Grid.Column="1"
                         ItemsSource="{Binding DataContext.Grid.ResizeModes, RelativeSource={RelativeSource AncestorType=Window}}"
                         SelectedItem="{Binding Resize, Mode=TwoWay}" Margin="0,0,0,4" />
-              <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Dimensões" Margin="0,0,6,4" />
-              <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,4">
-                <TextBlock DockPanel.Dock="Left" Text="{Binding SourceDimensionsText}" VerticalAlignment="Center"
-                           Foreground="{StaticResource FgDim}" ToolTip="Dimensões nativas do arquivo de origem" />
-                <Button DockPanel.Dock="Right" Content="+" Command="{Binding ZoomInCommand}" Padding="8,1" Margin="3,0,0,0"
-                        ToolTip="Aumentar escala" />
-                <Button DockPanel.Dock="Right" Content="−" Command="{Binding ZoomOutCommand}" Padding="8,1" Margin="6,0,0,0"
-                        ToolTip="Diminuir escala" />
+              <!-- Horizontal e vertical separados (T22/T24): cada eixo mexe na largura/
+                   altura EFETIVA em pixel (não um passo abstrato de escala). O slide
+                   "volante" abaixo de cada um sempre volta pro centro ao soltar —
+                   arrastar pra um lado aumenta/diminui continuamente enquanto segura. -->
+              <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Largura" Margin="0,0,6,2" />
+              <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,2">
+                <TextBlock DockPanel.Dock="Left" Text="{Binding EffectiveWidth, TargetNullValue=—, StringFormat={}{0}px}"
+                           VerticalAlignment="Center" Foreground="{StaticResource FgDim}"
+                           ToolTip="Largura efetiva (nativa × escala)" />
+                <Button DockPanel.Dock="Right" Content="+" Command="{Binding ZoomInHCommand}" Padding="8,1" Margin="3,0,0,0"
+                        ToolTip="+10px de largura" />
+                <Button DockPanel.Dock="Right" Content="−" Command="{Binding ZoomOutHCommand}" Padding="8,1" Margin="6,0,0,0"
+                        ToolTip="-10px de largura" />
                 <Border />
               </DockPanel>
-              <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Volume" Margin="0,0,6,0" />
-              <DockPanel Grid.Row="3" Grid.Column="1">
+              <Border Grid.Row="3" Grid.Column="1" Margin="0,0,0,6">
+                <controls:CenterSnapSlider JogCommand="{Binding JogWidthCommand}"
+                                            ToolTip="Arraste e segure pra aumentar/diminuir a largura — solta e volta pro centro" />
+              </Border>
+              <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="Altura" Margin="0,0,6,2" />
+              <DockPanel Grid.Row="4" Grid.Column="1" Margin="0,0,0,2">
+                <TextBlock DockPanel.Dock="Left" Text="{Binding EffectiveHeight, TargetNullValue=—, StringFormat={}{0}px}"
+                           VerticalAlignment="Center" Foreground="{StaticResource FgDim}"
+                           ToolTip="Altura efetiva (nativa × escala)" />
+                <Button DockPanel.Dock="Right" Content="+" Command="{Binding ZoomInVCommand}" Padding="8,1" Margin="3,0,0,0"
+                        ToolTip="+10px de altura" />
+                <Button DockPanel.Dock="Right" Content="−" Command="{Binding ZoomOutVCommand}" Padding="8,1" Margin="6,0,0,0"
+                        ToolTip="-10px de altura" />
+                <Border />
+              </DockPanel>
+              <Border Grid.Row="5" Grid.Column="1" Margin="0,0,0,6">
+                <controls:CenterSnapSlider JogCommand="{Binding JogHeightCommand}"
+                                            ToolTip="Arraste e segure pra aumentar/diminuir a altura — solta e volta pro centro" />
+              </Border>
+              <TextBlock Grid.Row="6" VerticalAlignment="Center" Text="Volume" Margin="0,0,6,0" />
+              <DockPanel Grid.Row="6" Grid.Column="1">
                 <CheckBox DockPanel.Dock="Right" Content="Mute" IsChecked="{Binding Mute, Mode=TwoWay}" Margin="10,0,0,0" />
                 <Slider Minimum="0" Maximum="1" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
               </DockPanel>
@@ -388,6 +417,9 @@
                         <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                           <MenuItem Header="Duplicar layer" Click="OnLayerDuplicate" />
                           <MenuItem Header="Limpar layer (tirar do ar)" Command="{Binding ClearCommand}" />
+                          <Separator />
+                          <MenuItem Header="Remover layer" Click="OnLayerRemove"
+                                    ToolTip="Remove a layer inteira da grade (pelo menos uma layer sempre fica)" />
                         </ContextMenu>
                       </Border.ContextMenu>
                       <StackPanel>
@@ -451,11 +483,16 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate>
                           <Border Width="104" Height="86" Margin="2,0" CornerRadius="2"
-                                  AllowDrop="True" Drop="OnClipDrop">
+                                  AllowDrop="True" Drop="OnClipDrop" PreviewMouseLeftButtonDown="OnCellPreviewMouseDown">
                             <Border.ContextMenu>
                               <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                                 <MenuItem Header="Limpar célula" Click="OnCellClear" />
                                 <MenuItem Header="Editar imagem..." Click="OnEditImageClick" />
+                                <Separator />
+                                <MenuItem Header="Vincular células selecionadas (Ctrl+clique)" Click="OnLinkCells"
+                                          ToolTip="Marque 2+ células com Ctrl+clique antes de usar isso — trocar uma troca todas" />
+                                <MenuItem Header="Desvincular célula" Click="OnUnlinkCell"
+                                          Visibility="{Binding LinkGroupId, Converter={StaticResource NotNullToVisibilityConverter}}" />
                               </ContextMenu>
                             </Border.ContextMenu>
                             <Border.Style>
@@ -470,6 +507,10 @@
                                   <DataTrigger Binding="{Binding IsActive}" Value="True">
                                     <Setter Property="Background" Value="{StaticResource AccentDim}" />
                                     <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+                                    <Setter Property="BorderThickness" Value="2" />
+                                  </DataTrigger>
+                                  <DataTrigger Binding="{Binding IsMultiSelected}" Value="True">
+                                    <Setter Property="BorderBrush" Value="#FF3FA9F5" />
                                     <Setter Property="BorderThickness" Value="2" />
                                   </DataTrigger>
                                 </Style.Triggers>
@@ -509,6 +550,10 @@
                                       ToolTip="Disparar (colocar no ar)">
                                 <Grid ClipToBounds="True">
                                   <Image Source="{Binding ThumbnailPath}" Stretch="UniformToFill" />
+                                  <TextBlock Text="🔗" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                             Margin="0,1,2,0"
+                                             ToolTip="Célula vinculada a um grupo de troca — trocar uma troca todas"
+                                             Visibility="{Binding LinkGroupId, Converter={StaticResource NotNullToVisibilityConverter}}" />
                                 </Grid>
                               </Button>
                             </DockPanel>

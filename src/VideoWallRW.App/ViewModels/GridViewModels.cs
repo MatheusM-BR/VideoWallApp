@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VideoWallRW.Core.Commands;
@@ -32,6 +33,13 @@ public sealed partial class ClipViewModel : ObservableObject
     /// <summary>Célula selecionada para edição (clique no nome) — não confundir com
     /// <see cref="IsActive"/> (no ar). Mantido pela CompositionViewModel.</summary>
     [ObservableProperty] private bool _isSelected;
+
+    /// <summary>Marcada com Ctrl+clique pra formar um grupo de troca (T20) — separado
+    /// de <see cref="IsSelected"/>, que é só a célula em edição no painel CLIP.</summary>
+    [ObservableProperty] private bool _isMultiSelected;
+
+    /// <summary>Grupo de troca desta célula (null = independente) — espelha Model.LinkGroupId.</summary>
+    [ObservableProperty] private Guid? _linkGroupId;
     [ObservableProperty] private string? _thumbnailPath;
     [ObservableProperty] private PlayMode _playMode;
     [ObservableProperty] private double _speed = 1.0;
@@ -94,13 +102,17 @@ public sealed partial class ClipViewModel : ObservableObject
     [ObservableProperty] private double _volume = 1.0;
     [ObservableProperty] private bool _mute;
 
-    /// <summary>Dimensões nativas (px) do arquivo de origem — sondadas uma vez, mostradas
-    /// abaixo do combo Resize (null = ainda não sondado ou sem mídia).</summary>
+    /// <summary>Dimensões nativas (px) do arquivo de origem — sondadas uma vez (null =
+    /// ainda não sondado ou sem mídia). Base pro cálculo de EffectiveWidth/Height.</summary>
     [ObservableProperty] private int? _sourceWidth;
     [ObservableProperty] private int? _sourceHeight;
-    public string SourceDimensionsText => SourceWidth is { } w && SourceHeight is { } h ? $"{w} × {h}" : "—";
-    partial void OnSourceWidthChanged(int? value) => OnPropertyChanged(nameof(SourceDimensionsText));
-    partial void OnSourceHeightChanged(int? value) => OnPropertyChanged(nameof(SourceDimensionsText));
+
+    /// <summary>Largura/altura EFETIVA em pixel (nativa × escala) — o que o +/- e o
+    /// slide "volante" da aba Clip mexem de verdade, não um passo abstrato de escala.</summary>
+    public int? EffectiveWidth => SourceWidth is { } w ? (int)Math.Round(w * ScaleX) : null;
+    public int? EffectiveHeight => SourceHeight is { } h ? (int)Math.Round(h * ScaleY) : null;
+    partial void OnSourceWidthChanged(int? value) => OnPropertyChanged(nameof(EffectiveWidth));
+    partial void OnSourceHeightChanged(int? value) => OnPropertyChanged(nameof(EffectiveHeight));
 
     // ── Transform manual (painel CLIP interativo — TransformGizmo) ──────────────
     [ObservableProperty] private double _positionX;
@@ -142,6 +154,7 @@ public sealed partial class ClipViewModel : ObservableObject
         PositionY = Model?.PositionY ?? 0.0;
         ScaleX = Model?.ScaleX ?? 1.0;
         ScaleY = Model?.ScaleY ?? 1.0;
+        LinkGroupId = Model?.LinkGroupId;
         _updatingFromModel = false;
 
         RequestThumbnail();
@@ -246,20 +259,52 @@ public sealed partial class ClipViewModel : ObservableObject
         }
     }
 
-    private const double ZoomStep = 0.05;
+    // Largura/altura efetivas em PIXEL (T24) — +/- e o slide "volante" mexem no
+    // tamanho real exibido, não num passo abstrato de ScaleX/Y; a escala é só o meio
+    // de chegar lá (largura efetiva ÷ largura nativa).
+    private const double PxStep = 10;
 
-    [RelayCommand]
-    private void ZoomIn()
+    private void SetEffectiveWidth(double px)
     {
-        ScaleX = Math.Round(ScaleX + ZoomStep, 2);
-        ScaleY = Math.Round(ScaleY + ZoomStep, 2);
+        if (SourceWidth is not { } w || w <= 0) return;
+        ScaleX = Math.Max(0.05, Math.Round(px / w, 4));
+    }
+
+    private void SetEffectiveHeight(double px)
+    {
+        if (SourceHeight is not { } h || h <= 0) return;
+        ScaleY = Math.Max(0.05, Math.Round(px / h, 4));
     }
 
     [RelayCommand]
-    private void ZoomOut()
+    private void ZoomInH() => SetEffectiveWidth((EffectiveWidth ?? 0) + PxStep);
+
+    [RelayCommand]
+    private void ZoomOutH() => SetEffectiveWidth(Math.Max(1, (EffectiveWidth ?? 0) - PxStep));
+
+    [RelayCommand]
+    private void ZoomInV() => SetEffectiveHeight((EffectiveHeight ?? 0) + PxStep);
+
+    [RelayCommand]
+    private void ZoomOutV() => SetEffectiveHeight(Math.Max(1, (EffectiveHeight ?? 0) - PxStep));
+
+    // ── Slide "volante" (T24): sempre centralizado, arrastar aplica uma taxa contínua
+    // enquanto segura (rate em -1..1) — o CenterSnapSlider chama isso a cada tick do
+    // seu timer interno enquanto o operador segura o arraste, e centraliza sozinho ao soltar.
+    private const double JogPxPerTick = 6;
+
+    [RelayCommand]
+    private void JogWidth(object? rate)
     {
-        ScaleX = Math.Max(0.05, Math.Round(ScaleX - ZoomStep, 2));
-        ScaleY = Math.Max(0.05, Math.Round(ScaleY - ZoomStep, 2));
+        if (rate is not double r || r == 0) return;
+        SetEffectiveWidth(Math.Max(1, (EffectiveWidth ?? 0) + r * JogPxPerTick));
+    }
+
+    [RelayCommand]
+    private void JogHeight(object? rate)
+    {
+        if (rate is not double r || r == 0) return;
+        SetEffectiveHeight(Math.Max(1, (EffectiveHeight ?? 0) + r * JogPxPerTick));
     }
 
     private static string? MediaPathOf(Clip? model) => model?.Source switch
@@ -337,8 +382,8 @@ public sealed partial class ClipViewModel : ObservableObject
     partial void OnMuteChanged(bool value) => ApplyEdits();
     partial void OnPositionXChanged(double value) => ApplyEdits();
     partial void OnPositionYChanged(double value) => ApplyEdits();
-    partial void OnScaleXChanged(double value) => ApplyEdits();
-    partial void OnScaleYChanged(double value) => ApplyEdits();
+    partial void OnScaleXChanged(double value) { ApplyEdits(); OnPropertyChanged(nameof(EffectiveWidth)); }
+    partial void OnScaleYChanged(double value) { ApplyEdits(); OnPropertyChanged(nameof(EffectiveHeight)); }
 
     /// <summary>Botão "Redefinir posição/escala" do gizmo.</summary>
     [RelayCommand]
@@ -643,11 +688,80 @@ public sealed partial class CompositionViewModel : ObservableObject
             throw new ArgumentOutOfRangeException();
 
         SnapshotForUndo(); // sobrescrever uma célula é desfazível
+        // Trocar a mídia de uma célula vinculada (T20) não tira ela do grupo —
+        // a nova mídia herda o LinkGroupId que já estava nessa posição.
+        clip.LinkGroupId = Layers[layerIndex].Clips[columnIndex].Model?.LinkGroupId;
         Model.Layers[layerIndex].Clips[columnIndex] = clip;
         Layers[layerIndex].Clips[columnIndex].SetModel(clip);
         SelectClip(Layers[layerIndex].Clips[columnIndex]);
         _render.Post(new UpdateClip(layerIndex, columnIndex, clip));
+        PropagateLinkGroup(Layers[layerIndex].Clips[columnIndex]);
         Changed?.Invoke();
+    }
+
+    // ── Grupos de troca (T20): células vinculadas trocam juntas ─────────────────
+
+    private IEnumerable<ClipViewModel> AllClips() => Layers.SelectMany(l => l.Clips);
+
+    /// <summary>Copia a célula alterada pras outras do mesmo grupo (mídia + todas as
+    /// configurações) — chamado depois de qualquer edição/troca de mídia numa célula
+    /// vinculada.</summary>
+    private void PropagateLinkGroup(ClipViewModel source)
+    {
+        if (source.Model?.LinkGroupId is not { } groupId)
+            return;
+
+        foreach (var other in AllClips())
+        {
+            if (ReferenceEquals(other, source) || other.Model?.LinkGroupId != groupId)
+                continue;
+
+            var propagated = source.Model.Clone();
+            propagated.LinkGroupId = groupId;
+            Model.Layers[other.LayerIndex].Clips[other.ColumnIndex] = propagated;
+            other.SetModel(propagated);
+            _render.Post(new UpdateClip(other.LayerIndex, other.ColumnIndex, propagated));
+        }
+    }
+
+    /// <summary>Vincula todas as células marcadas (Ctrl+clique) num grupo de troca novo —
+    /// precisa de pelo menos 2 células com mídia. Botão direito > "Vincular células".</summary>
+    public void LinkMultiSelectedCells()
+    {
+        var selected = AllClips().Where(c => c.IsMultiSelected && c.HasMedia).ToList();
+        if (selected.Count < 2)
+            return;
+
+        SnapshotForUndo();
+        var groupId = Guid.NewGuid();
+        foreach (var clip in selected)
+        {
+            if (clip.Model is null) continue;
+            clip.Model.LinkGroupId = groupId;
+            clip.LinkGroupId = groupId;
+            clip.IsMultiSelected = false;
+            _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>Tira uma célula do grupo de troca (as outras continuam vinculadas entre si).</summary>
+    public void UnlinkCell(ClipViewModel clip)
+    {
+        if (clip.Model?.LinkGroupId is null)
+            return;
+
+        SnapshotForUndo();
+        clip.Model.LinkGroupId = null;
+        clip.LinkGroupId = null;
+        _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
+        Changed?.Invoke();
+    }
+
+    public void ClearMultiSelection()
+    {
+        foreach (var clip in AllClips())
+            clip.IsMultiSelected = false;
     }
 
     private LayerViewModel CreateLayerViewModel(Layer layer, int layerIndex)
@@ -805,6 +919,7 @@ public sealed partial class CompositionViewModel : ObservableObject
 
         Model.Layers[clip.LayerIndex].Clips[clip.ColumnIndex] = clip.Model;
         _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
+        PropagateLinkGroup(clip);
     }
 
     private const int MaxRecentSources = 20;
@@ -866,6 +981,27 @@ public sealed partial class CompositionViewModel : ObservableObject
         var layer = new Layer { Name = $"Layer {Model.Layers.Count + 1}" };
         Model.AddLayer(layer);
         Layers.Add(CreateLayerViewModel(layer, Layers.Count));
+        SyncToEngine();
+        Changed?.Invoke();
+    }
+
+    /// <summary>Remove a layer inteira (botão direito no painel da layer) — mantém pelo
+    /// menos uma layer. Reconstrói os ViewModels pra renumerar os índices das demais.</summary>
+    public void RemoveLayer(int layerIndex)
+    {
+        if (Model.Layers.Count <= 1) return;
+        if (layerIndex < 0 || layerIndex >= Model.Layers.Count) return;
+
+        SnapshotForUndo();
+        Model.Layers.RemoveAt(layerIndex);
+        if (SelectedClip is not null)
+        {
+            SelectedClip.IsSelected = false;
+            SelectedClip = null;
+        }
+        Layers.Clear();
+        for (int i = 0; i < Model.Layers.Count; i++)
+            Layers.Add(CreateLayerViewModel(Model.Layers[i], i));
         SyncToEngine();
         Changed?.Invoke();
     }

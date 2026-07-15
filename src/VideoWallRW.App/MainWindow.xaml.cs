@@ -90,10 +90,34 @@ public partial class MainWindow : Window
             _vm.Grid.ClearCell(clipVm.LayerIndex, clipVm.ColumnIndex);
     }
 
+    /// <summary>Ctrl+clique numa célula marca/desmarca ela pro grupo de troca (T20), sem
+    /// disparar (TriggerCommand) nem selecionar pra edição (SelectCommand).</summary>
+    private void OnCellPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        if (sender is not FrameworkElement { DataContext: ViewModels.ClipViewModel clipVm }) return;
+        clipVm.IsMultiSelected = !clipVm.IsMultiSelected;
+        e.Handled = true;
+    }
+
+    private void OnLinkCells(object sender, RoutedEventArgs e) => _vm.Grid.LinkMultiSelectedCells();
+
+    private void OnUnlinkCell(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: ViewModels.ClipViewModel clipVm })
+            _vm.Grid.UnlinkCell(clipVm);
+    }
+
     private void OnLayerDuplicate(object sender, RoutedEventArgs e)
     {
         if (sender is MenuItem { DataContext: ViewModels.LayerViewModel layerVm })
             _vm.Grid.DuplicateLayer(layerVm.LayerIndex);
+    }
+
+    private void OnLayerRemove(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { DataContext: ViewModels.LayerViewModel layerVm })
+            _vm.Grid.RemoveLayer(layerVm.LayerIndex);
     }
 
     // ── Menu de contexto do cabeçalho de coluna ──
