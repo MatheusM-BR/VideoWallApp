@@ -134,26 +134,43 @@
             BorderThickness="1" Padding="8" Margin="0,6,0,0">
       <DockPanel>
 
-        <!-- Composition Monitor / Preview Monitor: por ora estáticos (sem pipeline de
-             captura da composição de volta pro WPF ainda) — só mostram a resolução. -->
+        <!-- Composition Monitor / Preview Monitor: mesma captura ao vivo da composição
+             (readback de textura do D3D11, ~12fps), atrás de um toggle desligado por
+             padrão — ligar custa uma sincronização de GPU por frame capturado. -->
         <StackPanel DockPanel.Dock="Left" Width="176" Margin="0,0,10,0">
-          <TextBlock Text="COMPOSITION MONITOR" Foreground="{StaticResource FgDim}" FontSize="9"
-                     FontWeight="Bold" Margin="0,0,0,3" />
+          <DockPanel Margin="0,0,0,3">
+            <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding CompositionMonitorEnabled}"
+                          Padding="4,0" FontSize="9" Content="●"
+                          ToolTip="Ligar/desligar captura ao vivo da composição (custa desempenho de GPU)" />
+            <TextBlock Text="COMPOSITION MONITOR" Foreground="{StaticResource FgDim}" FontSize="9" FontWeight="Bold" />
+          </DockPanel>
           <Border Height="99" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1">
-            <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center">
-              <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
-              <Run Text="×" />
-              <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
-            </TextBlock>
+            <Grid>
+              <Image Source="{Binding CompositionMonitorBitmap}" Stretch="Uniform"
+                     Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+              <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
+                <Run Text="×" />
+                <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
+                <LineBreak />
+                <Run Text="sem preview ao vivo — ligue no ●" FontSize="9" />
+              </TextBlock>
+            </Grid>
           </Border>
           <TextBlock Text="PREVIEW MONITOR" Foreground="{StaticResource FgDim}" FontSize="9"
                      FontWeight="Bold" Margin="0,8,0,3" />
           <Border Height="99" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1">
-            <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center">
-              <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
-              <Run Text="×" />
-              <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
-            </TextBlock>
+            <Grid>
+              <Image Source="{Binding CompositionMonitorBitmap}" Stretch="Uniform"
+                     Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+              <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                         Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
+                <Run Text="×" />
+                <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
+              </TextBlock>
+            </Grid>
           </Border>
         </StackPanel>
 
@@ -175,6 +192,15 @@
                 <TextBlock DockPanel.Dock="Left" Text="Nome" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
               </DockPanel>
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="In / Out (s)" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox Width="60" Text="{Binding InPointText, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text=" / " VerticalAlignment="Center" />
+                <TextBox Width="60" Text="{Binding OutPointText, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text="Duração" VerticalAlignment="Center" Margin="16,0,6,0" />
+                <TextBox Width="60" Text="{Binding ImageDurationText, UpdateSourceTrigger=LostFocus}"
+                         ToolTip="Duração no ar (imagem) ou trim (vídeo) — aplica aos dois tipos de mídia" />
+              </StackPanel>
               <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
                 <TextBlock DockPanel.Dock="Left" Text="Velocidade" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <TextBlock DockPanel.Dock="Right" Text="{Binding Speed, StringFormat={}{0:F1}×}" VerticalAlignment="Center" Margin="6,0,0,0" />
@@ -204,7 +230,7 @@
             </StackPanel>
           </Border>
 
-          <!-- ── CLIP: in/out, duração de imagem, resize, volume ── -->
+          <!-- ── CLIP: resize + dimensões nativas do arquivo, volume ── -->
           <Border Grid.Column="2" Margin="0,0,8,0" Background="{StaticResource InputBg}"
                   BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
             <Grid>
@@ -217,24 +243,25 @@
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
               <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="CLIP" Foreground="{StaticResource FgDim}" FontSize="10"
                          FontWeight="Bold" Margin="0,0,0,6" />
-              <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="In / Out (s)" Margin="0,0,6,4" />
-              <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBox Width="70" Text="{Binding InPointText, UpdateSourceTrigger=LostFocus}" />
-                <TextBlock Text=" / " VerticalAlignment="Center" />
-                <TextBox Width="70" Text="{Binding OutPointText, UpdateSourceTrigger=LostFocus}" />
-              </StackPanel>
-              <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Dur. imagem" Margin="0,0,6,4" />
-              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ImageDurationText, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,4" />
-              <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Resize" Margin="0,0,6,4" />
-              <ComboBox Grid.Row="3" Grid.Column="1"
+              <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Resize" Margin="0,0,6,4" />
+              <ComboBox Grid.Row="1" Grid.Column="1"
                         ItemsSource="{Binding DataContext.Grid.ResizeModes, RelativeSource={RelativeSource AncestorType=Window}}"
                         SelectedItem="{Binding Resize, Mode=TwoWay}" Margin="0,0,0,4" />
-              <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="Volume" Margin="0,0,6,0" />
-              <DockPanel Grid.Row="4" Grid.Column="1">
+              <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Dimensões" Margin="0,0,6,4" />
+              <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,4">
+                <TextBlock DockPanel.Dock="Left" Text="{Binding SourceDimensionsText}" VerticalAlignment="Center"
+                           Foreground="{StaticResource FgDim}" ToolTip="Dimensões nativas do arquivo de origem" />
+                <Button DockPanel.Dock="Right" Content="+" Command="{Binding ZoomInCommand}" Padding="8,1" Margin="3,0,0,0"
+                        ToolTip="Aumentar escala" />
+                <Button DockPanel.Dock="Right" Content="−" Command="{Binding ZoomOutCommand}" Padding="8,1" Margin="6,0,0,0"
+                        ToolTip="Diminuir escala" />
+                <Border />
+              </DockPanel>
+              <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Volume" Margin="0,0,6,0" />
+              <DockPanel Grid.Row="3" Grid.Column="1">
                 <CheckBox DockPanel.Dock="Right" Content="Mute" IsChecked="{Binding Mute, Mode=TwoWay}" Margin="10,0,0,0" />
                 <Slider Minimum="0" Maximum="1" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
               </DockPanel>

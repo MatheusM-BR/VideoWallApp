@@ -41,3 +41,6 @@ public sealed record ReloadClip(int LayerIndex, int ColumnIndex) : EngineCommand
 
 // ── Autopilot ON/OFF por layer (o toggle global da UI envia um por layer) ─────
 public sealed record SetLayerAutopilot(int LayerIndex, bool Enabled) : EngineCommand;
+
+// ── Composition Monitor ao vivo (T17): liga/desliga a leitura da textura ─────
+public sealed record SetCompositionMonitorEnabled(bool Enabled) : EngineCommand;

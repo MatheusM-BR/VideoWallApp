@@ -94,6 +94,14 @@ public sealed partial class ClipViewModel : ObservableObject
     [ObservableProperty] private double _volume = 1.0;
     [ObservableProperty] private bool _mute;
 
+    /// <summary>Dimensões nativas (px) do arquivo de origem — sondadas uma vez, mostradas
+    /// abaixo do combo Resize (null = ainda não sondado ou sem mídia).</summary>
+    [ObservableProperty] private int? _sourceWidth;
+    [ObservableProperty] private int? _sourceHeight;
+    public string SourceDimensionsText => SourceWidth is { } w && SourceHeight is { } h ? $"{w} × {h}" : "—";
+    partial void OnSourceWidthChanged(int? value) => OnPropertyChanged(nameof(SourceDimensionsText));
+    partial void OnSourceHeightChanged(int? value) => OnPropertyChanged(nameof(SourceDimensionsText));
+
     // ── Transform manual (painel CLIP interativo — TransformGizmo) ──────────────
     [ObservableProperty] private double _positionX;
     [ObservableProperty] private double _positionY;
@@ -138,6 +146,7 @@ public sealed partial class ClipViewModel : ObservableObject
 
         RequestThumbnail();
         ProbeDurationIfNeeded();
+        ProbeDimensionsIfNeeded();
     }
 
     /// <summary>Ponte pro TrimBar: In efetivo em segundos (campo vazio = 0).</summary>
@@ -194,6 +203,63 @@ public sealed partial class ClipViewModel : ObservableObject
             OutPointText = Duration.ToString("0.##", CultureInfo.CurrentCulture);
         OnPropertyChanged(nameof(TrimIn));
         OnPropertyChanged(nameof(TrimOut));
+    }
+
+    /// <summary>
+    /// Sonda as dimensões nativas do arquivo (vídeo via MediaDecoder leve, imagem via
+    /// header do WIC/BitmapFrame — sem decodificar pixels) — mostradas na aba Clip
+    /// abaixo do combo Resize.
+    /// </summary>
+    private async void ProbeDimensionsIfNeeded()
+    {
+        string? path = MediaPathOf(Model);
+        if (path is null)
+        {
+            SourceWidth = null;
+            SourceHeight = null;
+            return;
+        }
+
+        bool isVideo = Model?.Source is FileVideoSource;
+        var dims = await Task.Run(() => isVideo
+            ? VideoWallRW.Media.MediaProbe.TryGetVideoDimensions(path)
+            : TryGetImageDimensions(path));
+
+        if (dims is not { } d || MediaPathOf(Model) != path)
+            return;
+        SourceWidth = d.Width;
+        SourceHeight = d.Height;
+    }
+
+    private static (int Width, int Height)? TryGetImageDimensions(string path)
+    {
+        try
+        {
+            var frame = System.Windows.Media.Imaging.BitmapFrame.Create(new Uri(path),
+                System.Windows.Media.Imaging.BitmapCreateOptions.DelayCreation,
+                System.Windows.Media.Imaging.BitmapCacheOption.None);
+            return (frame.PixelWidth, frame.PixelHeight);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private const double ZoomStep = 0.05;
+
+    [RelayCommand]
+    private void ZoomIn()
+    {
+        ScaleX = Math.Round(ScaleX + ZoomStep, 2);
+        ScaleY = Math.Round(ScaleY + ZoomStep, 2);
+    }
+
+    [RelayCommand]
+    private void ZoomOut()
+    {
+        ScaleX = Math.Max(0.05, Math.Round(ScaleX - ZoomStep, 2));
+        ScaleY = Math.Max(0.05, Math.Round(ScaleY - ZoomStep, 2));
     }
 
     private static string? MediaPathOf(Clip? model) => model?.Source switch
@@ -764,6 +830,8 @@ public sealed partial class CompositionViewModel : ObservableObject
                 Name = Path.GetFileName(file),
                 // Padrão da operação: imagem fica 7s no ar antes do autopilot avançar.
                 ImageDuration = isImage ? 7 : null,
+                // Todo clip novo começa em tamanho real (Original), não esticado (Fit).
+                Resize = ResizeMode.Original,
             });
 
             RecentSources.Remove(file);

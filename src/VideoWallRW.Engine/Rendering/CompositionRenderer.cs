@@ -424,6 +424,55 @@ public sealed class CompositionRenderer : IDisposable
         _compSrv.Dispose();
         _compRtv.Dispose();
         _compTexture.Dispose();
+        _captureStaging?.Dispose();
+    }
+
+    // ── Composition Monitor: leitura da textura pra WPF (T17) ──────────────────
+    // Fora do caminho normal do frame — só roda quando o operador liga o monitor
+    // ao vivo. Textura Staging criada uma vez (mesmo tamanho/formato da composição).
+    private ID3D11Texture2D? _captureStaging;
+
+    /// <summary>Copia a composição já renderizada pro CPU (BGRA32). Chamar depois de
+    /// <see cref="Render"/>. Custa um Map(Read) — evitar chamar todo frame; throttle
+    /// no chamador (RenderThread).</summary>
+    public unsafe bool TryCaptureComposition(ID3D11DeviceContext ctx, out byte[] pixelsBgra, out int width, out int height)
+    {
+        width = _compWidth;
+        height = _compHeight;
+        pixelsBgra = [];
+
+        _captureStaging ??= _gfx.Device.CreateTexture2D(new Texture2DDescription
+        {
+            Width = (uint)_compWidth,
+            Height = (uint)_compHeight,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.B8G8R8A8_UNorm,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Staging,
+            CPUAccessFlags = CpuAccessFlags.Read,
+            BindFlags = BindFlags.None,
+        });
+
+        ctx.CopyResource(_captureStaging, _compTexture);
+        var mapped = ctx.Map(_captureStaging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+        try
+        {
+            pixelsBgra = new byte[_compWidth * _compHeight * 4];
+            int rowBytes = _compWidth * 4;
+            int rowPitch = (int)mapped.RowPitch;
+            byte* basePtr = (byte*)mapped.DataPointer;
+            for (int y = 0; y < _compHeight; y++)
+            {
+                var srcRow = new Span<byte>(basePtr + (long)y * rowPitch, rowBytes);
+                srcRow.CopyTo(pixelsBgra.AsSpan(y * rowBytes, rowBytes));
+            }
+        }
+        finally
+        {
+            ctx.Unmap(_captureStaging, 0);
+        }
+        return true;
     }
 }
 

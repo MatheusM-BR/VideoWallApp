@@ -59,6 +59,16 @@ public sealed class RenderThread : IDisposable
     /// <summary>Erro fatal (device lost etc.); as saídas foram derrubadas.</summary>
     public event Action<string>? EngineFailed;
 
+    // ── Composition Monitor ao vivo (T17): desligado por padrão, custa um Map(Read)
+    // por captura — só liga quando o operador pede, e mesmo assim com throttle. ────
+    private bool _compositionMonitorEnabled;
+    private readonly Stopwatch _captureClock = Stopwatch.StartNew();
+    private double _lastCaptureTime;
+    private const double CaptureIntervalSeconds = 1.0 / 12.0; // ~12 fps é suficiente pra um monitor de referência
+
+    /// <summary>Publicado na render thread quando o Composition Monitor está ligado (~12fps).</summary>
+    public event Action<byte[], int, int>? CompositionFrameCaptured;
+
     public RenderThread(GraphicsDevice gfx) => _gfx = gfx;
 
     public void Start()
@@ -105,7 +115,9 @@ public sealed class RenderThread : IDisposable
                 // As janelas de saída vivem nesta thread; o pump precisa rodar aqui.
                 OutputWindow.PumpMessages();
 
-                if (_outputs.Count == 0)
+                // Sem saída ativa nenhuma, só continua rodando o passe de composição se
+                // o Composition Monitor estiver ligado (senão não há textura pra capturar).
+                if (_outputs.Count == 0 && !_compositionMonitorEnabled)
                 {
                     Thread.Sleep(10);
                     continue;
@@ -138,6 +150,20 @@ public sealed class RenderThread : IDisposable
                         .Select(o => (o.Rtv, o.Monitor.Width, o.Monitor.Height, ResolveScreen(o.Monitor.DeviceName, o.Monitor.Width, o.Monitor.Height)))
                         .ToList();
                     _compositionRenderer.Render(_gfx.Context, _compositionData, _layers, outputList, _identify);
+
+                    // Composition Monitor ao vivo: desligado por padrão, com throttle
+                    // (~12fps) — o Map(Read) força uma sincronização de GPU, então nunca
+                    // roda todo frame mesmo ligado.
+                    if (_compositionMonitorEnabled && CompositionFrameCaptured is not null)
+                    {
+                        double now = _captureClock.Elapsed.TotalSeconds;
+                        if (now - _lastCaptureTime >= CaptureIntervalSeconds)
+                        {
+                            _lastCaptureTime = now;
+                            if (_compositionRenderer.TryCaptureComposition(_gfx.Context, out var pixels, out var w, out var h))
+                                CompositionFrameCaptured.Invoke(pixels, w, h);
+                        }
+                    }
                 }
                 else
                 {
@@ -257,6 +283,9 @@ public sealed class RenderThread : IDisposable
                 // o editor de imagem (Fase 10) salva em cima do arquivo e chama isso pra
                 // o telão atualizar sem frame preto, mesmo fluxo de crossfade do trigger normal.
                 OnTriggerClip(layerIdx, colIdx);
+                break;
+            case SetCompositionMonitorEnabled(var enabled):
+                _compositionMonitorEnabled = enabled;
                 break;
             default:
                 Log.Warning("Comando não tratado: {Command}", command);

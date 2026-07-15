@@ -21,4 +21,18 @@ public static class MediaProbe
             return null;
         }
     }
+
+    /// <summary>Dimensões nativas (px) do vídeo — mesmo Open leve usado por TryGetDuration.</summary>
+    public static (int Width, int Height)? TryGetVideoDimensions(string path)
+    {
+        try
+        {
+            using var decoder = MediaDecoder.Open(path);
+            return decoder.Width > 0 && decoder.Height > 0 ? (decoder.Width, decoder.Height) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

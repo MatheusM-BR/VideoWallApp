@@ -28,6 +28,12 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly DispatcherTimer _runtimeStateTimer;
     private readonly WatchFolderManager _watchFolders;
 
+    // Janelas "de origem" (Agenda, importador de PDF) fecham sozinhas ao abrir o
+    // editor de imagem — do contrário elas ficam por cima atrapalhando o arraste
+    // da tela de recorte/tela do editor.
+    private AgendaWindow? _agendaWindow;
+    private PdfImportWindow? _pdfImportWindow;
+
     public ObservableCollection<MonitorViewModel> Monitors { get; } = [];
     public ObservableCollection<SceneViewModel> Scenes { get; } = [];
 
@@ -43,6 +49,32 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Dock direito: false = aba Files, true = aba Sources (recentes + NDI).</summary>
     [ObservableProperty] private bool _showSourcesTab;
+
+    /// <summary>Composition/Preview Monitor ao vivo — desligado por padrão (custa uma
+    /// leitura de textura da GPU por frame capturado); liga/desliga o readback no engine.</summary>
+    [ObservableProperty] private bool _compositionMonitorEnabled;
+    [ObservableProperty] private System.Windows.Media.Imaging.WriteableBitmap? _compositionMonitorBitmap;
+
+    partial void OnCompositionMonitorEnabledChanged(bool value)
+    {
+        _render.Post(new SetCompositionMonitorEnabled(value));
+        if (!value) CompositionMonitorBitmap = null;
+    }
+
+    private void OnCompositionFrameCaptured(byte[] pixelsBgra, int width, int height)
+    {
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            if (!CompositionMonitorEnabled) return;
+            if (CompositionMonitorBitmap is not { } bmp || bmp.PixelWidth != width || bmp.PixelHeight != height)
+            {
+                bmp = new System.Windows.Media.Imaging.WriteableBitmap(
+                    width, height, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null);
+                CompositionMonitorBitmap = bmp;
+            }
+            bmp.WritePixels(new Int32Rect(0, 0, width, height), pixelsBgra, width * 4, 0);
+        });
+    }
 
 
     public CompositionViewModel Grid { get; }
@@ -70,6 +102,7 @@ public sealed partial class MainViewModel : ObservableObject
 
         _render.StatsUpdated += OnStatsUpdated;
         _render.EngineFailed += OnEngineFailed;
+        _render.CompositionFrameCaptured += OnCompositionFrameCaptured;
         RefreshMonitors();
 
         // T7.3: autosave a cada 120s.
@@ -197,14 +230,18 @@ public sealed partial class MainViewModel : ObservableObject
     private void OpenAgenda()
     {
         var vm = new ViewModels.AgendaViewModel(OpenImageEditorForFile, OpenPdfImporter);
-        var window = new AgendaWindow(vm) { Owner = Application.Current.MainWindow };
-        window.Show();
+        _agendaWindow = new AgendaWindow(vm) { Owner = Application.Current.MainWindow };
+        _agendaWindow.Closed += (_, _) => _agendaWindow = null;
+        _agendaWindow.Show();
     }
 
     /// <summary>Abre o editor numa imagem nova (Agenda/PDF/avulsa): a inserção na grade
-    /// é pelo chip "🖼 ARRASTE p/ célula" do próprio editor — solta na célula que quiser.</summary>
+    /// é pelo chip "🖼 ARRASTE p/ célula" do próprio editor — solta na célula que quiser.
+    /// Fecha Agenda/importador de PDF por baixo, senão eles ficam por cima atrapalhando
+    /// o arraste das guias de recorte/tela do editor.</summary>
     private void OpenImageEditorForFile(string path, string suggestedName)
     {
+        CloseSourceWindows();
         double? compAspect = Grid.Model.Height > 0 ? (double)Grid.Model.Width / Grid.Model.Height : null;
         var vm = new ImageEditorViewModel(path, onSaved: null, compAspect);
         var window = new ImageEditorWindow(vm) { Owner = Application.Current.MainWindow };
@@ -214,8 +251,15 @@ public sealed partial class MainViewModel : ObservableObject
     private void OpenPdfImporter(string pdfPath)
     {
         var vm = new PdfImportViewModel(pdfPath, (imagePath, name) => OpenImageEditorForFile(imagePath, name));
-        var window = new PdfImportWindow(vm) { Owner = Application.Current.MainWindow };
-        window.Show();
+        _pdfImportWindow = new PdfImportWindow(vm) { Owner = Application.Current.MainWindow };
+        _pdfImportWindow.Closed += (_, _) => _pdfImportWindow = null;
+        _pdfImportWindow.Show();
+    }
+
+    private void CloseSourceWindows()
+    {
+        _agendaWindow?.Close();
+        _pdfImportWindow?.Close();
     }
 
     /// <summary>Abre o seletor de célula de destino, pré-selecionando a célula atual.
@@ -258,6 +302,7 @@ public sealed partial class MainViewModel : ObservableObject
     /// ao salvar, recarrega o clip no motor sem frame preto (comando ReloadClip).</summary>
     public void EditCellImage(int layerIndex, int columnIndex, string path)
     {
+        CloseSourceWindows();
         double? compAspect = Grid.Model.Height > 0 ? (double)Grid.Model.Width / Grid.Model.Height : null;
         var vm = new ImageEditorViewModel(path, (editedPath, _) =>
         {

@@ -33,7 +33,7 @@ public sealed partial class PdfImportViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _pageCount;
     [ObservableProperty] private PdfPageThumbViewModel? _selectedPage;
     [ObservableProperty] private SKBitmap? _preview;
-    [ObservableProperty] private int _dpi = 200;
+    [ObservableProperty] private int _dpi = 1000;
     [ObservableProperty] private string _statusText = "Carregando páginas...";
 
     public System.Collections.ObjectModel.ObservableCollection<PdfPageThumbViewModel> Pages { get; } = [];
