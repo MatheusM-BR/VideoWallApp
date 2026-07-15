@@ -741,6 +741,11 @@ public sealed partial class CompositionViewModel : ObservableObject
         _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
     }
 
+    private const int MaxRecentSources = 20;
+
+    /// <summary>Últimos arquivos enviados pra grade, mais recente primeiro — aba Sources.</summary>
+    public ObservableCollection<string> RecentSources { get; } = [];
+
     public void SetFiles(int layerIndex, int startColumn, IEnumerable<string> files)
     {
         int column = startColumn;
@@ -760,6 +765,11 @@ public sealed partial class CompositionViewModel : ObservableObject
                 // Padrão da operação: imagem fica 7s no ar antes do autopilot avançar.
                 ImageDuration = isImage ? 7 : null,
             });
+
+            RecentSources.Remove(file);
+            RecentSources.Insert(0, file);
+            while (RecentSources.Count > MaxRecentSources)
+                RecentSources.RemoveAt(RecentSources.Count - 1);
         }
     }
 

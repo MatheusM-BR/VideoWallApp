@@ -53,3 +53,34 @@ public sealed class EnumBoolConverter : IValueConverter
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => (value is true) ? parameter : Binding.DoNothing;
 }
+
+/// <summary>Inverte um bool (usado nos dois ToggleButtons da aba Files/Sources: um é o
+/// espelho do outro).</summary>
+public sealed class InverseBoolConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object parameter, CultureInfo culture)
+        => !(value is true);
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => !(value is true);
+}
+
+/// <summary>bool=true → Collapsed, false → Visible (oposto do BooleanToVisibilityConverter padrão).</summary>
+public sealed class InverseBoolToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object parameter, CultureInfo culture)
+        => (value is true) ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+/// <summary>Caminho completo → só o nome do arquivo (aba Sources: lista de recentes guarda paths).</summary>
+public sealed class FileNameConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object parameter, CultureInfo culture)
+        => value is string path ? System.IO.Path.GetFileName(path) : "";
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}

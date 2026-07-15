@@ -41,6 +41,9 @@ public sealed partial class MainViewModel : ObservableObject
     /// vez (envia um comando por layer) — botão em evidência + tecla Espaço.</summary>
     [ObservableProperty] private bool _autopilotAll = true;
 
+    /// <summary>Dock direito: false = aba Files, true = aba Sources (recentes + NDI).</summary>
+    [ObservableProperty] private bool _showSourcesTab;
+
 
     public CompositionViewModel Grid { get; }
     public FileBrowserViewModel FileBrowser { get; }
@@ -227,6 +230,10 @@ public sealed partial class MainViewModel : ObservableObject
         };
         return dlg.ShowDialog() == true ? (dlg.SelectedLayer, dlg.SelectedColumn) : null;
     }
+
+    /// <summary>Painel Sources (duplo-clique num recente) — mesma regra do painel Files.</summary>
+    [RelayCommand]
+    public void SendRecentSource(string path) => SendFileToSelectedCell(path);
 
     /// <summary>Painel Files (duplo-clique): com célula selecionada vai direto nela;
     /// sem seleção, pergunta o destino.</summary>

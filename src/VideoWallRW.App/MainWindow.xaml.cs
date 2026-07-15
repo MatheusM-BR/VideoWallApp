@@ -71,6 +71,12 @@ public partial class MainWindow : Window
             _vm.FileBrowser.Open(item);
     }
 
+    private void OnRecentSourceDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBox { SelectedItem: string path })
+            _vm.SendRecentSource(path);
+    }
+
     private void OnEditImageClick(object sender, RoutedEventArgs e)
     {
         if (sender is not MenuItem { DataContext: ViewModels.ClipViewModel clipVm }) return;

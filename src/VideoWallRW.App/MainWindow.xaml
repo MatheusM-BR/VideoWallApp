@@ -129,122 +129,168 @@
       </DockPanel>
     </Border>
 
-    <!-- ═══ Propriedades do clip selecionado (faixa inferior, estilo painel de clip do Resolume) ═══ -->
+    <!-- ═══ Faixa inferior estilo Resolume Arena: monitores + Clip (Transport/Autopilot/Clip/Transform) ═══ -->
     <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
-            BorderThickness="1" Padding="8" Margin="0,6,0,0" DataContext="{Binding Grid.SelectedClip}">
-      <Grid IsEnabled="{Binding HasMedia}">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" />
-          <ColumnDefinition Width="180" />
-          <ColumnDefinition Width="Auto" />
-          <ColumnDefinition Width="150" />
-          <ColumnDefinition Width="Auto" />
-          <ColumnDefinition Width="150" />
-          <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="270" />
-        </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+            BorderThickness="1" Padding="8" Margin="0,6,0,0">
+      <DockPanel>
 
-        <TextBlock Grid.ColumnSpan="8" Text="CLIP" Foreground="{StaticResource FgDim}" FontSize="10"
-                   FontWeight="Bold" Margin="0,0,0,6" />
+        <!-- Composition Monitor / Preview Monitor: por ora estáticos (sem pipeline de
+             captura da composição de volta pro WPF ainda) — só mostram a resolução. -->
+        <StackPanel DockPanel.Dock="Left" Width="176" Margin="0,0,10,0">
+          <TextBlock Text="COMPOSITION MONITOR" Foreground="{StaticResource FgDim}" FontSize="9"
+                     FontWeight="Bold" Margin="0,0,0,3" />
+          <Border Height="99" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1">
+            <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center">
+              <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
+              <Run Text="×" />
+              <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
+            </TextBlock>
+          </Border>
+          <TextBlock Text="PREVIEW MONITOR" Foreground="{StaticResource FgDim}" FontSize="9"
+                     FontWeight="Bold" Margin="0,8,0,3" />
+          <Border Height="99" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1">
+            <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center">
+              <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
+              <Run Text="×" />
+              <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
+            </TextBlock>
+          </Border>
+        </StackPanel>
 
-        <!-- Transform interativo (estilo Resolume Arena): palco no formato real da
-             composição, com a miniatura do clip dentro dele; 4 cantos + 4 arestas
-             redimensionam simetricamente em torno do centro, arrastar por dentro move X/Y -->
-        <Border Grid.Row="1" Grid.RowSpan="3" Grid.Column="7" Margin="12,0,0,0"
-                Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
-                CornerRadius="2">
-          <DockPanel Margin="6">
-            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,5">
-              <Button DockPanel.Dock="Right" Content="↺ Reset" Command="{Binding ResetTransformCommand}"
-                      Padding="6,2" FontSize="10" ToolTip="Redefinir posição/escala" />
-              <TextBlock Text="TRANSFORMAR" Foreground="{StaticResource FgDim}" FontSize="10"
-                         FontWeight="Bold" VerticalAlignment="Center" />
+        <Grid DataContext="{Binding Grid.SelectedClip}" IsEnabled="{Binding HasMedia}">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="200" />
+            <ColumnDefinition Width="330" />
+            <ColumnDefinition Width="270" />
+          </Grid.ColumnDefinitions>
+
+          <!-- ── TRANSPORT: nome, timeline/trim com agulha de reprodução, velocidade ── -->
+          <Border Grid.Column="0" Margin="0,0,8,0" Background="{StaticResource InputBg}"
+                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Top" Text="TRANSPORT" Foreground="{StaticResource FgDim}" FontSize="10"
+                         FontWeight="Bold" Margin="0,0,0,6" />
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <TextBlock DockPanel.Dock="Left" Text="Nome" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+              </DockPanel>
+              <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="Velocidade" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Speed, StringFormat={}{0:F1}×}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                <Slider Minimum="0.1" Maximum="4" Value="{Binding Speed, Mode=TwoWay}" VerticalAlignment="Center" />
+              </DockPanel>
+              <!-- Trim estilo Resolume: barra da duração inteira, alças arrastáveis de In/Out, agulha do playhead -->
+              <controls:TrimBar Height="30"
+                                Duration="{Binding Duration}"
+                                InPoint="{Binding TrimIn, Mode=TwoWay}"
+                                OutPoint="{Binding TrimOut, Mode=TwoWay}"
+                                ScrubSeconds="{Binding ScrubSeconds, Mode=OneWayToSource}"
+                                Playhead="{Binding PlayheadSeconds}" />
             </DockPanel>
+          </Border>
 
-            <Grid DockPanel.Dock="Bottom" Margin="0,5,0,0">
+          <!-- ── AUTOPILOT: modo de loop + ação ao terminar ── -->
+          <Border Grid.Column="1" Margin="0,0,8,0" Background="{StaticResource InputBg}"
+                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
+            <StackPanel>
+              <TextBlock Text="AUTOPILOT" Foreground="{StaticResource FgDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,6" />
+              <TextBlock Text="Modo" FontSize="11" Margin="0,0,0,2" />
+              <ComboBox ItemsSource="{Binding DataContext.Grid.PlayModes, RelativeSource={RelativeSource AncestorType=Window}}"
+                        SelectedItem="{Binding PlayMode, Mode=TwoWay}" Margin="0,0,0,8" />
+              <TextBlock Text="Ao terminar" FontSize="11" Margin="0,0,0,2" />
+              <ComboBox ItemsSource="{Binding DataContext.Grid.AutopilotActions, RelativeSource={RelativeSource AncestorType=Window}}"
+                        SelectedItem="{Binding Autopilot, Mode=TwoWay}" />
+            </StackPanel>
+          </Border>
+
+          <!-- ── CLIP: in/out, duração de imagem, resize, volume ── -->
+          <Border Grid.Column="2" Margin="0,0,8,0" Background="{StaticResource InputBg}"
+                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
+            <Grid>
               <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
               <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
               </Grid.RowDefinitions>
-              <TextBlock Grid.Row="0" Grid.Column="0" Text="X" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
-              <TextBlock Grid.Row="0" Grid.Column="1" Text="Y" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
-              <TextBlock Grid.Row="0" Grid.Column="2" Text="ESCALA H" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
-              <TextBlock Grid.Row="0" Grid.Column="3" Text="ESCALA V" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
-              <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding PositionX, Mode=TwoWay, StringFormat=F2}"
-                        ToolTip="Posição X (fração da composição)" Margin="0,1,2,0" TextAlignment="Center" />
-              <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PositionY, Mode=TwoWay, StringFormat=F2}"
-                        ToolTip="Posição Y (fração da composição)" Margin="2,1,2,0" TextAlignment="Center" />
-              <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding ScaleX, Mode=TwoWay, StringFormat=F2}"
-                        ToolTip="Escala horizontal" Margin="2,1,2,0" TextAlignment="Center" />
-              <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding ScaleY, Mode=TwoWay, StringFormat=F2}"
-                        ToolTip="Escala vertical" Margin="2,1,0,0" TextAlignment="Center" />
+              <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="CLIP" Foreground="{StaticResource FgDim}" FontSize="10"
+                         FontWeight="Bold" Margin="0,0,0,6" />
+              <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="In / Out (s)" Margin="0,0,6,4" />
+              <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBox Width="70" Text="{Binding InPointText, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Text=" / " VerticalAlignment="Center" />
+                <TextBox Width="70" Text="{Binding OutPointText, UpdateSourceTrigger=LostFocus}" />
+              </StackPanel>
+              <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Dur. imagem" Margin="0,0,6,4" />
+              <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding ImageDurationText, UpdateSourceTrigger=LostFocus}" Margin="0,0,0,4" />
+              <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Resize" Margin="0,0,6,4" />
+              <ComboBox Grid.Row="3" Grid.Column="1"
+                        ItemsSource="{Binding DataContext.Grid.ResizeModes, RelativeSource={RelativeSource AncestorType=Window}}"
+                        SelectedItem="{Binding Resize, Mode=TwoWay}" Margin="0,0,0,4" />
+              <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="Volume" Margin="0,0,6,0" />
+              <DockPanel Grid.Row="4" Grid.Column="1">
+                <CheckBox DockPanel.Dock="Right" Content="Mute" IsChecked="{Binding Mute, Mode=TwoWay}" Margin="10,0,0,0" />
+                <Slider Minimum="0" Maximum="1" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
+              </DockPanel>
             </Grid>
+          </Border>
 
-            <controls:TransformGizmo PositionX="{Binding PositionX, Mode=TwoWay}"
-                                      PositionY="{Binding PositionY, Mode=TwoWay}"
-                                      ScaleX="{Binding ScaleX, Mode=TwoWay}"
-                                      ScaleY="{Binding ScaleY, Mode=TwoWay}"
-                                      StageWidth="{Binding DataContext.Grid.Model.Width, RelativeSource={RelativeSource AncestorType=Window}}"
-                                      StageHeight="{Binding DataContext.Grid.Model.Height, RelativeSource={RelativeSource AncestorType=Window}}"
-                                      Thumbnail="{Binding PreviewImagePath}" />
-          </DockPanel>
-        </Border>
+          <!-- Transform interativo (estilo Resolume Arena): palco no formato real da
+               composição, com a miniatura do clip dentro dele; 4 cantos + 4 arestas
+               redimensionam simetricamente em torno do centro, arrastar por dentro move X/Y -->
+          <Border Grid.Column="3"
+                  Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
+                  CornerRadius="2">
+            <DockPanel Margin="6">
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,5">
+                <Button DockPanel.Dock="Right" Content="↺ Reset" Command="{Binding ResetTransformCommand}"
+                        Padding="6,2" FontSize="10" ToolTip="Redefinir posição/escala" />
+                <TextBlock Text="TRANSFORMAR" Foreground="{StaticResource FgDim}" FontSize="10"
+                           FontWeight="Bold" VerticalAlignment="Center" />
+              </DockPanel>
 
-        <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Nome" Margin="0,0,6,4" />
-        <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,12,4" />
-        <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Text="Modo" Margin="0,0,6,4" />
-        <ComboBox Grid.Row="1" Grid.Column="3"
-                  ItemsSource="{Binding DataContext.Grid.PlayModes, RelativeSource={RelativeSource AncestorType=Window}}"
-                  SelectedItem="{Binding PlayMode, Mode=TwoWay}" Margin="0,0,12,4" />
-        <TextBlock Grid.Row="1" Grid.Column="4" VerticalAlignment="Center" Text="Autopilot" Margin="0,0,6,4" />
-        <ComboBox Grid.Row="1" Grid.Column="5"
-                  ItemsSource="{Binding DataContext.Grid.AutopilotActions, RelativeSource={RelativeSource AncestorType=Window}}"
-                  SelectedItem="{Binding Autopilot, Mode=TwoWay}" Margin="0,0,0,4" />
-        <StackPanel Grid.Row="1" Grid.Column="6" Orientation="Horizontal" Margin="12,0,0,4">
-          <TextBlock Text="Velocidade" VerticalAlignment="Center" Margin="0,0,6,0" />
-          <Slider Width="110" Minimum="0.1" Maximum="4" Value="{Binding Speed, Mode=TwoWay}" VerticalAlignment="Center" />
-          <TextBlock Text="{Binding Speed, StringFormat={}{0:F1}×}" VerticalAlignment="Center" Margin="6,0,0,0" />
-        </StackPanel>
+              <Grid DockPanel.Dock="Bottom" Margin="0,5,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="X" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="Y" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="ESCALA H" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="ESCALA V" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding PositionX, Mode=TwoWay, StringFormat=F2}"
+                          ToolTip="Posição X (fração da composição)" Margin="0,1,2,0" TextAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PositionY, Mode=TwoWay, StringFormat=F2}"
+                          ToolTip="Posição Y (fração da composição)" Margin="2,1,2,0" TextAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding ScaleX, Mode=TwoWay, StringFormat=F2}"
+                          ToolTip="Escala horizontal" Margin="2,1,2,0" TextAlignment="Center" />
+                <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding ScaleY, Mode=TwoWay, StringFormat=F2}"
+                          ToolTip="Escala vertical" Margin="2,1,0,0" TextAlignment="Center" />
+              </Grid>
 
-        <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="In / Out (s)" Margin="0,0,6,0" />
-        <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Margin="0,0,12,0">
-          <TextBox Width="70" Text="{Binding InPointText, UpdateSourceTrigger=LostFocus}" />
-          <TextBlock Text=" / " VerticalAlignment="Center" />
-          <TextBox Width="70" Text="{Binding OutPointText, UpdateSourceTrigger=LostFocus}" />
-        </StackPanel>
-        <TextBlock Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" Text="Dur. imagem" Margin="0,0,6,0" />
-        <TextBox Grid.Row="2" Grid.Column="3" Text="{Binding ImageDurationText, UpdateSourceTrigger=LostFocus}" Margin="0,0,12,0" />
-        <TextBlock Grid.Row="2" Grid.Column="4" VerticalAlignment="Center" Text="Resize" Margin="0,0,6,0" />
-        <ComboBox Grid.Row="2" Grid.Column="5"
-                  ItemsSource="{Binding DataContext.Grid.ResizeModes, RelativeSource={RelativeSource AncestorType=Window}}"
-                  SelectedItem="{Binding Resize, Mode=TwoWay}" />
-        <StackPanel Grid.Row="2" Grid.Column="6" Orientation="Horizontal" Margin="12,0,0,0">
-          <TextBlock Text="Volume" VerticalAlignment="Center" Margin="0,0,6,0" />
-          <Slider Width="110" Minimum="0" Maximum="1" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
-          <CheckBox Content="Mute" IsChecked="{Binding Mute, Mode=TwoWay}" Margin="10,0,0,0" />
-        </StackPanel>
-
-        <!-- Trim estilo Resolume: barra da duração inteira, alças arrastáveis de In/Out -->
-        <TextBlock Grid.Row="3" VerticalAlignment="Center" Text="Trim" Margin="0,8,6,0" />
-        <controls:TrimBar Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="6" Height="26" Margin="0,8,0,0"
-                          Duration="{Binding Duration}"
-                          InPoint="{Binding TrimIn, Mode=TwoWay}"
-                          OutPoint="{Binding TrimOut, Mode=TwoWay}"
-                          ScrubSeconds="{Binding ScrubSeconds, Mode=OneWayToSource}"
-                          Playhead="{Binding PlayheadSeconds}" />
-      </Grid>
+              <controls:TransformGizmo PositionX="{Binding PositionX, Mode=TwoWay}"
+                                        PositionY="{Binding PositionY, Mode=TwoWay}"
+                                        ScaleX="{Binding ScaleX, Mode=TwoWay}"
+                                        ScaleY="{Binding ScaleY, Mode=TwoWay}"
+                                        StageWidth="{Binding DataContext.Grid.Model.Width, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        StageHeight="{Binding DataContext.Grid.Model.Height, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Thumbnail="{Binding PreviewImagePath}" />
+            </DockPanel>
+          </Border>
+        </Grid>
+      </DockPanel>
     </Border>
 
     <!-- ═══ Área central: grade (esq.) + dock Files/Preview (dir.), como no Resolume ═══ -->
@@ -452,8 +498,15 @@
       </DockPanel>
     </Border>
 
-    <!-- ═══ Dock direito: FILES (navegador de pastas) + PREVIEW do clip selecionado ═══ -->
+    <!-- ═══ Dock direito: abas FILES / SOURCES + PREVIEW do clip selecionado ═══ -->
     <DockPanel Grid.Column="1" Margin="6,0,0,0">
+
+      <!-- Abas FILES / SOURCES, estilo Resolume -->
+      <UniformGrid DockPanel.Dock="Top" Rows="1" Columns="2" Margin="0,0,0,4">
+        <ToggleButton Content="Files" IsChecked="{Binding ShowSourcesTab, Converter={StaticResource InverseBoolConverter}}"
+                      Padding="0,4" />
+        <ToggleButton Content="Sources" IsChecked="{Binding ShowSourcesTab}" Padding="0,4" />
+      </UniformGrid>
 
       <!-- PREVIEW (embaixo das pastas): mostra o arquivo clicado na lista Files -->
       <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
@@ -470,9 +523,9 @@
         </StackPanel>
       </Border>
 
-      <!-- FILES (preenche) -->
+      <!-- FILES (navegador de pastas) -->
       <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
-              Padding="6">
+              Padding="6" Visibility="{Binding ShowSourcesTab, Converter={StaticResource InverseBoolToVisibilityConverter}}">
         <DockPanel>
           <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
             <TextBlock DockPanel.Dock="Left" Text="FILES" Foreground="{StaticResource FgDim}" FontSize="10"
@@ -500,6 +553,40 @@
                 <StackPanel Orientation="Horizontal">
                   <TextBlock Text="{Binding Icon}" FontSize="11" Margin="0,0,5,0" />
                   <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+
+      <!-- SOURCES: recentes/favoritos (funcional) + NDI (aguardando runtime instalado) -->
+      <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
+              Padding="6" Visibility="{Binding ShowSourcesTab, Converter={StaticResource BoolToVisibilityConverter}}">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Text="SOURCES" Foreground="{StaticResource FgDim}" FontSize="10"
+                     FontWeight="Bold" Margin="0,0,0,4" />
+
+          <!-- NDI: sem o runtime instalado, a seção fica visível mas desabilitada. -->
+          <Border DockPanel.Dock="Bottom" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}"
+                  BorderThickness="1" Padding="6" Margin="0,6,0,0">
+            <StackPanel IsEnabled="False">
+              <TextBlock Text="NDI" FontSize="11" FontWeight="Bold" Foreground="{StaticResource FgDim}" />
+              <TextBlock Text="Instale o NDI Runtime pra listar fontes de rede aqui."
+                         FontSize="10" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,3,0,0" />
+            </StackPanel>
+          </Border>
+
+          <TextBlock DockPanel.Dock="Bottom" Text="duplo-clique envia p/ célula selecionada" FontSize="9"
+                     Foreground="{StaticResource FgDim}" Margin="0,6,0,0" />
+
+          <TextBlock DockPanel.Dock="Top" Text="Recentes" FontSize="10" Foreground="{StaticResource FgDim}" Margin="0,0,0,3" />
+          <ListBox ItemsSource="{Binding Grid.RecentSources}" MouseDoubleClick="OnRecentSourceDoubleClick">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Orientation="Horizontal" ToolTip="{Binding}">
+                  <TextBlock Text="🕒" FontSize="11" Margin="0,0,5,0" />
+                  <TextBlock Text="{Binding Converter={StaticResource FileNameConverter}}" FontSize="11" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
               </DataTemplate>
             </ListBox.ItemTemplate>
