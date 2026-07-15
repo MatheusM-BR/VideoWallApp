@@ -1,0 +1,96 @@
+<Window x:Class="VideoWallRW.App.HelpWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Ajuda — Como usar o VideoWallRW" Height="700" Width="820"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
+  <DockPanel Margin="14">
+    <TextBlock DockPanel.Dock="Top" Text="Guia rápido de operação" FontSize="20" FontWeight="Bold" Margin="0,0,0,4" />
+    <TextBlock DockPanel.Dock="Top" Text="Passo a passo do dia a dia — do carregar mídia ao colocar no telão."
+               Foreground="{StaticResource FgDim}" Margin="0,0,0,14" />
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <StackPanel>
+
+        <TextBlock Text="1. Carregar mídia" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+          Use o painel <Bold>FILES</Bold> (canto superior direito) para navegar até a pasta com os vídeos/imagens —
+          ele já abre em <Italic>C:\Video Wall</Italic>, a pasta padrão da operação. Arraste o arquivo direto para
+          a célula da grade onde ele deve entrar, ou dê duplo-clique para mandar para a célula selecionada.
+        </TextBlock>
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
+          Fotos e vídeos já entram com <Bold>Autopilot: PlayNextClip</Bold> (avançam sozinhos pro próximo) e fotos
+          ficam <Bold>7 segundos</Bold> no ar por padrão — ajustável no painel CLIP.
+        </TextBlock>
+
+        <TextBlock Text="2. Disparar clipes" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+          Clique na <Bold>miniatura</Bold> da célula (parte de cima) para colocar o clipe no ar. Clique no
+          <Bold>nome</Bold> (barra de baixo) para só selecionar, sem trocar o que está tocando — assim dá pra ajustar
+          um clipe sem interromper o telão. O número da coluna no topo dispara a coluna inteira (todas as layers).
+        </TextBlock>
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
+          Botão direito na célula: <Bold>Limpar célula</Bold>, <Bold>Editar imagem...</Bold>. Botão direito na
+          coluna: limpar, clonar, adicionar antes/depois, remover. Botão direito na layer: duplicar, limpar.
+        </TextBlock>
+
+        <TextBlock Text="3. Controles gerais" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+          <Bold>BLACKOUT</Bold> escurece a saída sem mexer no master fader — desligar volta exatamente de onde
+          estava. <Bold>AUTOPILOT ON/OFF</Bold> (barra superior ou tecla <Bold>Espaço</Bold>) liga/desliga a troca
+          automática em todas as layers de uma vez; cada layer também tem seu próprio botão ▶/⏸.
+        </TextBlock>
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
+          <Bold>Ctrl+C</Bold> / <Bold>Ctrl+V</Bold> com uma célula selecionada copia e cola o clipe (com todas as
+          configurações) para outra célula.
+        </TextBlock>
+
+        <TextBlock Text="4. Saídas (monitores/telões)" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+          Na linha <Bold>SAÍDAS</Bold> (rodapé), marque o monitor para ativá-lo. O combo ao lado escolhe o que ele
+          exibe: a <Bold>composição inteira</Bold> (todas as layers misturadas) ou uma <Bold>layer isolada</Bold>.
+        </TextBlock>
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
+          Para recortar/posicionar em vários projetores ou telas recortadas, use <Bold>Avançado → Advanced
+          Output...</Bold> — lá dá pra criar múltiplos slices por tela, cada um com seu recorte de entrada e posição
+          de saída, arrastando direto no canvas.
+        </TextBlock>
+
+        <TextBlock Text="5. Cenas" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
+          <Bold>+ Salvar cena</Bold> guarda o estado inteiro da grade (clipe ativo e opacidade de cada layer, master
+          fader) num botão — um clique dispara tudo de volta. Botão direito no chip da cena: renomear ou excluir
+          (com confirmação).
+        </TextBlock>
+
+        <TextBlock Text="6. Editor de imagem" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
+          Abre pelo menu de contexto de uma célula de imagem ("Editar imagem...") ou pelos botões da Agenda/PDF.
+          As ferramentas ficam na barra de cima; as opções de cada ferramenta aparecem no painel à direita —
+          igual ao Paint 3D. <Bold>Recortar</Bold> tem presets de proporção e o quadro fica móvel/redimensionável
+          depois de criado. <Bold>Tela</Bold> redimensiona a imagem ou só a moldura, com guias arrastáveis.
+        </TextBlock>
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
+          Depois de editar, arraste o chip <Bold>"🖼 ARRASTE p/ célula"</Bold> até a célula da grade onde a imagem
+          deve entrar. Se você abriu o editor a partir de uma célula existente, <Bold>Salvar</Bold> já atualiza o
+          clipe no ar, sem precisar arrastar de novo.
+        </TextBlock>
+
+        <TextBlock Text="7. Agenda de leilões" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
+          O botão <Bold>🗓 Agenda</Bold> busca os leilões do dia no site, baixa banners em alta resolução e permite
+          extrair páginas de catálogos em PDF como imagem — tudo salvo em <Italic>C:\Video Wall\Agenda\...</Italic>,
+          pronto pra arrastar pra grade.
+        </TextBlock>
+
+        <TextBlock Text="8. Modo instalação fixa" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,6">
+          Em <Bold>Avançado → Instalação...</Bold> dá pra configurar um sequenciador automático de colunas, regras
+          de agenda (horário/dia da semana) e pastas monitoradas (arquivos novos viram clipes sozinhos). Ligar
+          "Iniciar com o Windows" faz o programa abrir automaticamente sem operador — útil pra telões fixos.
+        </TextBlock>
+
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

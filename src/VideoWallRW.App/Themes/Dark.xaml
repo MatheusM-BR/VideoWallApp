@@ -214,6 +214,104 @@
     </Setter>
   </Style>
 
+  <Style TargetType="ContextMenu">
+    <Setter Property="Background" Value="{StaticResource PanelBg}" />
+    <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    <Setter Property="BorderBrush" Value="{StaticResource BorderDim}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="ContextMenu">
+          <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" Padding="2">
+            <StackPanel IsItemsHost="True" />
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="MenuItem">
+    <Setter Property="Foreground" Value="{StaticResource Fg}" />
+    <Setter Property="Padding" Value="8,5" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="MenuItem">
+          <Grid>
+            <Border x:Name="Root" Background="Transparent">
+              <Grid Margin="{TemplateBinding Padding}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center"
+                                  RecognizesAccessKey="True" />
+              </Grid>
+            </Border>
+            <Popup x:Name="Popup" Placement="Right" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                   AllowsTransparency="True" Focusable="False">
+              <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="2">
+                <StackPanel IsItemsHost="True" />
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+              <Setter TargetName="Root" Property="Background" Value="{StaticResource AccentDim}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource FgDim}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <Style TargetType="Separator">
+    <Setter Property="Background" Value="{StaticResource BorderDim}" />
+    <Setter Property="Height" Value="1" />
+    <Setter Property="Margin" Value="4,3" />
+  </Style>
+
+  <Style TargetType="Menu">
+    <Setter Property="Background" Value="{StaticResource PanelBg}" />
+    <Setter Property="Foreground" Value="{StaticResource Fg}" />
+  </Style>
+
+  <!-- MenuItem de nível superior (barra de menu, ex.: Arquivo/Avançado) — precisa de
+       template próprio porque o de contexto acima é para itens de submenu. -->
+  <Style x:Key="TopMenuItem" TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="MenuItem">
+          <Grid>
+            <Border x:Name="Root" Background="{StaticResource CellBg}" BorderBrush="{StaticResource BorderDim}"
+                    BorderThickness="1" CornerRadius="2" Padding="10,5">
+              <ContentPresenter ContentSource="Header" RecognizesAccessKey="True" />
+            </Border>
+            <Popup x:Name="Popup" Placement="Bottom" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                   AllowsTransparency="True" Focusable="False" StaysOpen="False">
+              <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="2"
+                      MinWidth="180">
+                <StackPanel IsItemsHost="True" />
+              </Border>
+            </Popup>
+          </Grid>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Root" Property="Background" Value="{StaticResource CellHoverBg}" />
+            </Trigger>
+            <Trigger Property="IsSubmenuOpen" Value="True">
+              <Setter TargetName="Root" Property="Background" Value="{StaticResource AccentDim}" />
+              <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource Accent}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <Style TargetType="TabControl">
     <Setter Property="Background" Value="{StaticResource PanelBg}" />
     <Setter Property="BorderBrush" Value="{StaticResource BorderDim}" />

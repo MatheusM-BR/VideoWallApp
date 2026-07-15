@@ -6,12 +6,14 @@ using Microsoft.Win32;
 
 namespace VideoWallRW.App.ViewModels;
 
-public sealed class FileBrowserItem
+public sealed partial class FileBrowserItem : ObservableObject
 {
     public required string Name { get; init; }
     public required string FullPath { get; init; }
     public required bool IsFolder { get; init; }
     public string Icon => IsFolder ? "📁" : "🎞";
+
+    [ObservableProperty] private string? _thumbnailPath;
 }
 
 /// <summary>
@@ -28,6 +30,9 @@ public sealed partial class FileBrowserViewModel : ObservableObject
 
     [ObservableProperty] private string _currentFolder = "";
 
+    /// <summary>Item clicado na lista — alimenta o painel PREVIEW abaixo das pastas.</summary>
+    [ObservableProperty] private FileBrowserItem? _selectedItem;
+
     public ObservableCollection<FileBrowserItem> Items { get; } = [];
 
     public FileBrowserViewModel(Action<string> sendToCell)
@@ -35,6 +40,16 @@ public sealed partial class FileBrowserViewModel : ObservableObject
         _sendToCell = sendToCell;
         // Padrão da operação: abre sempre em C:\Video Wall (criada se não existir).
         Navigate(AppPaths.EnsureMediaRoot());
+    }
+
+    partial void OnSelectedItemChanged(FileBrowserItem? value)
+    {
+        if (value is null || value.IsFolder) return;
+        ThumbnailProvider.Request(value.FullPath, thumb =>
+        {
+            if (SelectedItem == value) // pode ter trocado a seleção enquanto gerava
+                value.ThumbnailPath = thumb;
+        });
     }
 
     [RelayCommand]
@@ -71,6 +86,7 @@ public sealed partial class FileBrowserViewModel : ObservableObject
             return;
 
         CurrentFolder = folder;
+        SelectedItem = null;
         Items.Clear();
         try
         {

@@ -11,16 +11,24 @@
     <Border DockPanel.Dock="Top" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
             BorderThickness="1" Padding="6" Margin="0,0,0,6">
       <DockPanel>
-        <Button DockPanel.Dock="Left" Content="Novo" Command="{Binding NewProjectCommand}" Margin="0,0,3,0" />
-        <Button DockPanel.Dock="Left" Content="Abrir" Command="{Binding OpenProjectCommand}" Margin="0,0,3,0" />
-        <Button DockPanel.Dock="Left" Content="Salvar" Command="{Binding SaveProjectCommand}" Margin="0,0,3,0" />
-        <Button DockPanel.Dock="Left" Content="Salvar como" Command="{Binding SaveProjectAsCommand}" Margin="0,0,12,0" />
+        <Menu DockPanel.Dock="Left" Background="Transparent" Margin="0,0,12,0">
+          <MenuItem Header="Arquivo" Style="{StaticResource TopMenuItem}" Margin="0,0,3,0">
+            <MenuItem Header="Novo" Command="{Binding NewProjectCommand}" />
+            <MenuItem Header="Abrir..." Command="{Binding OpenProjectCommand}" />
+            <Separator />
+            <MenuItem Header="Salvar" Command="{Binding SaveProjectCommand}" />
+            <MenuItem Header="Salvar como..." Command="{Binding SaveProjectAsCommand}" />
+          </MenuItem>
+          <MenuItem Header="Avançado" Style="{StaticResource TopMenuItem}">
+            <MenuItem Header="🖥 Advanced Output..." Command="{Binding OpenOutputSetupCommand}" />
+            <MenuItem Header="⚡ Conversor HAP..." Command="{Binding OpenHapConverterCommand}" />
+            <MenuItem Header="⌨ Atalhos..." Command="{Binding OpenKeymapEditorCommand}" />
+            <MenuItem Header="⚙ Instalação..." Command="{Binding OpenInstallationCommand}" />
+          </MenuItem>
+        </Menu>
 
-        <Button DockPanel.Dock="Left" Content="🖥 Output" Command="{Binding OpenOutputSetupCommand}" Margin="0,0,3,0" />
-        <Button DockPanel.Dock="Left" Content="⚙ Instalação" Command="{Binding OpenInstallationCommand}" Margin="0,0,3,0" />
-        <Button DockPanel.Dock="Left" Content="🗓 Agenda" Command="{Binding OpenAgendaCommand}" Margin="0,0,3,0" />
-        <Button DockPanel.Dock="Left" Content="⚡ HAP" Command="{Binding OpenHapConverterCommand}" Margin="0,0,3,0" />
-        <Button DockPanel.Dock="Left" Content="⌨ Atalhos" Command="{Binding OpenKeymapEditorCommand}" Margin="0,0,12,0" />
+        <Button DockPanel.Dock="Left" Content="❓ Ajuda" Command="{Binding OpenHelpCommand}" Margin="0,0,12,0" />
+        <Button DockPanel.Dock="Left" Content="🗓 Agenda" Command="{Binding OpenAgendaCommand}" Margin="0,0,12,0" />
 
         <ToggleButton DockPanel.Dock="Left" Content="▶ SEQ" IsChecked="{Binding SequencerRunning}"
                       ToolTip="Sequenciador de colunas (Instalação)" Margin="0,0,3,0" />
@@ -397,23 +405,18 @@
     <!-- ═══ Dock direito: FILES (navegador de pastas) + PREVIEW do clip selecionado ═══ -->
     <DockPanel Grid.Column="1" Margin="6,0,0,0">
 
-      <!-- PREVIEW (embaixo) -->
+      <!-- PREVIEW (embaixo das pastas): mostra o arquivo clicado na lista Files -->
       <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
-              BorderThickness="1" Padding="6" Margin="0,6,0,0" DataContext="{Binding Grid.SelectedClip}">
+              BorderThickness="1" Padding="6" Margin="0,6,0,0" DataContext="{Binding FileBrowser.SelectedItem}">
         <StackPanel>
           <TextBlock Text="PREVIEW" Foreground="{StaticResource FgDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,4" />
           <Border Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
                   Height="128" ClipToBounds="True">
-            <!-- Durante o scrub da TrimBar mostra o frame do instante sendo definido -->
-            <Image Source="{Binding PreviewImagePath}" Stretch="Uniform" />
+            <Image Source="{Binding ThumbnailPath}" Stretch="Uniform" />
           </Border>
           <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,0"
-                     TextTrimming="CharacterEllipsis" />
-          <TextBlock FontSize="10" Foreground="{StaticResource FgDim}">
-            <Run Text="Duração: " /><Run Text="{Binding Duration, Mode=OneWay, StringFormat={}{0:F1}s}" />
-            <Run Text="   In/Out: " /><Run Text="{Binding TrimIn, Mode=OneWay, StringFormat={}{0:F1}}" />
-            <Run Text=" → " /><Run Text="{Binding TrimOut, Mode=OneWay, StringFormat={}{0:F1}}" />
-          </TextBlock>
+                     TextTrimming="CharacterEllipsis"
+                     Visibility="{Binding Converter={StaticResource NotNullToVisibilityConverter}}" />
         </StackPanel>
       </Border>
 
@@ -438,6 +441,7 @@
           <TextBlock DockPanel.Dock="Bottom" Text="duplo-clique envia p/ célula · arraste p/ grade" FontSize="9"
                      Foreground="{StaticResource FgDim}" Margin="0,4,0,0" />
           <ListBox x:Name="FileList" ItemsSource="{Binding FileBrowser.Items}"
+                   SelectedItem="{Binding FileBrowser.SelectedItem, Mode=TwoWay}"
                    MouseDoubleClick="OnFileListDoubleClick"
                    PreviewMouseLeftButtonDown="OnFileListMouseDown"
                    PreviewMouseMove="OnFileListMouseMove">

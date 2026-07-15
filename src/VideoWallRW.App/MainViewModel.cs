@@ -184,6 +184,13 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void OpenHelp()
+    {
+        var window = new HelpWindow { Owner = Application.Current.MainWindow };
+        window.Show();
+    }
+
+    [RelayCommand]
     private void OpenAgenda()
     {
         var vm = new ViewModels.AgendaViewModel(OpenImageEditorForFile, OpenPdfImporter);
