@@ -95,6 +95,9 @@
     </Style.Triggers>
   </Style>
 
+  <!-- TextBox precisa de ControlTemplate próprio: sem isso, o chrome do Windows
+       assume o fundo (principalmente desabilitado — cinza-claro do sistema, ilegível
+       no tema escuro) mesmo com Background/Foreground setados via Style. -->
   <Style TargetType="TextBox">
     <Setter Property="Background" Value="{StaticResource InputBg}" />
     <Setter Property="Foreground" Value="{StaticResource Fg}" />
@@ -103,11 +106,63 @@
     <Setter Property="CaretBrush" Value="{StaticResource Fg}" />
     <Setter Property="Padding" Value="3,1" />
     <Setter Property="SelectionBrush" Value="{StaticResource AccentDim}" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="TextBox">
+          <Border x:Name="Root" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="2">
+            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                          VerticalAlignment="Center" Focusable="False" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsFocused" Value="True">
+              <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource Accent}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter TargetName="Root" Property="Background" Value="{StaticResource PanelBg}" />
+              <Setter TargetName="Root" Property="BorderBrush" Value="{StaticResource BorderDim}" />
+              <Setter Property="Foreground" Value="{StaticResource FgDim}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
   </Style>
 
+  <!-- CheckBox precisa de ControlTemplate próprio pelo mesmo motivo: o glyph do
+       Windows é uma caixa clara com marca escura — quase invisível no tema escuro. -->
   <Style TargetType="CheckBox">
     <Setter Property="Foreground" Value="{StaticResource Fg}" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="CheckBox">
+          <StackPanel Orientation="Horizontal">
+            <Border x:Name="Box" Width="15" Height="15" Background="{StaticResource InputBg}"
+                    BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2"
+                    VerticalAlignment="Center">
+              <Path x:Name="Check" Data="M 2,7 L 6,11 L 13,3" Stroke="{StaticResource Accent}"
+                    StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                    StrokeLineJoin="Round" Visibility="Collapsed" />
+            </Border>
+            <ContentPresenter Margin="6,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True" />
+          </StackPanel>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+              <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="Box" Property="BorderBrush" Value="{StaticResource Accent}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource FgDim}" />
+              <Setter TargetName="Box" Property="Background" Value="{StaticResource PanelBg}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
   </Style>
 
   <Style TargetType="Slider">
