@@ -1,7 +1,8 @@
 <Window x:Class="VideoWallRW.App.OutputSetupWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Advanced Output" Height="640" Width="980"
+        xmlns:controls="clr-namespace:VideoWallRW.App.Controls"
+        Title="Advanced Output" Height="760" Width="1180"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
   <DockPanel Margin="10">
@@ -90,34 +91,46 @@
                     </DockPanel>
                     <Grid>
                       <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" /><ColumnDefinition Width="70" />
-                        <ColumnDefinition Width="70" /><ColumnDefinition Width="70" /><ColumnDefinition Width="70" />
-                        <ColumnDefinition Width="20" />
-                        <ColumnDefinition Width="Auto" /><ColumnDefinition Width="70" />
-                        <ColumnDefinition Width="70" /><ColumnDefinition Width="70" /><ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="*" />
                       </Grid.ColumnDefinitions>
-                      <Grid.RowDefinitions>
-                        <RowDefinition /><RowDefinition />
-                      </Grid.RowDefinitions>
-                      <TextBlock Text="Input (comp.)" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,4,2" />
-                      <TextBlock Text="X" Grid.Row="1" Grid.Column="1" HorizontalAlignment="Center" FontSize="9" />
-                      <TextBlock Text="Y" Grid.Row="1" Grid.Column="2" HorizontalAlignment="Center" FontSize="9" />
-                      <TextBlock Text="W" Grid.Row="1" Grid.Column="3" HorizontalAlignment="Center" FontSize="9" />
-                      <TextBlock Text="H" Grid.Row="1" Grid.Column="4" HorizontalAlignment="Center" FontSize="9" />
-                      <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding InputX, UpdateSourceTrigger=PropertyChanged}" />
-                      <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding InputY, UpdateSourceTrigger=PropertyChanged}" />
-                      <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding InputWidth, UpdateSourceTrigger=PropertyChanged}" />
-                      <TextBox Grid.Row="0" Grid.Column="4" Text="{Binding InputHeight, UpdateSourceTrigger=PropertyChanged}" />
 
-                      <TextBlock Text="Output (monitor)" Grid.Row="0" Grid.Column="6" VerticalAlignment="Center" Margin="0,0,4,2" />
-                      <TextBlock Text="X" Grid.Row="1" Grid.Column="7" HorizontalAlignment="Center" FontSize="9" />
-                      <TextBlock Text="Y" Grid.Row="1" Grid.Column="8" HorizontalAlignment="Center" FontSize="9" />
-                      <TextBlock Text="W" Grid.Row="1" Grid.Column="9" HorizontalAlignment="Center" FontSize="9" />
-                      <TextBlock Text="H" Grid.Row="1" Grid.Column="10" HorizontalAlignment="Center" FontSize="9" />
-                      <TextBox Grid.Row="0" Grid.Column="7" Text="{Binding OutputX, UpdateSourceTrigger=PropertyChanged}" />
-                      <TextBox Grid.Row="0" Grid.Column="8" Text="{Binding OutputY, UpdateSourceTrigger=PropertyChanged}" />
-                      <TextBox Grid.Row="0" Grid.Column="9" Text="{Binding OutputWidth, UpdateSourceTrigger=PropertyChanged}" />
-                      <TextBox Grid.Row="0" Grid.Column="10" Text="{Binding OutputHeight, UpdateSourceTrigger=PropertyChanged}" />
+                      <!-- Recorte de entrada: arrasta/redimensiona contra o tamanho da composição -->
+                      <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                        <TextBlock Text="Recorte da composição (entrada)" FontSize="10"
+                                   Foreground="{StaticResource FgDim}" Margin="0,0,0,3" />
+                        <Border BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Height="150">
+                          <controls:RectStageEditor
+                              StageWidth="{Binding DataContext.CompWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                              StageHeight="{Binding DataContext.CompHeight, RelativeSource={RelativeSource AncestorType=Window}}"
+                              RectX="{Binding InputX, Mode=TwoWay}" RectY="{Binding InputY, Mode=TwoWay}"
+                              RectWidth="{Binding InputWidth, Mode=TwoWay}" RectHeight="{Binding InputHeight, Mode=TwoWay}" />
+                        </Border>
+                        <UniformGrid Rows="1" Columns="4" Margin="0,3,0,0">
+                          <TextBox Text="{Binding InputX, UpdateSourceTrigger=PropertyChanged, StringFormat=F0}" ToolTip="X" Margin="1,0" />
+                          <TextBox Text="{Binding InputY, UpdateSourceTrigger=PropertyChanged, StringFormat=F0}" ToolTip="Y" Margin="1,0" />
+                          <TextBox Text="{Binding InputWidth, UpdateSourceTrigger=PropertyChanged, StringFormat=F0}" ToolTip="Largura" Margin="1,0" />
+                          <TextBox Text="{Binding InputHeight, UpdateSourceTrigger=PropertyChanged, StringFormat=F0}" ToolTip="Altura" Margin="1,0" />
+                        </UniformGrid>
+                      </StackPanel>
+
+                      <!-- Posição de saída: arrasta/redimensiona contra o tamanho do monitor -->
+                      <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                        <TextBlock Text="Posição na tela (saída)" FontSize="10"
+                                   Foreground="{StaticResource FgDim}" Margin="0,0,0,3" />
+                        <Border BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Height="150">
+                          <controls:RectStageEditor
+                              StageWidth="{Binding DataContext.MonitorWidth, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                              StageHeight="{Binding DataContext.MonitorHeight, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                              RectX="{Binding OutputX, Mode=TwoWay}" RectY="{Binding OutputY, Mode=TwoWay}"
+                              RectWidth="{Binding OutputWidth, Mode=TwoWay}" RectHeight="{Binding OutputHeight, Mode=TwoWay}" />
+                        </Border>
+                        <UniformGrid Rows="1" Columns="4" Margin="0,3,0,0">
+                          <TextBox Text="{Binding OutputX, UpdateSourceTrigger=PropertyChanged, StringFormat=F0}" ToolTip="X" Margin="1,0" />
+                          <TextBox Text="{Binding OutputY, UpdateSourceTrigger=PropertyChanged, StringFormat=F0}" ToolTip="Y" Margin="1,0" />
+                          <TextBox Text="{Binding OutputWidth, UpdateSourceTrigger=PropertyChanged, StringFormat=F0}" ToolTip="Largura" Margin="1,0" />
+                          <TextBox Text="{Binding OutputHeight, UpdateSourceTrigger=PropertyChanged, StringFormat=F0}" ToolTip="Altura" Margin="1,0" />
+                        </UniformGrid>
+                      </StackPanel>
                     </Grid>
                   </StackPanel>
                 </Border>

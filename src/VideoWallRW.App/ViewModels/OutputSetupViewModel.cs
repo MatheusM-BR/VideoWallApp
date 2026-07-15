@@ -27,6 +27,10 @@ public sealed partial class OutputSetupViewModel : ObservableObject
     public IReadOnlyList<MonitorInfo> AvailableMonitors { get; }
     public IReadOnlyList<Rotation> Rotations { get; } = Enum.GetValues<Rotation>();
 
+    /// <summary>Tamanho da composição — palco do editor visual de "Input" de cada slice.</summary>
+    public double CompWidth => _compWidth();
+    public double CompHeight => _compHeight();
+
     [ObservableProperty] private bool _identify;
     [ObservableProperty] private string _presetName = "default";
     [ObservableProperty] private string _statusText = "";
