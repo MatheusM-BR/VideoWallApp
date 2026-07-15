@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -57,6 +58,11 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         "#FFF200", "#22B14C", "#00A2E8", "#3F48CC", "#A349A4", "#B97A57",
     ];
 
+    private const int MaxColorHistory = 12;
+
+    /// <summary>Cores pegas com o conta-gotas, mais recente primeiro — clicável igual à Palette.</summary>
+    public ObservableCollection<string> ColorHistory { get; } = [];
+
     public event Action? BitmapChanged;
 
     public ImageEditorViewModel(string sourcePath, Action<string, string>? onSaved = null,
@@ -79,6 +85,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
         AspectPresets =
         [
+            new AspectPreset("Original", _bitmap.Width / (double)_bitmap.Height),
             new AspectPreset("Livre", null),
             new AspectPreset("16:9", 16.0 / 9),
             new AspectPreset("9:16", 9.0 / 16),
@@ -90,6 +97,8 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         if (sliceAspects is not null)
             for (int i = 0; i < sliceAspects.Count; i++)
                 AspectPresets.Add(new AspectPreset($"Slice {i + 1}", sliceAspects[i]));
+        // "Fixar proporção" já vem ativo por padrão (T9) — sem um preset com razão
+        // definida ele não travava nada, então o padrão é a proporção original da imagem.
         SelectedPreset = AspectPresets[0];
     }
 
@@ -170,6 +179,11 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         BrushColor = color;
         BrushColorHex = $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
         StatusText = $"Cor capturada: {BrushColorHex}";
+
+        ColorHistory.Remove(BrushColorHex);
+        ColorHistory.Insert(0, BrushColorHex);
+        while (ColorHistory.Count > MaxColorHistory)
+            ColorHistory.RemoveAt(ColorHistory.Count - 1);
     }
 
     // ── Balde de tinta (flood fill com tolerância) ───────────────────────────

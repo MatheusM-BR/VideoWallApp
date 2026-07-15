@@ -22,6 +22,13 @@ public partial class ImageEditorWindow : Window
     private CropDragMode _cropMode;
     private SKPoint _cropAnchor; // Resize: canto oposto fixo · Move: offset do clique ao canto sup-esq.
 
+    // Mesma interação do quadro de corte, aplicada à forma: depois de desenhada ela
+    // fica pendente (editável) até "Concluir forma" — arrastar um canto redimensiona,
+    // arrastar por dentro move, fora dela começa uma forma nova.
+    private enum ShapeDragMode { None, Create, Move, Resize }
+    private ShapeDragMode _shapeMode;
+    private SKPoint _shapeAnchor;
+
     // Guias de redimensionar a TELA (estilo Paint): direita, inferior e canto.
     private enum CanvasHandle { None, N, S, E, W, NE, NW, SE, SW }
     private CanvasHandle _canvasDrag;
@@ -114,8 +121,7 @@ public partial class ImageEditorWindow : Window
                 _vm.FloodFillAt(pt);
                 break;
             case EditorTool.Shape:
-                _dragStart = pt;
-                _liveShape = (pt, pt);
+                BeginShapeDrag(pt);
                 break;
             case EditorTool.Text:
                 _vm.ApplyText(pt);
@@ -146,9 +152,9 @@ public partial class ImageEditorWindow : Window
             _lastPaintPoint = pt;
             Canvas.InvalidateVisual();
         }
-        else if (_vm.Tool == EditorTool.Shape && _dragStart is { } shapeStart)
+        else if (_vm.Tool == EditorTool.Shape && _shapeMode != ShapeDragMode.None)
         {
-            _liveShape = (shapeStart, pt);
+            ContinueShapeDrag(pt);
             Canvas.InvalidateVisual();
         }
     }
@@ -157,25 +163,28 @@ public partial class ImageEditorWindow : Window
     {
         Canvas.ReleaseMouseCapture();
 
-        if (_vm.Tool == EditorTool.Shape && _liveShape is { } shape &&
-            (Math.Abs(shape.B.X - shape.A.X) > 2 || Math.Abs(shape.B.Y - shape.A.Y) > 2))
+        // A forma fica pendente (editável — mover/redimensionar) até "Concluir forma",
+        // igual ao quadro de corte; descarta só se ficou minúscula (clique acidental).
+        if (_vm.Tool == EditorTool.Shape && _shapeMode == ShapeDragMode.Create && _liveShape is { } newShape &&
+            Math.Abs(newShape.B.X - newShape.A.X) <= 2 && Math.Abs(newShape.B.Y - newShape.A.Y) <= 2)
         {
-            _vm.ApplyShape(shape.A, shape.B);
+            _liveShape = null;
         }
+        _shapeMode = ShapeDragMode.None;
 
-        // Arrastar a alça só atualiza a prévia (guia tracejada + campos W/H);
-        // o resize só é efetivado ao clicar em "Aplicar", assim dá tempo de
-        // escolher "Redimensionar imagem com a tela" antes de confirmar. A guia
-        // continua visível (mostrando o tamanho pendente) até o Aplicar.
+        // Soltar a alça já aplica o resize (responsivo — sem precisar clicar em
+        // Aplicar); usa o que "Redimensionar imagem com a tela" estiver marcado
+        // NA HORA, então escolha o modo antes de arrastar.
         if (_vm.Tool == EditorTool.Canvas && _canvasDrag != CanvasHandle.None)
         {
             _canvasDrag = CanvasHandle.None;
+            if (_liveCanvasSize is { } size)
+                ApplyCanvasSize((int)size.X, (int)size.Y);
             Canvas.InvalidateVisual();
         }
 
         _dragStart = null;
         _lastPaintPoint = null;
-        _liveShape = null;
         _cropMode = CropDragMode.None; // o quadro de corte permanece, editável
         Canvas.InvalidateVisual();
     }
@@ -296,6 +305,84 @@ public partial class ImageEditorWindow : Window
         }
     }
 
+    // ── Forma: criar, mover e redimensionar antes de concluir ──────────────────
+
+    private static SKRect NormalizedShape((SKPoint A, SKPoint B) s) => new(
+        Math.Min(s.A.X, s.B.X), Math.Min(s.A.Y, s.B.Y),
+        Math.Max(s.A.X, s.B.X), Math.Max(s.A.Y, s.B.Y));
+
+    private void BeginShapeDrag(SKPoint pt)
+    {
+        float tolerance = (float)(14 / Math.Max(CanvasScale(), 0.01));
+
+        if (_liveShape is { } shape)
+        {
+            var rect = NormalizedShape(shape);
+            SKPoint[] corners =
+            [
+                new(rect.Left, rect.Top), new(rect.Right, rect.Top),
+                new(rect.Left, rect.Bottom), new(rect.Right, rect.Bottom),
+            ];
+            for (int i = 0; i < corners.Length; i++)
+            {
+                if (SKPoint.Distance(pt, corners[i]) <= tolerance)
+                {
+                    _shapeMode = ShapeDragMode.Resize;
+                    _shapeAnchor = corners[3 - i]; // canto oposto
+                    return;
+                }
+            }
+
+            if (rect.Contains(pt.X, pt.Y))
+            {
+                _shapeMode = ShapeDragMode.Move;
+                _shapeAnchor = new SKPoint(pt.X - rect.Left, pt.Y - rect.Top);
+                return;
+            }
+        }
+
+        _shapeMode = ShapeDragMode.Create;
+        _liveShape = (pt, pt);
+    }
+
+    private void ContinueShapeDrag(SKPoint pt)
+    {
+        switch (_shapeMode)
+        {
+            case ShapeDragMode.Create when _liveShape is { } s:
+                _liveShape = (s.A, pt);
+                break;
+
+            case ShapeDragMode.Resize:
+                _liveShape = (_shapeAnchor, pt);
+                break;
+
+            case ShapeDragMode.Move when _liveShape is { } s:
+                var rect = NormalizedShape(s);
+                var bmp = _vm.Bitmap;
+                float left = Math.Clamp(pt.X - _shapeAnchor.X, 0, Math.Max(bmp.Width - rect.Width, 0));
+                float top = Math.Clamp(pt.Y - _shapeAnchor.Y, 0, Math.Max(bmp.Height - rect.Height, 0));
+                _liveShape = (new SKPoint(left, top), new SKPoint(left + rect.Width, top + rect.Height));
+                break;
+        }
+    }
+
+    private void OnCancelShape(object sender, RoutedEventArgs e)
+    {
+        _liveShape = null;
+        Canvas.InvalidateVisual();
+    }
+
+    private void OnApplyShape(object sender, RoutedEventArgs e)
+    {
+        if (_liveShape is { } shape)
+        {
+            _vm.ApplyShape(shape.A, shape.B);
+            _liveShape = null;
+            Canvas.InvalidateVisual();
+        }
+    }
+
     // ── Tela: campos + guias de arrastar (direita, inferior, canto) ─────────────
 
     private bool _updatingTela;
@@ -323,13 +410,10 @@ public partial class ImageEditorWindow : Window
             _updatingTela = false;
         }
 
-        // Reflete o valor digitado na guia tracejada (prévia), pendente até Aplicar.
+        // Digitar já aplica direto (responsivo — sem precisar clicar em Aplicar).
         if (int.TryParse(TelaW.Text, out int pw) && pw > 0 &&
             int.TryParse(TelaH.Text, out int ph) && ph > 0)
-        {
-            _liveCanvasSize = new SKPoint(pw, ph);
-            Canvas.InvalidateVisual();
-        }
+            ApplyCanvasSize(pw, ph);
     }
 
     private void OnApplyCanvas(object sender, RoutedEventArgs e)
@@ -497,6 +581,15 @@ public partial class ImageEditorWindow : Window
                 case ShapeKind.Elipse: canvas.DrawOval(rect, paint); break;
                 case ShapeKind.Linha: canvas.DrawLine(a, b, paint); break;
             }
+
+            // Contorno + alças: a forma fica pendente (editável) até "Concluir forma".
+            using var outlinePaint = new SKPaint { Color = SKColors.Lime, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f };
+            canvas.DrawRect(rect, outlinePaint);
+            using var handlePaint = new SKPaint { Color = SKColors.Lime, Style = SKPaintStyle.Fill };
+            const float hs = 5;
+            foreach (var c in new[] { new SKPoint(rect.Left, rect.Top), new SKPoint(rect.Right, rect.Top),
+                                       new SKPoint(rect.Left, rect.Bottom), new SKPoint(rect.Right, rect.Bottom) })
+                canvas.DrawRect(new SKRect(c.X - hs, c.Y - hs, c.X + hs, c.Y + hs), handlePaint);
         }
     }
 }

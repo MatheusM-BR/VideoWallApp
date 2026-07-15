@@ -149,6 +149,32 @@
             </ItemsControl>
           </StackPanel>
 
+          <StackPanel Margin="0,6,0,0">
+            <StackPanel.Style>
+              <Style TargetType="StackPanel">
+                <Setter Property="Visibility" Value="Visible" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding ColorHistory.Count}" Value="0">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </StackPanel.Style>
+            <TextBlock Text="Histórico (conta-gotas)" FontSize="10" Foreground="{StaticResource FgDim}" Margin="0,0,0,3" />
+            <ItemsControl ItemsSource="{Binding ColorHistory}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><WrapPanel Width="176" /></ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Button Width="26" Height="20" Margin="1" Padding="0" BorderThickness="1"
+                          BorderBrush="{StaticResource BorderDim}" Background="{Binding}"
+                          Click="OnPaletteClick" ToolTip="{Binding}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
           <TextBlock Text="Pincel / contorno" FontSize="11" Margin="0,8,0,2" />
           <DockPanel>
             <TextBox DockPanel.Dock="Right" Text="{Binding BrushSize, UpdateSourceTrigger=PropertyChanged}" Width="36" Margin="6,0,0,0" />
@@ -158,6 +184,28 @@
           <TextBlock Text="Forma" FontSize="11" Margin="0,8,0,2" />
           <ComboBox ItemsSource="{Binding Shapes}" SelectedItem="{Binding Shape}" />
           <CheckBox Content="Preenchida" IsChecked="{Binding ShapeFilled}" Margin="0,4,0,0" />
+          <StackPanel Margin="0,6,0,0">
+            <StackPanel.Style>
+              <Style TargetType="StackPanel">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Shape}">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </StackPanel.Style>
+            <TextBlock Text="Depois de desenhar, arraste por dentro pra mover ou os cantos pra redimensionar."
+                       Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6" />
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition /><ColumnDefinition />
+              </Grid.ColumnDefinitions>
+              <Button Grid.Column="0" Content="Cancelar" Click="OnCancelShape" Margin="0,0,3,0" Padding="0,6" />
+              <Button Grid.Column="1" Content="Concluir forma" Click="OnApplyShape" Margin="3,0,0,0" Padding="0,6"
+                      Background="{StaticResource AccentDim}" BorderBrush="{StaticResource Accent}" FontWeight="Bold" />
+            </Grid>
+          </StackPanel>
 
           <TextBlock Text="Tolerância do balde" FontSize="11" Margin="0,8,0,2" />
           <DockPanel>
