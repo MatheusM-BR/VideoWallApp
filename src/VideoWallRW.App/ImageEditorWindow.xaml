@@ -126,7 +126,7 @@
             <CheckBox Content="Redimensionar imagem com a tela" IsChecked="{Binding ResizeImageWithCanvas}" Margin="0,0,0,10" />
             <Button Content="Aplicar" Click="OnApplyCanvas" Padding="0,6"
                     Background="{StaticResource AccentDim}" BorderBrush="{StaticResource Accent}" FontWeight="Bold" />
-            <TextBlock Text="Ou arraste as guias nas bordas direita/inferior da imagem."
+            <TextBlock Text="Ou arraste as guias em qualquer borda/canto da imagem — a arte original sempre fica centralizada na tela nova."
                        Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0" />
           </StackPanel>
 

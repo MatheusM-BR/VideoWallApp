@@ -281,8 +281,10 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         BitmapChanged?.Invoke();
     }
 
-    /// <summary>Redimensionar só a TELA: a imagem mantém o tamanho, ancorada no
-    /// canto superior esquerdo; área nova fica branca (igual ao Paint).</summary>
+    /// <summary>Redimensionar só a TELA: a imagem mantém o tamanho e fica
+    /// CENTRALIZADA na tela nova (área extra fica branca, igual ao Paint) — não
+    /// importa se a tela cresceu pra direita, esquerda, cima ou baixo, o desenho
+    /// original sempre aparece no meio, facilitando continuar editando em volta dele.</summary>
     public void ApplyCanvasResize(int width, int height)
     {
         if (width <= 0 || height <= 0) return;
@@ -291,7 +293,9 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         using (var canvas = new SKCanvas(canvasBitmap))
         {
             canvas.Clear(SKColors.White);
-            canvas.DrawBitmap(Bitmap, 0, 0);
+            float offsetX = (width - Bitmap.Width) / 2f;
+            float offsetY = (height - Bitmap.Height) / 2f;
+            canvas.DrawBitmap(Bitmap, offsetX, offsetY);
         }
         Bitmap = canvasBitmap;
         BitmapChanged?.Invoke();

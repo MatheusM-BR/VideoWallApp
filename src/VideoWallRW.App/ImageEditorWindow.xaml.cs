@@ -23,9 +23,11 @@ public partial class ImageEditorWindow : Window
     private SKPoint _cropAnchor; // Resize: canto oposto fixo · Move: offset do clique ao canto sup-esq.
 
     // Guias de redimensionar a TELA (estilo Paint): direita, inferior e canto.
-    private enum CanvasHandle { None, Right, Bottom, Corner }
+    private enum CanvasHandle { None, N, S, E, W, NE, NW, SE, SW }
     private CanvasHandle _canvasDrag;
-    private SKPoint _liveCanvasSize; // tamanho provisório durante o arraste (px da imagem)
+    // Tamanho provisório (px da imagem) enquanto o usuário arrasta uma alça ou edita
+    // os campos W/H — fica pendente até "Aplicar"; null = nenhuma alteração pendente.
+    private SKPoint? _liveCanvasSize;
 
     private Point _chipDragStart;
 
@@ -161,10 +163,14 @@ public partial class ImageEditorWindow : Window
             _vm.ApplyShape(shape.A, shape.B);
         }
 
+        // Arrastar a alça só atualiza a prévia (guia tracejada + campos W/H);
+        // o resize só é efetivado ao clicar em "Aplicar", assim dá tempo de
+        // escolher "Redimensionar imagem com a tela" antes de confirmar. A guia
+        // continua visível (mostrando o tamanho pendente) até o Aplicar.
         if (_vm.Tool == EditorTool.Canvas && _canvasDrag != CanvasHandle.None)
         {
             _canvasDrag = CanvasHandle.None;
-            ApplyCanvasSize((int)_liveCanvasSize.X, (int)_liveCanvasSize.Y);
+            Canvas.InvalidateVisual();
         }
 
         _dragStart = null;
@@ -304,14 +310,26 @@ public partial class ImageEditorWindow : Window
 
     private void OnTelaFieldChanged(object sender, TextChangedEventArgs e)
     {
-        if (_updatingTela || !_vm.LockAspect) return;
-        double aspect = _vm.Bitmap.Height > 0 ? (double)_vm.Bitmap.Width / _vm.Bitmap.Height : 1;
-        _updatingTela = true;
-        if (ReferenceEquals(sender, TelaW) && int.TryParse(TelaW.Text, out int w) && w > 0)
-            TelaH.Text = Math.Max((int)Math.Round(w / aspect), 1).ToString(CultureInfo.InvariantCulture);
-        else if (ReferenceEquals(sender, TelaH) && int.TryParse(TelaH.Text, out int h) && h > 0)
-            TelaW.Text = Math.Max((int)Math.Round(h * aspect), 1).ToString(CultureInfo.InvariantCulture);
-        _updatingTela = false;
+        if (_updatingTela) return;
+
+        if (_vm.LockAspect)
+        {
+            double aspect = _vm.Bitmap.Height > 0 ? (double)_vm.Bitmap.Width / _vm.Bitmap.Height : 1;
+            _updatingTela = true;
+            if (ReferenceEquals(sender, TelaW) && int.TryParse(TelaW.Text, out int w) && w > 0)
+                TelaH.Text = Math.Max((int)Math.Round(w / aspect), 1).ToString(CultureInfo.InvariantCulture);
+            else if (ReferenceEquals(sender, TelaH) && int.TryParse(TelaH.Text, out int h) && h > 0)
+                TelaW.Text = Math.Max((int)Math.Round(h * aspect), 1).ToString(CultureInfo.InvariantCulture);
+            _updatingTela = false;
+        }
+
+        // Reflete o valor digitado na guia tracejada (prévia), pendente até Aplicar.
+        if (int.TryParse(TelaW.Text, out int pw) && pw > 0 &&
+            int.TryParse(TelaH.Text, out int ph) && ph > 0)
+        {
+            _liveCanvasSize = new SKPoint(pw, ph);
+            Canvas.InvalidateVisual();
+        }
     }
 
     private void OnApplyCanvas(object sender, RoutedEventArgs e)
@@ -323,28 +341,44 @@ public partial class ImageEditorWindow : Window
 
     private void ApplyCanvasSize(int w, int h)
     {
+        _liveCanvasSize = null;
         if (w <= 0 || h <= 0 || (w == _vm.Bitmap.Width && h == _vm.Bitmap.Height)) return;
         if (_vm.ResizeImageWithCanvas)
             _vm.ApplyResize(w, h);
         else
             _vm.ApplyCanvasResize(w, h);
         UpdateTelaFields();
+        Canvas.InvalidateVisual();
     }
 
+    /// <summary>
+    /// 8 alças (estilo Paint/Resolume): direita/esquerda crescem ou encolhem a tela
+    /// pros dois lados, cima/baixo idem no eixo vertical, cantos combinam os dois.
+    /// Como o resultado final sempre CENTRALIZA a imagem original (ver
+    /// <see cref="ImageEditorViewModel.ApplyCanvasResize"/>), não importa de que lado
+    /// você arrasta — o efeito prático é "abrir mais tela" e a arte fica no meio.
+    /// </summary>
     private void BeginCanvasDrag(SKPoint pt)
     {
         var bmp = _vm.Bitmap;
         float tolerance = (float)(14 / Math.Max(CanvasScale(), 0.01));
+        bool nearLeft = Math.Abs(pt.X) <= tolerance;
         bool nearRight = Math.Abs(pt.X - bmp.Width) <= tolerance;
+        bool nearTop = Math.Abs(pt.Y) <= tolerance;
         bool nearBottom = Math.Abs(pt.Y - bmp.Height) <= tolerance;
         bool midY = pt.Y > -tolerance && pt.Y < bmp.Height + tolerance;
         bool midX = pt.X > -tolerance && pt.X < bmp.Width + tolerance;
 
-        _canvasDrag = (nearRight, nearBottom) switch
+        _canvasDrag = (nearLeft, nearRight, nearTop, nearBottom) switch
         {
-            (true, true) => CanvasHandle.Corner,
-            (true, false) when midY => CanvasHandle.Right,
-            (false, true) when midX => CanvasHandle.Bottom,
+            (true, false, true, false) => CanvasHandle.NW,
+            (false, true, true, false) => CanvasHandle.NE,
+            (true, false, false, true) => CanvasHandle.SW,
+            (false, true, false, true) => CanvasHandle.SE,
+            (true, false, false, false) when midY => CanvasHandle.W,
+            (false, true, false, false) when midY => CanvasHandle.E,
+            (false, false, true, false) when midX => CanvasHandle.N,
+            (false, false, false, true) when midX => CanvasHandle.S,
             _ => CanvasHandle.None,
         };
         _liveCanvasSize = new SKPoint(bmp.Width, bmp.Height);
@@ -353,23 +387,27 @@ public partial class ImageEditorWindow : Window
     private void ContinueCanvasDrag(SKPoint pt)
     {
         var bmp = _vm.Bitmap;
-        float w = _liveCanvasSize.X, h = _liveCanvasSize.Y;
+        var live = _liveCanvasSize ?? new SKPoint(bmp.Width, bmp.Height);
+        float w = live.X, h = live.Y;
         double aspect = bmp.Height > 0 ? (double)bmp.Width / bmp.Height : 1;
+
+        // Arrastar pra fora de qualquer lado (inclusive esquerda/cima, onde a
+        // coordenada fica negativa) aumenta o tamanho correspondente.
+        float wFromRight() => Math.Max(pt.X, 8);
+        float wFromLeft() => Math.Max(bmp.Width - pt.X, 8);
+        float hFromBottom() => Math.Max(pt.Y, 8);
+        float hFromTop() => Math.Max(bmp.Height - pt.Y, 8);
 
         switch (_canvasDrag)
         {
-            case CanvasHandle.Right:
-                w = Math.Max(pt.X, 8);
-                if (_vm.LockAspect) h = (float)(w / aspect);
-                break;
-            case CanvasHandle.Bottom:
-                h = Math.Max(pt.Y, 8);
-                if (_vm.LockAspect) w = (float)(h * aspect);
-                break;
-            case CanvasHandle.Corner:
-                w = Math.Max(pt.X, 8);
-                h = _vm.LockAspect ? (float)(w / aspect) : Math.Max(pt.Y, 8);
-                break;
+            case CanvasHandle.E: w = wFromRight(); if (_vm.LockAspect) h = (float)(w / aspect); break;
+            case CanvasHandle.W: w = wFromLeft(); if (_vm.LockAspect) h = (float)(w / aspect); break;
+            case CanvasHandle.S: h = hFromBottom(); if (_vm.LockAspect) w = (float)(h * aspect); break;
+            case CanvasHandle.N: h = hFromTop(); if (_vm.LockAspect) w = (float)(h * aspect); break;
+            case CanvasHandle.SE: w = wFromRight(); h = _vm.LockAspect ? (float)(w / aspect) : hFromBottom(); break;
+            case CanvasHandle.SW: w = wFromLeft(); h = _vm.LockAspect ? (float)(w / aspect) : hFromBottom(); break;
+            case CanvasHandle.NE: w = wFromRight(); h = _vm.LockAspect ? (float)(w / aspect) : hFromTop(); break;
+            case CanvasHandle.NW: w = wFromLeft(); h = _vm.LockAspect ? (float)(w / aspect) : hFromTop(); break;
         }
 
         _liveCanvasSize = new SKPoint(w, h);
@@ -411,12 +449,16 @@ public partial class ImageEditorWindow : Window
                 canvas.DrawRect(new SKRect(c.X - hs, c.Y - hs, c.X + hs, c.Y + hs), handle);
         }
 
-        // Guias da TELA (estilo Paint): contorno provisório + alças direita/inferior/canto.
+        // Guias da TELA (estilo Paint): contorno provisório CENTRADO na imagem atual —
+        // o resultado final sempre centraliza (ApplyCanvasResize), então a prévia já
+        // mostra pra onde a arte vai, não importa de que lado você arrastou a alça.
         if (_vm.Tool == EditorTool.Canvas)
         {
-            var size = _canvasDrag != CanvasHandle.None ? _liveCanvasSize : new SKPoint(bmp.Width, bmp.Height);
-            var o = ToScreen(new SKPoint(0, 0));
-            var c2 = ToScreen(size);
+            var size = _liveCanvasSize ?? new SKPoint(bmp.Width, bmp.Height);
+            float offX = (size.X - bmp.Width) / 2f;
+            float offY = (size.Y - bmp.Height) / 2f;
+            var o = ToScreen(new SKPoint(-offX, -offY));
+            var c2 = ToScreen(new SKPoint(bmp.Width + offX, bmp.Height + offY));
             using var outline = new SKPaint
             {
                 Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1,
@@ -426,11 +468,13 @@ public partial class ImageEditorWindow : Window
 
             using var handle = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill };
             const float hs = 5;
+            float midX = (o.X + c2.X) / 2, midY = (o.Y + c2.Y) / 2;
             foreach (var p in new[]
             {
-                new SKPoint(c2.X, (o.Y + c2.Y) / 2), // direita
-                new SKPoint((o.X + c2.X) / 2, c2.Y), // inferior
-                new SKPoint(c2.X, c2.Y),             // canto
+                new SKPoint(c2.X, midY), new SKPoint(o.X, midY),   // direita, esquerda
+                new SKPoint(midX, c2.Y), new SKPoint(midX, o.Y),   // inferior, cima
+                new SKPoint(c2.X, c2.Y), new SKPoint(o.X, c2.Y),   // cantos inferiores
+                new SKPoint(c2.X, o.Y), new SKPoint(o.X, o.Y),     // cantos superiores
             })
                 canvas.DrawRect(new SKRect(p.X - hs, p.Y - hs, p.X + hs, p.Y + hs), handle);
         }
