@@ -23,7 +23,6 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
     private readonly AgendaClient _client = new();
     private readonly Action<string, string> _openImageEditor; // (path, suggestedClipName)
     private readonly Action<string> _openPdfImporter;
-    private readonly Action<string, string> _sendToCell; // (path, clipName)
 
     [ObservableProperty] private DateOnly _date = DateOnly.FromDateTime(DateTime.Now);
     [ObservableProperty] private bool _loading;
@@ -35,12 +34,10 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<AgendaEventViewModel> Events { get; } = [];
 
-    public AgendaViewModel(Action<string, string> openImageEditor,
-        Action<string> openPdfImporter, Action<string, string> sendToCell)
+    public AgendaViewModel(Action<string, string> openImageEditor, Action<string> openPdfImporter)
     {
         _openImageEditor = openImageEditor;
         _openPdfImporter = openPdfImporter;
-        _sendToCell = sendToCell;
         _ = LoadAsync();
     }
 
@@ -117,18 +114,13 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
             System.Text.Json.JsonSerializer.Serialize(meta, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private enum AfterSave { Nothing, Edit, SendToCell }
+    [RelayCommand]
+    private async Task SaveBanner() => await SaveBannerInternal(openEditor: false);
 
     [RelayCommand]
-    private async Task SaveBanner() => await SaveBannerInternal(AfterSave.Nothing);
+    private async Task SaveBannerAndEdit() => await SaveBannerInternal(openEditor: true);
 
-    [RelayCommand]
-    private async Task SaveBannerAndEdit() => await SaveBannerInternal(AfterSave.Edit);
-
-    [RelayCommand]
-    private async Task SaveBannerAndSend() => await SaveBannerInternal(AfterSave.SendToCell);
-
-    private async Task SaveBannerInternal(AfterSave then)
+    private async Task SaveBannerInternal(bool openEditor)
     {
         if (Details?.BannerUrl is not { } bannerUrl) return;
         bool lowRes = Details.BannerPreviewUrl is null;
@@ -143,18 +135,10 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
             WriteMeta(folder, bannerUrl);
             StatusText = lowRes
                 ? $"Banner salvo (baixa resolução — o evento não tinha alta): {dest}"
-                : $"Banner salvo: {dest}";
+                : $"Banner salvo: {dest} — arraste até uma célula da grade";
 
-            switch (then)
-            {
-                case AfterSave.Edit:
-                    _openImageEditor(dest, Details.Title);
-                    break;
-                case AfterSave.SendToCell:
-                    _sendToCell(dest, Details.Title);
-                    StatusText = $"Banner salvo e enviado para a grade: {dest}";
-                    break;
-            }
+            if (openEditor)
+                _openImageEditor(dest, Details.Title);
         }
         catch (Exception ex)
         {

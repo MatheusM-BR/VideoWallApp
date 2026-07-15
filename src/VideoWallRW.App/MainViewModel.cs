@@ -41,24 +41,17 @@ public sealed partial class MainViewModel : ObservableObject
     /// vez (envia um comando por layer) — botão em evidência + tecla Espaço.</summary>
     [ObservableProperty] private bool _autopilotAll = true;
 
-    /// <summary>Mute geral do áudio — o programa SEMPRE abre mutado (padrão da operação).</summary>
-    [ObservableProperty] private bool _masterMuted = true;
 
     public CompositionViewModel Grid { get; }
     public FileBrowserViewModel FileBrowser { get; }
 
     private readonly bool _kiosk;
-    private readonly VideoWallRW.Media.Audio.AudioEngine? _audio;
 
-    public MainViewModel(GraphicsDevice gfx, RenderThread render, bool kiosk = false,
-        VideoWallRW.Media.Audio.AudioEngine? audio = null)
+    public MainViewModel(GraphicsDevice gfx, RenderThread render, bool kiosk = false)
     {
         _gfx = gfx;
         _render = render;
         _kiosk = kiosk;
-        _audio = audio;
-        if (_audio is not null)
-            _audio.MasterMute = MasterMuted; // programa abre MUTADO por padrão
 
         var compModel = new Composition { ColumnCount = 8 };
         compModel.AddLayer(new Layer { Name = "Layer 3" });
@@ -193,17 +186,17 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenAgenda()
     {
-        var vm = new ViewModels.AgendaViewModel(OpenImageEditorForFile, OpenPdfImporter, SendImageToCell);
+        var vm = new ViewModels.AgendaViewModel(OpenImageEditorForFile, OpenPdfImporter);
         var window = new AgendaWindow(vm) { Owner = Application.Current.MainWindow };
         window.Show();
     }
 
-    /// <summary>Fase 10 T10.6: "editar imagem" abre o editor; ao salvar, envia direto
-    /// pra célula selecionada (ou pergunta layer/coluna se nada estiver selecionado).</summary>
+    /// <summary>Abre o editor numa imagem nova (Agenda/PDF/avulsa): a inserção na grade
+    /// é pelo chip "🖼 ARRASTE p/ célula" do próprio editor — solta na célula que quiser.</summary>
     private void OpenImageEditorForFile(string path, string suggestedName)
     {
         double? compAspect = Grid.Model.Height > 0 ? (double)Grid.Model.Width / Grid.Model.Height : null;
-        var vm = new ImageEditorViewModel(path, (editedPath, name) => SendImageToCell(editedPath, name), compAspect);
+        var vm = new ImageEditorViewModel(path, onSaved: null, compAspect);
         var window = new ImageEditorWindow(vm) { Owner = Application.Current.MainWindow };
         window.Show();
     }
@@ -245,20 +238,6 @@ public sealed partial class MainViewModel : ObservableObject
 
         Grid.SetFiles(layerIndex, columnIndex, [path]);
         StatusText = $"Enviado para a grade: {Path.GetFileName(path)}";
-    }
-
-    /// <summary>Enviar imagem do editor/Agenda pra grade: o operador escolhe a célula
-    /// de destino (pré-selecionada na célula atual).</summary>
-    private void SendImageToCell(string path, string suggestedName)
-    {
-        if (PickTargetCell() is not { } cell)
-            return;
-        Grid.SetClip(cell.Layer, cell.Column, new Clip(new FileImageSource(path))
-        {
-            Name = suggestedName,
-            ImageDuration = 7, // padrão da operação
-        });
-        StatusText = $"Imagem enviada para a célula: {suggestedName}";
     }
 
     /// <summary>Reabre o editor numa imagem já na grade (menu de contexto da célula) e,
@@ -687,12 +666,6 @@ public sealed partial class MainViewModel : ObservableObject
             : "⏸ Autopilot DESLIGADO — cada clip segura onde está (Espaço religa)";
     }
 
-    partial void OnMasterMutedChanged(bool value)
-    {
-        if (_audio is not null)
-            _audio.MasterMute = value;
-        StatusText = value ? "🔇 Áudio mutado" : "🔊 Áudio ligado";
-    }
 
     public void ToggleBlackout() => Blackout = !Blackout;
 

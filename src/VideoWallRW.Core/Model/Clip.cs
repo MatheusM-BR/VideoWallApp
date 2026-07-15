@@ -18,7 +18,9 @@ public sealed class Clip
     
     public ResizeMode? Resize { get; set; } // null = herda da Layer
     
-    public double Volume { get; set; } = 1.0;
+    /// <summary>Padrão da operação: todo vídeo novo entra com volume ZERADO —
+    /// o operador sobe o volume só no clip que deve soar (telão costuma ser mudo).</summary>
+    public double Volume { get; set; } = 0.0;
     public bool Mute { get; set; }
     
     /// <summary>Padrão da operação: toda mídia nova já entra avançando pro próximo

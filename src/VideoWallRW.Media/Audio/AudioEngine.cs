@@ -48,37 +48,12 @@ public sealed class AudioEngine : IDisposable
     public void AddTrack(ClipAudioTrack track) => _mixer.AddMixerInput(track);
     public void RemoveTrack(ClipAudioTrack track) => _mixer.RemoveMixerInput(track);
 
-    private volatile bool _masterMute;
-
-    /// <summary>Mute geral: zera a saída inteira do mixer sem mexer nos volumes por
-    /// clip — desmutar volta exatamente ao estado anterior. Thread-safe.</summary>
-    public bool MasterMute
-    {
-        get => _masterMute;
-        set => _masterMute = value;
-    }
-
-    /// <summary>Gate de mute entre o mixer e o WASAPI: continua CONSUMINDO os samples
-    /// (os tracks seguem avançando em sincronia com o vídeo), só silencia a saída.</summary>
-    private sealed class MuteGate(NAudio.Wave.ISampleProvider inner, Func<bool> muted) : NAudio.Wave.ISampleProvider
-    {
-        public WaveFormat WaveFormat => inner.WaveFormat;
-
-        public int Read(float[] buffer, int offset, int count)
-        {
-            int read = inner.Read(buffer, offset, count);
-            if (muted())
-                Array.Clear(buffer, offset, read);
-            return read;
-        }
-    }
-
     private void ThreadLoop()
     {
         try
         {
             _output = new WasapiOut(AudioClientShareMode.Shared, 100);
-            _output.Init(new SampleToWaveProvider(new MuteGate(_mixer, () => _masterMute)));
+            _output.Init(new SampleToWaveProvider(_mixer));
             _output.Play();
             Log.Information("AudioEngine iniciado (WASAPI shared, 100ms)");
         }

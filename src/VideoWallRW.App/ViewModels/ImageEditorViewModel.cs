@@ -6,7 +6,7 @@ using SkiaSharp;
 
 namespace VideoWallRW.App.ViewModels;
 
-public enum EditorTool { Crop, Brush, Eraser, Eyedropper, Bucket, Shape, Text }
+public enum EditorTool { Crop, Canvas, Brush, Eraser, Eyedropper, Bucket, Shape, Text }
 
 public enum ShapeKind { Retângulo, Elipse, Linha }
 
@@ -23,7 +23,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 {
     private const int MaxUndo = 20;
     private readonly string _sourcePath;
-    private readonly Action<string, string> _onSendToCell;
+    private readonly Action<string, string>? _onSaved; // célula em edição: Salvar atualiza no ar
     private readonly Stack<SKBitmap> _undoStack = new();
     private readonly Stack<SKBitmap> _redoStack = new();
 
@@ -40,6 +40,13 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     [ObservableProperty] private int _bucketTolerance = 32;
     [ObservableProperty] private string _statusText = "";
 
+    /// <summary>Fixar proporção (corte e tela) — igual ao Paint 3D.</summary>
+    [ObservableProperty] private bool _lockAspect = true;
+
+    /// <summary>Painel Tela: marcado = a imagem estica junto com a tela; desmarcado =
+    /// só a tela muda (imagem ancorada no canto, área nova branca).</summary>
+    [ObservableProperty] private bool _resizeImageWithCanvas = true;
+
     public List<AspectPreset> AspectPresets { get; }
     public IReadOnlyList<ShapeKind> Shapes { get; } = Enum.GetValues<ShapeKind>();
 
@@ -52,11 +59,11 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     public event Action? BitmapChanged;
 
-    public ImageEditorViewModel(string sourcePath, Action<string, string> onSendToCell,
+    public ImageEditorViewModel(string sourcePath, Action<string, string>? onSaved = null,
         double? compositionAspect = null, IReadOnlyList<double>? sliceAspects = null)
     {
         _sourcePath = sourcePath;
-        _onSendToCell = onSendToCell;
+        _onSaved = onSaved;
         using (var stream = File.OpenRead(sourcePath))
         {
             var decoded = SKBitmap.Decode(stream) ?? throw new InvalidOperationException($"Não foi possível abrir '{sourcePath}'.");
@@ -310,7 +317,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     // ── Salvar ───────────────────────────────────────────────────────────────
 
     // Toda edição vai pra pasta padrão da operação (C:\Video Wall), nunca sobrescreve o original.
-    private string SavePath => Path.Combine(
+    public string SaveTargetPath => Path.Combine(
         AppPaths.EnsureMediaRoot(),
         Path.GetFileNameWithoutExtension(_sourcePath) + "-edit.png");
 
@@ -319,16 +326,18 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     {
         using var image = SKImage.FromBitmap(Bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-        using var stream = File.Create(SavePath);
-        data.SaveTo(stream);
-        StatusText = $"Salvo: {SavePath}";
+        using (var stream = File.Create(SaveTargetPath))
+            data.SaveTo(stream);
+        StatusText = $"Salvo: {SaveTargetPath} — arraste o chip \"🖼\" até uma célula da grade";
+        // Editando a imagem de uma célula: salvar já atualiza o clip no ar.
+        _onSaved?.Invoke(SaveTargetPath, Path.GetFileNameWithoutExtension(_sourcePath));
     }
 
-    [RelayCommand]
-    private void SaveAndSendToCell()
+    /// <summary>Garante o PNG salvo em disco (usado pelo chip de arrastar).</summary>
+    public string EnsureSaved()
     {
         Save();
-        _onSendToCell(SavePath, Path.GetFileNameWithoutExtension(_sourcePath));
+        return SaveTargetPath;
     }
 
     public void Dispose()

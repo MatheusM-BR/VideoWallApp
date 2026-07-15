@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -21,14 +22,26 @@ public partial class ImageEditorWindow : Window
     private CropDragMode _cropMode;
     private SKPoint _cropAnchor; // Resize: canto oposto fixo · Move: offset do clique ao canto sup-esq.
 
+    // Guias de redimensionar a TELA (estilo Paint): direita, inferior e canto.
+    private enum CanvasHandle { None, Right, Bottom, Corner }
+    private CanvasHandle _canvasDrag;
+    private SKPoint _liveCanvasSize; // tamanho provisório durante o arraste (px da imagem)
+
+    private Point _chipDragStart;
+
     public ImageEditorWindow(ImageEditorViewModel viewModel)
     {
         // _vm ANTES do InitializeComponent: eventos de XAML podem disparar durante o parse.
         _vm = viewModel;
         InitializeComponent();
         DataContext = viewModel;
-        viewModel.BitmapChanged += () => Dispatcher.Invoke(() => Canvas.InvalidateVisual());
+        viewModel.BitmapChanged += () => Dispatcher.Invoke(() =>
+        {
+            Canvas.InvalidateVisual();
+            UpdateTelaFields();
+        });
         Closed += (_, _) => viewModel.Dispose();
+        Loaded += (_, _) => UpdateTelaFields();
     }
 
     private void OnPaletteClick(object sender, RoutedEventArgs e)
@@ -37,15 +50,30 @@ public partial class ImageEditorWindow : Window
             _vm.SetColorHex(hex);
     }
 
-    private void OnCanvasSize(object sender, RoutedEventArgs e)
-    {
-        var dlg = new CanvasSizeWindow(_vm.Bitmap.Width, _vm.Bitmap.Height) { Owner = this };
-        if (dlg.ShowDialog() != true) return;
+    // ── Chip "arraste p/ célula": salva e inicia o drag&drop de arquivo ─────────
 
-        if (dlg.StretchImage)
-            _vm.ApplyResize(dlg.NewWidth, dlg.NewHeight);
-        else
-            _vm.ApplyCanvasResize(dlg.NewWidth, dlg.NewHeight);
+    private void OnDragChipDown(object sender, MouseButtonEventArgs e)
+        => _chipDragStart = e.GetPosition(null);
+
+    private void OnDragChipMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        var pos = e.GetPosition(null);
+        if (Math.Abs(pos.X - _chipDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _chipDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        string path = _vm.EnsureSaved();
+        DragDrop.DoDragDrop((DependencyObject)sender,
+            new DataObject(DataFormats.FileDrop, new[] { path }), DragDropEffects.Copy);
+    }
+
+    // ── Espaço imagem ↔ tela ────────────────────────────────────────────────────
+
+    private double CanvasScale()
+    {
+        var bmp = _vm.Bitmap;
+        return Math.Min(Canvas.ActualWidth / bmp.Width, Canvas.ActualHeight / bmp.Height);
     }
 
     /// <summary>Mapeia um ponto do controle (coordenadas WPF) pro espaço de pixels do
@@ -53,11 +81,13 @@ public partial class ImageEditorWindow : Window
     private SKPoint ToImageSpace(Point p)
     {
         var bmp = _vm.Bitmap;
-        double scale = Math.Min(Canvas.ActualWidth / bmp.Width, Canvas.ActualHeight / bmp.Height);
+        double scale = CanvasScale();
         double offsetX = (Canvas.ActualWidth - bmp.Width * scale) / 2;
         double offsetY = (Canvas.ActualHeight - bmp.Height * scale) / 2;
         return new SKPoint((float)((p.X - offsetX) / scale), (float)((p.Y - offsetY) / scale));
     }
+
+    // ── Mouse na área de desenho ────────────────────────────────────────────────
 
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -66,6 +96,9 @@ public partial class ImageEditorWindow : Window
         {
             case EditorTool.Crop:
                 BeginCropDrag(pt);
+                break;
+            case EditorTool.Canvas:
+                BeginCanvasDrag(pt);
                 break;
             case EditorTool.Brush:
             case EditorTool.Eraser:
@@ -97,6 +130,12 @@ public partial class ImageEditorWindow : Window
         if (_vm.Tool == EditorTool.Crop && _cropMode != CropDragMode.None)
         {
             ContinueCropDrag(pt);
+            UpdateCropFields();
+            Canvas.InvalidateVisual();
+        }
+        else if (_vm.Tool == EditorTool.Canvas && _canvasDrag != CanvasHandle.None)
+        {
+            ContinueCanvasDrag(pt);
             Canvas.InvalidateVisual();
         }
         else if (_vm.Tool is EditorTool.Brush or EditorTool.Eraser && _lastPaintPoint is { } last)
@@ -122,6 +161,12 @@ public partial class ImageEditorWindow : Window
             _vm.ApplyShape(shape.A, shape.B);
         }
 
+        if (_vm.Tool == EditorTool.Canvas && _canvasDrag != CanvasHandle.None)
+        {
+            _canvasDrag = CanvasHandle.None;
+            ApplyCanvasSize((int)_liveCanvasSize.X, (int)_liveCanvasSize.Y);
+        }
+
         _dragStart = null;
         _lastPaintPoint = null;
         _liveShape = null;
@@ -130,12 +175,6 @@ public partial class ImageEditorWindow : Window
     }
 
     // ── Quadro de corte: criar, mover e redimensionar ──────────────────────────
-
-    private double CanvasScale()
-    {
-        var bmp = _vm.Bitmap;
-        return Math.Min(Canvas.ActualWidth / bmp.Width, Canvas.ActualHeight / bmp.Height);
-    }
 
     private SKRect? NormalizedCrop() => _liveCropRect is { } r
         ? new SKRect(Math.Min(r.Left, r.Right), Math.Min(r.Top, r.Bottom),
@@ -148,7 +187,6 @@ public partial class ImageEditorWindow : Window
 
         if (NormalizedCrop() is { } rect)
         {
-            // Perto de um canto → redimensiona (o canto oposto fica fixo).
             SKPoint[] corners =
             [
                 new(rect.Left, rect.Top), new(rect.Right, rect.Top),
@@ -165,7 +203,6 @@ public partial class ImageEditorWindow : Window
                 }
             }
 
-            // Dentro do quadro → move inteiro.
             if (rect.Contains(pt.X, pt.Y))
             {
                 _cropMode = CropDragMode.Move;
@@ -174,7 +211,6 @@ public partial class ImageEditorWindow : Window
             }
         }
 
-        // Fora → começa uma seleção nova.
         _cropMode = CropDragMode.Create;
         _dragStart = pt;
         _liveCropRect = new SKRect(pt.X, pt.Y, pt.X, pt.Y);
@@ -186,14 +222,14 @@ public partial class ImageEditorWindow : Window
         {
             case CropDragMode.Create when _dragStart is { } start:
                 _liveCropRect = new SKRect(start.X, start.Y,
-                    start.X + WidthFor(pt.X - start.X),
+                    start.X + (pt.X - start.X),
                     start.Y + HeightFor(pt.X - start.X, pt.Y - start.Y));
                 break;
 
             case CropDragMode.Resize:
                 float w = pt.X - _cropAnchor.X;
                 _liveCropRect = new SKRect(_cropAnchor.X, _cropAnchor.Y,
-                    _cropAnchor.X + WidthFor(w),
+                    _cropAnchor.X + w,
                     _cropAnchor.Y + HeightFor(w, pt.Y - _cropAnchor.Y));
                 break;
 
@@ -206,23 +242,144 @@ public partial class ImageEditorWindow : Window
         }
     }
 
-    private static float WidthFor(float w) => w;
-
     private float HeightFor(float w, float h)
-        => _vm.SelectedPreset?.Ratio is { } ratio
+        => _vm.LockAspect && _vm.SelectedPreset?.Ratio is { } ratio
             ? Math.Sign(h == 0 ? 1 : h) * Math.Abs(w) / (float)ratio
             : h;
 
-    private void OnApplyCrop(object sender, RoutedEventArgs e)
+    private void UpdateCropFields()
     {
-        if (_liveCropRect is { } rect)
+        if (NormalizedCrop() is { } rect)
         {
-            _vm.ApplyCrop(SKRect.Create(
-                Math.Min(rect.Left, rect.Right), Math.Min(rect.Top, rect.Bottom),
-                Math.Abs(rect.Width), Math.Abs(rect.Height)));
-            _liveCropRect = null;
+            CropW.Text = ((int)rect.Width).ToString(CultureInfo.InvariantCulture);
+            CropH.Text = ((int)rect.Height).ToString(CultureInfo.InvariantCulture);
         }
     }
+
+    private void OnCropFieldChanged(object sender, RoutedEventArgs e)
+    {
+        // Editar W/H redimensiona a seleção ancorada no canto superior esquerdo.
+        if (NormalizedCrop() is not { } rect) return;
+        if (!int.TryParse(CropW.Text, out int w) || w <= 0 ||
+            !int.TryParse(CropH.Text, out int h) || h <= 0) return;
+
+        if (_vm.LockAspect && _vm.SelectedPreset?.Ratio is { } ratio)
+            h = Math.Max((int)Math.Round(w / ratio), 1);
+
+        _liveCropRect = new SKRect(rect.Left, rect.Top, rect.Left + w, rect.Top + h);
+        UpdateCropFields();
+        Canvas.InvalidateVisual();
+    }
+
+    private void OnCropCancel(object sender, RoutedEventArgs e)
+    {
+        _liveCropRect = null;
+        CropW.Text = "";
+        CropH.Text = "";
+        Canvas.InvalidateVisual();
+    }
+
+    private void OnApplyCrop(object sender, RoutedEventArgs e)
+    {
+        if (NormalizedCrop() is { } rect)
+        {
+            _vm.ApplyCrop(rect);
+            _liveCropRect = null;
+            CropW.Text = "";
+            CropH.Text = "";
+        }
+    }
+
+    // ── Tela: campos + guias de arrastar (direita, inferior, canto) ─────────────
+
+    private bool _updatingTela;
+
+    private void UpdateTelaFields()
+    {
+        _updatingTela = true;
+        TelaW.Text = _vm.Bitmap.Width.ToString(CultureInfo.InvariantCulture);
+        TelaH.Text = _vm.Bitmap.Height.ToString(CultureInfo.InvariantCulture);
+        _updatingTela = false;
+    }
+
+    private void OnTelaFieldChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_updatingTela || !_vm.LockAspect) return;
+        double aspect = _vm.Bitmap.Height > 0 ? (double)_vm.Bitmap.Width / _vm.Bitmap.Height : 1;
+        _updatingTela = true;
+        if (ReferenceEquals(sender, TelaW) && int.TryParse(TelaW.Text, out int w) && w > 0)
+            TelaH.Text = Math.Max((int)Math.Round(w / aspect), 1).ToString(CultureInfo.InvariantCulture);
+        else if (ReferenceEquals(sender, TelaH) && int.TryParse(TelaH.Text, out int h) && h > 0)
+            TelaW.Text = Math.Max((int)Math.Round(h * aspect), 1).ToString(CultureInfo.InvariantCulture);
+        _updatingTela = false;
+    }
+
+    private void OnApplyCanvas(object sender, RoutedEventArgs e)
+    {
+        if (int.TryParse(TelaW.Text, out int w) && w > 0 &&
+            int.TryParse(TelaH.Text, out int h) && h > 0)
+            ApplyCanvasSize(w, h);
+    }
+
+    private void ApplyCanvasSize(int w, int h)
+    {
+        if (w <= 0 || h <= 0 || (w == _vm.Bitmap.Width && h == _vm.Bitmap.Height)) return;
+        if (_vm.ResizeImageWithCanvas)
+            _vm.ApplyResize(w, h);
+        else
+            _vm.ApplyCanvasResize(w, h);
+        UpdateTelaFields();
+    }
+
+    private void BeginCanvasDrag(SKPoint pt)
+    {
+        var bmp = _vm.Bitmap;
+        float tolerance = (float)(14 / Math.Max(CanvasScale(), 0.01));
+        bool nearRight = Math.Abs(pt.X - bmp.Width) <= tolerance;
+        bool nearBottom = Math.Abs(pt.Y - bmp.Height) <= tolerance;
+        bool midY = pt.Y > -tolerance && pt.Y < bmp.Height + tolerance;
+        bool midX = pt.X > -tolerance && pt.X < bmp.Width + tolerance;
+
+        _canvasDrag = (nearRight, nearBottom) switch
+        {
+            (true, true) => CanvasHandle.Corner,
+            (true, false) when midY => CanvasHandle.Right,
+            (false, true) when midX => CanvasHandle.Bottom,
+            _ => CanvasHandle.None,
+        };
+        _liveCanvasSize = new SKPoint(bmp.Width, bmp.Height);
+    }
+
+    private void ContinueCanvasDrag(SKPoint pt)
+    {
+        var bmp = _vm.Bitmap;
+        float w = _liveCanvasSize.X, h = _liveCanvasSize.Y;
+        double aspect = bmp.Height > 0 ? (double)bmp.Width / bmp.Height : 1;
+
+        switch (_canvasDrag)
+        {
+            case CanvasHandle.Right:
+                w = Math.Max(pt.X, 8);
+                if (_vm.LockAspect) h = (float)(w / aspect);
+                break;
+            case CanvasHandle.Bottom:
+                h = Math.Max(pt.Y, 8);
+                if (_vm.LockAspect) w = (float)(h * aspect);
+                break;
+            case CanvasHandle.Corner:
+                w = Math.Max(pt.X, 8);
+                h = _vm.LockAspect ? (float)(w / aspect) : Math.Max(pt.Y, 8);
+                break;
+        }
+
+        _liveCanvasSize = new SKPoint(w, h);
+        _updatingTela = true;
+        TelaW.Text = ((int)w).ToString(CultureInfo.InvariantCulture);
+        TelaH.Text = ((int)h).ToString(CultureInfo.InvariantCulture);
+        _updatingTela = false;
+    }
+
+    // ── Pintura ─────────────────────────────────────────────────────────────────
 
     private void OnPaintSurface(object? sender, SkiaSharp.Views.Desktop.SKPaintSurfaceEventArgs e)
     {
@@ -252,6 +409,30 @@ public partial class ImageEditorWindow : Window
             const float hs = 5;
             foreach (var c in new[] { a, new SKPoint(b.X, a.Y), new SKPoint(a.X, b.Y), b })
                 canvas.DrawRect(new SKRect(c.X - hs, c.Y - hs, c.X + hs, c.Y + hs), handle);
+        }
+
+        // Guias da TELA (estilo Paint): contorno provisório + alças direita/inferior/canto.
+        if (_vm.Tool == EditorTool.Canvas)
+        {
+            var size = _canvasDrag != CanvasHandle.None ? _liveCanvasSize : new SKPoint(bmp.Width, bmp.Height);
+            var o = ToScreen(new SKPoint(0, 0));
+            var c2 = ToScreen(size);
+            using var outline = new SKPaint
+            {
+                Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1,
+                PathEffect = SKPathEffect.CreateDash([4f, 4f], 0),
+            };
+            canvas.DrawRect(new SKRect(o.X, o.Y, c2.X, c2.Y), outline);
+
+            using var handle = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Fill };
+            const float hs = 5;
+            foreach (var p in new[]
+            {
+                new SKPoint(c2.X, (o.Y + c2.Y) / 2), // direita
+                new SKPoint((o.X + c2.X) / 2, c2.Y), // inferior
+                new SKPoint(c2.X, c2.Y),             // canto
+            })
+                canvas.DrawRect(new SKRect(p.X - hs, p.Y - hs, p.X + hs, p.Y + hs), handle);
         }
 
         if (_liveShape is { } shape)
