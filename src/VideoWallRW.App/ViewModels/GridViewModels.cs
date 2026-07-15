@@ -725,10 +725,16 @@ public sealed partial class CompositionViewModel : ObservableObject
                 break;
 
             var extension = Path.GetExtension(file).ToLowerInvariant();
-            SourceDescriptor source = extension is ".png" or ".jpg" or ".jpeg" or ".bmp"
+            bool isImage = extension is ".png" or ".jpg" or ".jpeg" or ".bmp";
+            SourceDescriptor source = isImage
                 ? new FileImageSource(file)
                 : new FileVideoSource(file);
-            SetClip(layerIndex, column++, new Clip(source) { Name = Path.GetFileName(file) });
+            SetClip(layerIndex, column++, new Clip(source)
+            {
+                Name = Path.GetFileName(file),
+                // Padrão da operação: imagem fica 7s no ar antes do autopilot avançar.
+                ImageDuration = isImage ? 7 : null,
+            });
         }
     }
 

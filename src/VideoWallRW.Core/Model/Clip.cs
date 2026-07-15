@@ -21,7 +21,9 @@ public sealed class Clip
     public double Volume { get; set; } = 1.0;
     public bool Mute { get; set; }
     
-    public AutopilotAction Autopilot { get; set; } = AutopilotAction.None;
+    /// <summary>Padrão da operação: toda mídia nova já entra avançando pro próximo
+    /// clip ao terminar (fotos após o timer, vídeos após cada passada).</summary>
+    public AutopilotAction Autopilot { get; set; } = AutopilotAction.PlayNextClip;
 
     public Clip(SourceDescriptor source)
     {

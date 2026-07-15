@@ -253,7 +253,11 @@ public sealed partial class MainViewModel : ObservableObject
     {
         if (PickTargetCell() is not { } cell)
             return;
-        Grid.SetClip(cell.Layer, cell.Column, new Clip(new FileImageSource(path)) { Name = suggestedName });
+        Grid.SetClip(cell.Layer, cell.Column, new Clip(new FileImageSource(path))
+        {
+            Name = suggestedName,
+            ImageDuration = 7, // padrão da operação
+        });
         StatusText = $"Imagem enviada para a célula: {suggestedName}";
     }
 
@@ -264,9 +268,13 @@ public sealed partial class MainViewModel : ObservableObject
         double? compAspect = Grid.Model.Height > 0 ? (double)Grid.Model.Width / Grid.Model.Height : null;
         var vm = new ImageEditorViewModel(path, (editedPath, _) =>
         {
+            var previous = Grid.Model.Layers[layerIndex].Clips[columnIndex];
             Grid.SetClip(layerIndex, columnIndex, new Clip(new FileImageSource(editedPath))
             {
-                Name = Grid.Model.Layers[layerIndex].Clips[columnIndex]?.Name ?? Path.GetFileNameWithoutExtension(editedPath),
+                Name = previous?.Name ?? Path.GetFileNameWithoutExtension(editedPath),
+                // Editar não reseta o timer/autopilot que o operador já tinha ajustado.
+                ImageDuration = previous?.ImageDuration ?? 7,
+                Autopilot = previous?.Autopilot ?? AutopilotAction.PlayNextClip,
             });
             _render.Post(new ReloadClip(layerIndex, columnIndex));
         }, compAspect);
