@@ -259,11 +259,9 @@ public sealed partial class ClipViewModel : ObservableObject
         }
     }
 
-    // Largura/altura efetivas em PIXEL (T24) — +/- e o slide "volante" mexem no
-    // tamanho real exibido, não num passo abstrato de ScaleX/Y; a escala é só o meio
-    // de chegar lá (largura efetiva ÷ largura nativa).
-    private const double PxStep = 10;
-
+    // Largura/altura efetivas em PIXEL (T24) — o slide "volante" mexe no tamanho real
+    // exibido, não num passo abstrato de ScaleX/Y; a escala é só o meio de chegar lá
+    // (largura efetiva ÷ largura nativa).
     private void SetEffectiveWidth(double px)
     {
         if (SourceWidth is not { } w || w <= 0) return;
@@ -275,18 +273,6 @@ public sealed partial class ClipViewModel : ObservableObject
         if (SourceHeight is not { } h || h <= 0) return;
         ScaleY = Math.Max(0.05, Math.Round(px / h, 4));
     }
-
-    [RelayCommand]
-    private void ZoomInH() => SetEffectiveWidth((EffectiveWidth ?? 0) + PxStep);
-
-    [RelayCommand]
-    private void ZoomOutH() => SetEffectiveWidth(Math.Max(1, (EffectiveWidth ?? 0) - PxStep));
-
-    [RelayCommand]
-    private void ZoomInV() => SetEffectiveHeight((EffectiveHeight ?? 0) + PxStep);
-
-    [RelayCommand]
-    private void ZoomOutV() => SetEffectiveHeight(Math.Max(1, (EffectiveHeight ?? 0) - PxStep));
 
     // ── Slide "volante" (T24): sempre centralizado, arrastar aplica uma taxa contínua
     // enquanto segura (rate em -1..1) — o CenterSnapSlider chama isso a cada tick do
@@ -949,10 +935,16 @@ public sealed partial class CompositionViewModel : ObservableObject
                 Resize = ResizeMode.Original,
             });
 
-            RecentSources.Remove(file);
-            RecentSources.Insert(0, file);
-            while (RecentSources.Count > MaxRecentSources)
-                RecentSources.RemoveAt(RecentSources.Count - 1);
+            // Aba Sources > Recentes: só imagens (geralmente recortadas no editor) —
+            // vídeo é conteúdo pesado/específico de cada leilão, não faz sentido
+            // reaproveitar como "fonte recente" do mesmo jeito que um banner/logo.
+            if (isImage)
+            {
+                RecentSources.Remove(file);
+                RecentSources.Insert(0, file);
+                while (RecentSources.Count > MaxRecentSources)
+                    RecentSources.RemoveAt(RecentSources.Count - 1);
+            }
         }
     }
 

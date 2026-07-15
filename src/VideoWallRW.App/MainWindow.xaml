@@ -255,36 +255,22 @@
               <ComboBox Grid.Row="1" Grid.Column="1"
                         ItemsSource="{Binding DataContext.Grid.ResizeModes, RelativeSource={RelativeSource AncestorType=Window}}"
                         SelectedItem="{Binding Resize, Mode=TwoWay}" Margin="0,0,0,4" />
-              <!-- Horizontal e vertical separados (T22/T24): cada eixo mexe na largura/
-                   altura EFETIVA em pixel (não um passo abstrato de escala). O slide
-                   "volante" abaixo de cada um sempre volta pro centro ao soltar —
-                   arrastar pra um lado aumenta/diminui continuamente enquanto segura. -->
+              <!-- Horizontal e vertical separados (T22/T24): o slide "volante" abaixo de
+                   cada um sempre volta pro centro ao soltar — arrastar pra um lado
+                   aumenta/diminui a largura/altura EFETIVA em pixel continuamente
+                   enquanto segura, cada eixo no seu slide. -->
               <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Largura" Margin="0,0,6,2" />
-              <DockPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,2">
-                <TextBlock DockPanel.Dock="Left" Text="{Binding EffectiveWidth, TargetNullValue=—, StringFormat={}{0}px}"
-                           VerticalAlignment="Center" Foreground="{StaticResource FgDim}"
-                           ToolTip="Largura efetiva (nativa × escala)" />
-                <Button DockPanel.Dock="Right" Content="+" Command="{Binding ZoomInHCommand}" Padding="8,1" Margin="3,0,0,0"
-                        ToolTip="+10px de largura" />
-                <Button DockPanel.Dock="Right" Content="−" Command="{Binding ZoomOutHCommand}" Padding="8,1" Margin="6,0,0,0"
-                        ToolTip="-10px de largura" />
-                <Border />
-              </DockPanel>
+              <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding EffectiveWidth, TargetNullValue=—, StringFormat={}{0}px}"
+                         Foreground="{StaticResource FgDim}" Margin="0,0,0,2"
+                         ToolTip="Largura efetiva (nativa × escala)" />
               <Border Grid.Row="3" Grid.Column="1" Margin="0,0,0,6">
                 <controls:CenterSnapSlider JogCommand="{Binding JogWidthCommand}"
                                             ToolTip="Arraste e segure pra aumentar/diminuir a largura — solta e volta pro centro" />
               </Border>
               <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="Altura" Margin="0,0,6,2" />
-              <DockPanel Grid.Row="4" Grid.Column="1" Margin="0,0,0,2">
-                <TextBlock DockPanel.Dock="Left" Text="{Binding EffectiveHeight, TargetNullValue=—, StringFormat={}{0}px}"
-                           VerticalAlignment="Center" Foreground="{StaticResource FgDim}"
-                           ToolTip="Altura efetiva (nativa × escala)" />
-                <Button DockPanel.Dock="Right" Content="+" Command="{Binding ZoomInVCommand}" Padding="8,1" Margin="3,0,0,0"
-                        ToolTip="+10px de altura" />
-                <Button DockPanel.Dock="Right" Content="−" Command="{Binding ZoomOutVCommand}" Padding="8,1" Margin="6,0,0,0"
-                        ToolTip="-10px de altura" />
-                <Border />
-              </DockPanel>
+              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding EffectiveHeight, TargetNullValue=—, StringFormat={}{0}px}"
+                         Foreground="{StaticResource FgDim}" Margin="0,0,0,2"
+                         ToolTip="Altura efetiva (nativa × escala)" />
               <Border Grid.Row="5" Grid.Column="1" Margin="0,0,0,6">
                 <controls:CenterSnapSlider JogCommand="{Binding JogHeightCommand}"
                                             ToolTip="Arraste e segure pra aumentar/diminuir a altura — solta e volta pro centro" />

@@ -73,6 +73,12 @@ public sealed class CenterSnapSlider : FrameworkElement
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
+        // A animação de "voltar pro centro" do arraste anterior deixa a propriedade
+        // Value presa (WPF: FillBehavior.HoldEnd continua "dona" da propriedade depois
+        // que a animação termina, e um SetValue direto é ignorado silenciosamente até
+        // limpar a animação) — sem isso, só o primeiro arraste funcionava.
+        BeginAnimation(ValueProperty, null);
+
         _dragging = true;
         CaptureMouse();
         _timer.Start();
@@ -108,6 +114,14 @@ public sealed class CenterSnapSlider : FrameworkElement
         var anim = new DoubleAnimation(Value, 0, TimeSpan.FromMilliseconds(180))
         {
             EasingFunction = new BackEase { Amplitude = 0.3, EasingMode = EasingMode.EaseOut },
+        };
+        // Solta a propriedade assim que a animação termina em vez de deixar o clock
+        // "dono" dela pra sempre — sem isso, arrastar de novo simplesmente não move
+        // mais o cabo (o WPF ignora SetValue enquanto uma animação ainda segura o valor).
+        anim.Completed += (_, _) =>
+        {
+            BeginAnimation(ValueProperty, null);
+            Value = 0;
         };
         BeginAnimation(ValueProperty, anim);
     }
