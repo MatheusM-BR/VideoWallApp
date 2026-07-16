@@ -6,6 +6,14 @@ public sealed class ProjectMeta
 {
     public DateTimeOffset SavedAt { get; set; } = DateTimeOffset.Now;
     public string? OutputPresetName { get; set; }
+
+    /// <summary>Autopilot geral (toggle global da barra superior) — sem isso, reabrir
+    /// um projeto sempre voltava com autopilot ligado, perdendo o estado real salvo.</summary>
+    public bool AutopilotAllEnabled { get; set; } = true;
+
+    /// <summary>Sequenciador de colunas (modo Instalação) rodando ou não — sem isso,
+    /// reabrir sempre parava o sequenciador mesmo que estivesse ativo ao salvar.</summary>
+    public bool SequencerRunning { get; set; }
 }
 
 /// <summary>

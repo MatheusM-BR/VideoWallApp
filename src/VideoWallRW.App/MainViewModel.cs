@@ -114,9 +114,6 @@ public sealed partial class MainViewModel : ObservableObject
         _runtimeStateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
         _runtimeStateTimer.Tick += (_, _) => SaveRuntimeState();
         _runtimeStateTimer.Start();
-
-        if (!_kiosk)
-            CheckCrashRecovery();
     }
 
     /// <summary>Usado pelo modo <c>--kiosk</c>: carrega sem os diálogos interativos
@@ -433,7 +430,17 @@ public sealed partial class MainViewModel : ObservableObject
         _installation = project.Installation;
         _render.Post(new SyncInstallation(_installation));
         _watchFolders.Apply(_installation.WatchFolders);
-        SequencerRunning = false;
+
+        // Restaura o toggle global sem disparar a propagação normal (que forçaria
+        // TODAS as layers a seguir esse valor) — as layers já vieram com o
+        // AutopilotEnabled certo de cada uma via Grid.ReplaceModel logo acima.
+        _restoringAutopilotAll = true;
+        AutopilotAll = project.Meta.AutopilotAllEnabled;
+        _restoringAutopilotAll = false;
+
+        // Sequenciador: restaura o estado salvo (liga/desliga o comando no engine de
+        // verdade), em vez de sempre voltar parado mesmo que estivesse rodando.
+        SequencerRunning = project.Meta.SequencerRunning;
 
         MasterFader = project.Composition.MasterOpacity;
         Blackout = project.Composition.Blackout;
@@ -547,6 +554,11 @@ public sealed partial class MainViewModel : ObservableObject
             Output = _outputSetup,
             Snapshots = Scenes.Select(s => s.Model).ToList(),
             Installation = _installation,
+            Meta = new ProjectMeta
+            {
+                AutopilotAllEnabled = AutopilotAll,
+                SequencerRunning = SequencerRunning,
+            },
         };
     }
 
@@ -590,28 +602,6 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             StatusText = $"Falha no autosave: {ex.Message}";
-        }
-    }
-
-    private void CheckCrashRecovery()
-    {
-        if (!AutosaveService.WasUncleanShutdown())
-            return;
-
-        var autosave = AutosaveService.TryLoadAutosave(_currentProjectPath);
-        if (autosave is null)
-            return;
-
-        var result = MessageBox.Show(
-            "O VideoWallRW não foi fechado normalmente da última vez. " +
-            "Encontramos um autosave — deseja recuperar o trabalho não salvo?",
-            "Recuperação", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (result == MessageBoxResult.Yes)
-        {
-            ApplyProject(autosave);
-            _isDirty = true;
-            UpdateWindowTitle();
-            StatusText = "Projeto recuperado do autosave.";
         }
     }
 
@@ -715,8 +705,15 @@ public sealed partial class MainViewModel : ObservableObject
     /// e a tecla Espaço) — hoje alterna o autopilot global.</summary>
     public void ToggleMasterPause() => AutopilotAll = !AutopilotAll;
 
+    /// <summary>Ao restaurar um projeto salvo, o toggle global não deve forçar todas as
+    /// layers a seguir o mesmo valor — cada uma já veio com o AutopilotEnabled certo
+    /// pelo próprio projeto (podem ter sido salvas em estados diferentes entre si).</summary>
+    private bool _restoringAutopilotAll;
+
     partial void OnAutopilotAllChanged(bool value)
     {
+        if (_restoringAutopilotAll) return;
+
         // "Envia comando para todos": o toggle global dirige o toggle de cada layer.
         foreach (var layer in Grid.Layers)
             layer.AutopilotEnabled = value;
