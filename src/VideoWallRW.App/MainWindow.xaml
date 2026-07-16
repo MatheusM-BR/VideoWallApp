@@ -148,8 +148,12 @@
             <Grid>
               <Image Source="{Binding CompositionMonitorBitmap}" Stretch="Uniform"
                      Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+              <!-- Sem captura ao vivo: mostra a thumbnail do clip ativo no topo da pilha,
+                   em vez de deixar o monitor mudo — só cai pro texto se nada estiver no ar. -->
+              <Image Source="{Binding ActiveClipThumbnailPath}" Stretch="Uniform"
+                     Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
               <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
-                         Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                         Visibility="{Binding ShowMonitorPlaceholderText, Converter={StaticResource BoolToVisibilityConverter}}">
                 <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
                 <Run Text="×" />
                 <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
@@ -164,8 +168,10 @@
             <Grid>
               <Image Source="{Binding CompositionMonitorBitmap}" Stretch="Uniform"
                      Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+              <Image Source="{Binding ActiveClipThumbnailPath}" Stretch="Uniform"
+                     Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
               <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
-                         Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+                         Visibility="{Binding ShowMonitorPlaceholderText, Converter={StaticResource BoolToVisibilityConverter}}">
                 <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
                 <Run Text="×" />
                 <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
@@ -534,8 +540,10 @@
                               <Button Command="{Binding TriggerCommand}" AllowDrop="True"
                                       Background="Transparent" BorderThickness="0" Padding="0"
                                       ToolTip="Disparar (colocar no ar)">
-                                <Grid ClipToBounds="True">
-                                  <Image Source="{Binding ThumbnailPath}" Stretch="UniformToFill" />
+                                <Grid ClipToBounds="True" Background="{StaticResource InputBg}">
+                                  <!-- Uniform (não UniformToFill): o operador precisa ver o
+                                       enquadramento REAL do arquivo, sem cortar nada. -->
+                                  <Image Source="{Binding ThumbnailPath}" Stretch="Uniform" />
                                   <TextBlock Text="🔗" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Top"
                                              Margin="0,1,2,0"
                                              ToolTip="Célula vinculada a um grupo de troca — trocar uma troca todas"

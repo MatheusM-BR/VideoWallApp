@@ -27,6 +27,10 @@ public sealed partial class OutputSetupViewModel : ObservableObject
     public IReadOnlyList<MonitorInfo> AvailableMonitors { get; }
     public IReadOnlyList<Rotation> Rotations { get; } = Enum.GetValues<Rotation>();
 
+    /// <summary>Tela selecionada — fonte única pra lista, painel de detalhes e o mapa
+    /// de telas (T27), assim clicar num retângulo no mapa seleciona na lista e vice-versa.</summary>
+    [ObservableProperty] private ScreenViewModel? _selectedScreen;
+
     /// <summary>Tamanho da composição — palco do editor visual de "Input" de cada slice.</summary>
     public double CompWidth => _compWidth();
     public double CompHeight => _compHeight();
@@ -62,6 +66,7 @@ public sealed partial class OutputSetupViewModel : ObservableObject
             OutputRect = new RectF(0, 0, monitor.Width, monitor.Height),
         });
         Screens.Add(screenVm);
+        SelectedScreen = screenVm;
         Push();
     }
 
@@ -70,6 +75,8 @@ public sealed partial class OutputSetupViewModel : ObservableObject
     {
         if (screen is null)
             return;
+        if (ReferenceEquals(SelectedScreen, screen))
+            SelectedScreen = null;
         Screens.Remove(screen);
         Push();
     }

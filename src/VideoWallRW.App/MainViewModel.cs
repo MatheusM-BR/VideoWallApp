@@ -55,10 +55,34 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _compositionMonitorEnabled;
     [ObservableProperty] private System.Windows.Media.Imaging.WriteableBitmap? _compositionMonitorBitmap;
 
+    /// <summary>Com a captura ao vivo desligada, mostra a thumbnail do clip ativo mais
+    /// "no topo" (última layer com um clip no ar, na ordem de blend) em vez de deixar
+    /// o monitor mostrando só texto — dá pro operador ver o que está rodando mesmo
+    /// sem pagar o custo de GPU do readback ao vivo.</summary>
+    [ObservableProperty] private string? _activeClipThumbnailPath;
+
+    public bool ShowMonitorPlaceholderText => !CompositionMonitorEnabled && ActiveClipThumbnailPath is null;
+
     partial void OnCompositionMonitorEnabledChanged(bool value)
     {
         _render.Post(new SetCompositionMonitorEnabled(value));
         if (!value) CompositionMonitorBitmap = null;
+        OnPropertyChanged(nameof(ShowMonitorPlaceholderText));
+    }
+
+    partial void OnActiveClipThumbnailPathChanged(string? value) => OnPropertyChanged(nameof(ShowMonitorPlaceholderText));
+
+    /// <summary>Percorre as layers em ordem — a última com um clip ativo é a que renderiza
+    /// por cima (CompositionRenderer itera 0..N blendando cada uma sobre a anterior).</summary>
+    private void RefreshActiveClipThumbnail()
+    {
+        string? thumb = null;
+        foreach (var layer in Grid.Layers)
+        {
+            if (layer.Clips.FirstOrDefault(c => c.IsActive) is { ThumbnailPath: { } path })
+                thumb = path;
+        }
+        ActiveClipThumbnailPath = thumb;
     }
 
     private void OnCompositionFrameCaptured(byte[] pixelsBgra, int width, int height)
@@ -689,6 +713,8 @@ public sealed partial class MainViewModel : ObservableObject
 
             if (stats.Positions is not null)
                 Grid.UpdatePlayheads(stats.Positions);
+
+            RefreshActiveClipThumbnail();
         });
     }
 

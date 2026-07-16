@@ -20,6 +20,21 @@
       <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
     </DockPanel>
 
+    <!-- Cenário (T27): mapa com TODAS as telas de uma vez, nomeadas e no lugar certo
+         dentro da composição — "tela vertical na esquerda, horizontal no meio..." fica
+         visível de relance, e arrastar aqui já é a forma principal de posicionar/
+         redimensionar (os campos numéricos abaixo continuam existindo pra ajuste fino). -->
+    <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
+            Background="{StaticResource PanelBg}" Padding="8" Margin="0,0,0,10" Height="220">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="CENÁRIO — clique numa tela pra selecionar, arraste pra mover/redimensionar"
+                   FontWeight="Bold" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,0,0,6" />
+        <controls:MultiRectStageEditor
+            StageWidth="{Binding CompWidth}" StageHeight="{Binding CompHeight}"
+            Screens="{Binding Screens}" SelectedScreen="{Binding SelectedScreen, Mode=TwoWay}" />
+      </DockPanel>
+    </Border>
+
     <!-- Painel esquerdo: lista de telas -->
     <DockPanel DockPanel.Dock="Left" Width="220" Margin="0,0,10,0">
       <TextBlock DockPanel.Dock="Top" Text="Telas" FontWeight="Bold" Margin="0,0,0,4" />
@@ -29,11 +44,12 @@
         <Button DockPanel.Dock="Top" Content="+ Adicionar tela" Padding="6,4"
                 Command="{Binding AddScreenCommand}" CommandParameter="{Binding ElementName=MonitorPicker, Path=SelectedItem}" />
       </DockPanel>
-      <ListBox x:Name="ScreenList" ItemsSource="{Binding Screens}" DisplayMemberPath="Name" />
+      <ListBox x:Name="ScreenList" ItemsSource="{Binding Screens}" DisplayMemberPath="Name"
+               SelectedItem="{Binding SelectedScreen, Mode=TwoWay}" />
     </DockPanel>
 
     <!-- Painel direito: detalhes da tela selecionada -->
-    <ScrollViewer DataContext="{Binding ElementName=ScreenList, Path=SelectedItem}" VerticalScrollBarVisibility="Auto">
+    <ScrollViewer DataContext="{Binding SelectedScreen}" VerticalScrollBarVisibility="Auto">
       <StackPanel>
         <TextBlock Text="Selecione uma tela à esquerda." Foreground="{StaticResource FgDim}"
                    Visibility="{Binding Converter={StaticResource NullToVisibilityConverter}}" />
