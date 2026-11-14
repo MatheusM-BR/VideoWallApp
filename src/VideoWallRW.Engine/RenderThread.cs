@@ -36,11 +36,18 @@ public sealed class RenderThread : IDisposable
     private Core.Model.OutputSetup? _outputSetup;
     private bool _identify;
 
-    // Criação assíncrona de players: a factory (abre FFmpeg, demuxa, cria texturas)
-    // roda em Task.Run; o resultado volta pra render thread por esta fila. A geração
-    // por layer descarta anexos obsoletos (operador disparou outro clip no meio).
+    // Criação de players: a factory (abre FFmpeg, demuxa, cria texturas D3D, decodifica
+    // imagem via WIC) roda numa ÚNICA thread dedicada — NUNCA em Task.Run paralelo. Sob
+    // disparo rápido (ainda mais com células vinculadas), várias factories concorrentes
+    // faziam inicialização NATIVA simultânea (FFmpeg/WIC/D3D) e corrompiam o heap →
+    // crash determinístico 0xc0000005 no coreclr, sem exceção .NET (relatórios de 20/07).
+    // Serializar tudo numa fila de thread única elimina essa corrida. O resultado pronto
+    // volta pra render thread pela _deferred (a geração por layer descarta anexos
+    // obsoletos — operador disparou outro clip no meio).
     private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _deferred = new();
     private readonly Dictionary<int, int> _triggerGeneration = [];
+    private readonly System.Collections.Concurrent.BlockingCollection<Action> _creationQueue = new();
+    private Thread? _creationThread;
 
     // ── Fase 7: cenas ───────────────────────────────────────────────────────────
     private List<Core.Persistence.SceneSnapshot> _scenes = [];
@@ -68,6 +75,7 @@ public sealed class RenderThread : IDisposable
 
     /// <summary>Publicado na render thread quando o Composition Monitor está ligado (~12fps).</summary>
     public event Action<byte[], int, int>? CompositionFrameCaptured;
+    public event Action<int, int>? ClipTriggered;
 
     public RenderThread(GraphicsDevice gfx) => _gfx = gfx;
 
@@ -78,11 +86,51 @@ public sealed class RenderThread : IDisposable
         _running = true;
         _thread = new Thread(Loop) { Name = "RenderThread", IsBackground = true };
         _thread.Start();
+
+        // Thread única de criação de fontes (ver _creationQueue) — serializa toda a
+        // inicialização nativa (FFmpeg/WIC/D3D) pra não corromper o heap sob disparo rápido.
+        _creationThread = new Thread(CreationLoop) { Name = "ClipCreation", IsBackground = true };
+        _creationThread.Start();
+    }
+
+    /// <summary>
+    /// Descarte de fonte/player na MESMA thread que cria (ClipCreation). Fechar FFmpeg/
+    /// HAP e liberar texturas D3D é trabalho NATIVO tão pesado quanto abrir — deixar o
+    /// descarte na render thread punha teardown e setup nativos rodando em paralelo
+    /// exatamente na troca de clipe (fim de vídeo / fim do tempo da imagem), que é onde
+    /// o programa fechava. Se a fila já foi encerrada (shutdown), descarta inline.
+    /// </summary>
+    private void DeferDispose(IDisposable disposable)
+    {
+        if (_creationQueue.IsAddingCompleted)
+        {
+            try { disposable.Dispose(); } catch (Exception ex) { Log.Error(ex, "Erro ao descartar fonte no shutdown"); }
+            return;
+        }
+        try { _creationQueue.Add(() => disposable.Dispose()); }
+        catch (InvalidOperationException) { disposable.Dispose(); } // fila fechou no meio
+    }
+
+    private void CreationLoop()
+    {
+        try
+        {
+            foreach (var work in _creationQueue.GetConsumingEnumerable())
+            {
+                try { work(); }
+                catch (Exception ex) { Log.Error(ex, "Erro criando fonte de clipe"); }
+            }
+        }
+        catch (ObjectDisposedException) { /* fila fechada no shutdown */ }
+        catch (InvalidOperationException) { /* CompleteAdding chamado */ }
     }
 
     public void Stop()
     {
         _running = false;
+        _creationQueue.CompleteAdding();
+        _creationThread?.Join(TimeSpan.FromSeconds(3));
+        _creationThread = null;
         _thread?.Join(TimeSpan.FromSeconds(3));
         _thread = null;
     }
@@ -115,18 +163,12 @@ public sealed class RenderThread : IDisposable
                 // As janelas de saída vivem nesta thread; o pump precisa rodar aqui.
                 OutputWindow.PumpMessages();
 
-                // Sem saída ativa nenhuma, só continua rodando o passe de composição se
-                // o Composition Monitor estiver ligado (senão não há textura pra capturar).
-                if (_outputs.Count == 0 && !_compositionMonitorEnabled)
-                {
-                    Thread.Sleep(10);
-                    continue;
-                }
+                bool hasVisualOutput = _outputs.Count > 0 || _compositionMonitorEnabled;
 
                 double time = clock.Elapsed.TotalSeconds;
                 double dt = time - lastTime;
                 lastTime = time;
-                if (dt > 1.0 / 40.0) _dropCount++; // frametime > 1.5x o alvo de 60fps (~16.7ms)
+                if (hasVisualOutput && dt > 1.0 / 40.0) _dropCount++; // só mede drops quando existe saída visual
                 if (dt > 0.1) dt = 0.1; // cap: evitar salto grande após pausa do debugger
 
                 // Pausa global = pausa a SEQUÊNCIA (autopilot/sequenciador), não o
@@ -143,7 +185,7 @@ public sealed class RenderThread : IDisposable
                     EvaluateSchedule();
                 }
 
-                if (_compositionRenderer != null && _compositionData != null)
+                if (hasVisualOutput && _compositionRenderer != null && _compositionData != null)
                 {
                     // Passe de composição + saídas via CompositionRenderer.
                     var outputList = _outputs
@@ -165,12 +207,19 @@ public sealed class RenderThread : IDisposable
                         }
                     }
                 }
-                else
+                else if (_outputs.Count > 0)
                 {
                     // Fase 0 fallback: gradiente de teste.
                     foreach (var output in _outputs)
                         testScene.Render(_gfx.Context, output.Rtv,
                             output.Monitor.Width, output.Monitor.Height, time);
+                }
+                else
+                {
+                    // Sem display, mantém relógio, decodificação e promoção de players
+                    // ativos. Não executa o passe de composição, preservando GPU.
+                    foreach (var layer in _layers)
+                        layer.AcquireFrames();
                 }
 
                 foreach (var output in _outputs)
@@ -186,6 +235,11 @@ public sealed class RenderThread : IDisposable
 
                 if (statsClock.ElapsedMilliseconds >= 500)
                     PublishStats(statsClock);
+
+                // Reprodução headless em aproximadamente 24 Hz: suficiente para
+                // timeline/autopilot, sem ocupar um núcleo ou compor frames invisíveis.
+                if (!hasVisualOutput)
+                    Thread.Sleep(40);
             }
         }
         catch (Exception ex)
@@ -226,6 +280,9 @@ public sealed class RenderThread : IDisposable
                 break;
             case TriggerColumn(var colIdx):
                 OnTriggerColumn(colIdx);
+                break;
+            case SeekClip(var layerIdx, var colIdx, var seconds):
+                OnSeekClip(layerIdx, colIdx, seconds);
                 break;
             case ClearLayer(var layerIdx):
                 OnClearLayer(layerIdx);
@@ -318,12 +375,21 @@ public sealed class RenderThread : IDisposable
         _compositionRenderer?.Dispose();
         
         _compositionData = data.Clone();
+        foreach (var layer in _compositionData.Layers)
+        {
+            if (!layer.AutopilotEnabled || !layer.Clips.Any(c => c is not null) ||
+                !layer.Clips.Where(c => c is not null).All(c => c!.Autopilot == Core.Model.AutopilotAction.None))
+                continue;
+            foreach (var clip in layer.Clips)
+                if (clip is not null)
+                    clip.Autopilot = Core.Model.AutopilotAction.PlayNextClip;
+        }
         _compositionRenderer = new CompositionRenderer(_gfx,
             _compositionData.Width, _compositionData.Height);
         
         foreach (var layerModel in _compositionData.Layers)
         {
-            _layers.Add(new LayerRenderer(layerModel));
+            _layers.Add(new LayerRenderer(layerModel, DeferDispose));
         }
         
         Log.Information("Composition Sincronizada com {N} camadas no Motor.", _layers.Count);
@@ -457,31 +523,19 @@ public sealed class RenderThread : IDisposable
     }
 
     /// <summary>
-    /// Dispara uma cena salva: aplica o clip ativo e a opacidade de cada layer e o
-    /// master fader de uma vez. Cada layer usa seu próprio crossfade (se configurado)
-    /// — nunca aparece um buraco preto mesmo trocando várias layers juntas.
+    /// Dispara uma cena salva (T30): cada cena é uma grade completa e independente
+    /// (como uma aba) — disparar troca a composição inteira, igual a carregar um
+    /// projeto (nenhum clip fica "no ar" sozinho, estado sempre parado ao trocar).
+    /// Usado pelo caminho remoto (OSC/RemoteWebService/agenda de Instalação); o botão
+    /// interativo da UI troca de cena via MainViewModel.SelectScene (que também
+    /// atualiza a grade visível na tela do operador).
     /// </summary>
     private void OnTriggerScene(Guid sceneId)
     {
         var scene = _scenes.FirstOrDefault(s => s.Id == sceneId);
-        if (scene is null || _compositionData is null)
-            return;
+        if (scene is null) return;
 
-        for (int i = 0; i < _compositionData.Layers.Count; i++)
-        {
-            var layer = _compositionData.Layers[i];
-            if (scene.ActiveColumns.TryGetValue(layer.Id, out int column))
-            {
-                if (column < 0)
-                    OnClearLayer(i);
-                else
-                    OnTriggerClip(i, column);
-            }
-            if (scene.LayerOpacities.TryGetValue(layer.Id, out double opacity))
-                OnSetLayerOpacity(i, opacity);
-        }
-
-        _compositionData.MasterOpacity = Math.Clamp(scene.MasterFader, 0.0, 1.0);
+        SyncComp(scene.Grid);
         Log.Information("Cena disparada: {Name}", scene.Name);
     }
 
@@ -514,7 +568,10 @@ public sealed class RenderThread : IDisposable
         var factory = _clipFactory;
         double defaultImageDuration = _compositionData.DefaultImageDuration;
 
-        Task.Run(() =>
+        // Serializado na thread única de criação (NÃO Task.Run paralelo) — ver _creationQueue.
+        if (_creationQueue.IsAddingCompleted)
+            return;
+        _creationQueue.Add(() =>
         {
             try
             {
@@ -531,6 +588,7 @@ public sealed class RenderThread : IDisposable
                     player.EndReached += endedClip => OnClipEnded(layerIdx, endedClip);
                     bool retrigger = _layers[layerIdx].ActiveClip?.Id == clipModel.Id;
                     _layers[layerIdx].SetPlayer(player, clipModel, retrigger);
+                    ClipTriggered?.Invoke(layerIdx, colIdx);
                     Log.Information("Trigger disparado: Camada {L}, Coluna {C}", layerIdx, colIdx);
                 });
             }
@@ -546,8 +604,24 @@ public sealed class RenderThread : IDisposable
         if (_compositionData == null) return;
         for (int i = 0; i < _compositionData.Layers.Count; i++)
         {
+            // Layer marcada como FIXA fica de fora do disparo de coluna — é a linha de
+            // entrada ao vivo (câmera NDI etc.), que não pode cair quando o operador
+            // troca a coluna de conteúdo pelo atalho. Disparar a célula dela na mão
+            // continua funcionando normalmente.
+            if (_compositionData.Layers[i].IgnoreColumnTrigger) continue;
             OnTriggerClip(i, colIdx);
         }
+    }
+
+    private void OnSeekClip(int layerIdx, int colIdx, double seconds)
+    {
+        if (_compositionData is null || layerIdx < 0 || layerIdx >= _layers.Count)
+            return;
+        var clips = _compositionData.Layers[layerIdx].Clips;
+        if (colIdx < 0 || colIdx >= clips.Length || clips[colIdx] is not { } clip ||
+            _layers[layerIdx].ActiveClip?.Id != clip.Id)
+            return;
+        _layers[layerIdx].ActivePlayer?.Seek(seconds);
     }
 
     private void OnClearLayer(int layerIdx)
@@ -604,6 +678,14 @@ public sealed class RenderThread : IDisposable
             _layers[layerIdx].UpdateClip(updatedClip);
     }
 
+    // Última vez que cada layer avançou por autopilot — trava de segurança contra
+    // "tempestade de avanço". Qualquer bug que faça o fim do clipe disparar todo frame
+    // (intervalo degenerado, sonda de duração falhada, fonte quebrada) abriria dezenas
+    // de fontes por segundo e derrubaria o processo. Nenhum conteúdo real precisa
+    // trocar mais de 4x por segundo.
+    private readonly Dictionary<int, DateTime> _lastAutopilotAdvance = [];
+    private static readonly TimeSpan MinAdvanceInterval = TimeSpan.FromMilliseconds(250);
+
     private void OnClipEnded(int layerIdx, Core.Model.Clip endedClip)
     {
         // Pausa global = segurar a sequência: o clip que terminou fica no último
@@ -624,6 +706,16 @@ public sealed class RenderThread : IDisposable
         int nextColumn = FindAutopilotColumn(_compositionData.Layers[layerIdx], currentColumn, endedClip.Autopilot);
         if (nextColumn >= 0)
         {
+            // A trava só conta AVANÇO DE VERDADE, e é verificada por último. Marcá-la
+            // antes das validações fazia um evento de fim obsoleto (ex.: do player
+            // ainda em crossfade, que não é mais o ativo) gastar a janela de 250ms e
+            // ENGOLIR o avanço real que chegava logo em seguida — era isso que deixava
+            // a sequência parada no mesmo clipe.
+            var now = DateTime.UtcNow;
+            if (_lastAutopilotAdvance.TryGetValue(layerIdx, out var last) && now - last < MinAdvanceInterval)
+                return; // rápido demais pra ser real — protege contra tempestade de disparos
+            _lastAutopilotAdvance[layerIdx] = now;
+
             OnTriggerClip(layerIdx, nextColumn);
             return;
         }

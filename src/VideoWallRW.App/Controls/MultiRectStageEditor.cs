@@ -57,12 +57,12 @@ public sealed class MultiRectStageEditor : FrameworkElement
     private double _startX, _startY, _startW, _startH;
 
     private static readonly Brush StageBrush = Frozen(Color.FromRgb(0x17, 0x17, 0x1A));
-    private static readonly Brush RectBrush = Frozen(Color.FromArgb(0x45, 0x9A, 0xCD, 0x32));
-    private static readonly Brush RectBrushSelected = Frozen(Color.FromArgb(0x70, 0x9A, 0xCD, 0x32));
+    private static readonly Brush RectBrush = Frozen(Color.FromArgb(0x45, 0x82, 0xBA, 0xF6));
+    private static readonly Brush RectBrushSelected = Frozen(Color.FromArgb(0x70, 0x82, 0xBA, 0xF6));
     private static readonly Pen StagePen = FrozenPen(Color.FromRgb(0x3C, 0x3C, 0x44), 1);
     private static readonly Pen RectPen = FrozenPen(Color.FromRgb(0x6B, 0x8E, 0x23), 1.5);
-    private static readonly Pen RectPenSelected = FrozenPen(Color.FromRgb(0x9A, 0xCD, 0x32), 2.5);
-    private static readonly Brush HandleBrush = Frozen(Color.FromRgb(0x9A, 0xCD, 0x32));
+    private static readonly Pen RectPenSelected = FrozenPen(Color.FromRgb(0x82, 0xBA, 0xF6), 2.5);
+    private static readonly Brush HandleBrush = Frozen(Color.FromRgb(0x82, 0xBA, 0xF6));
     private static readonly Brush LabelBrush = Frozen(Color.FromRgb(0xDF, 0xDF, 0xDF));
 
     private static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }

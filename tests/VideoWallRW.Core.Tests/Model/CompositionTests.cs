@@ -6,7 +6,7 @@ namespace VideoWallRW.Core.Tests.Model;
 public class CompositionTests
 {
     [Fact]
-    public void ColumnCount_Change_ResizesAllLayerClipsArrays()
+    public void SetColumnCount_ResizesAllLayerClipsArrays()
     {
         var comp = new Composition();
         var layer1 = new Layer();
@@ -16,13 +16,13 @@ public class CompositionTests
         comp.AddLayer(layer2);
 
         // Act
-        comp.ColumnCount = 10;
+        comp.SetColumnCount(10);
 
         // Assert
         Assert.Equal(10, layer1.Clips.Length);
         Assert.Equal(10, layer2.Clips.Length);
         
-        comp.ColumnCount = 4;
+        comp.SetColumnCount(4);
         Assert.Equal(4, layer1.Clips.Length);
         Assert.Equal(4, layer2.Clips.Length);
     }

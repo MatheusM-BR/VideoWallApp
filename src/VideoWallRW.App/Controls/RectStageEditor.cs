@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace VideoWallRW.App.Controls;
 
@@ -26,6 +27,42 @@ public sealed class RectStageEditor : FrameworkElement
     public static readonly DependencyProperty RectWidthProperty = RegisterRect(nameof(RectWidth), 100.0);
     public static readonly DependencyProperty RectHeightProperty = RegisterRect(nameof(RectHeight), 100.0);
 
+    // ── Imagem de referência (T28: guiar as correções do Advanced Output) ──
+    // BackgroundImage é desenhada esticada no palco inteiro; se Crop* > 0, mostra só
+    // o recorte (em unidades de ImageWidth/ImageHeight — tipicamente o tamanho da
+    // composição) dessa imagem, esticado no palco — é o que dá pro operador ver,
+    // no editor de "posição na tela", exatamente o pedaço da composição/teste que
+    // vai cair naquele monitor, sem precisar imaginar.
+    public static readonly DependencyProperty BackgroundImageProperty =
+        DependencyProperty.Register(nameof(BackgroundImage), typeof(ImageSource), typeof(RectStageEditor),
+            new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty ImageWidthProperty =
+        DependencyProperty.Register(nameof(ImageWidth), typeof(double), typeof(RectStageEditor),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty ImageHeightProperty =
+        DependencyProperty.Register(nameof(ImageHeight), typeof(double), typeof(RectStageEditor),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty CropXProperty =
+        DependencyProperty.Register(nameof(CropX), typeof(double), typeof(RectStageEditor),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty CropYProperty =
+        DependencyProperty.Register(nameof(CropY), typeof(double), typeof(RectStageEditor),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty CropWidthProperty =
+        DependencyProperty.Register(nameof(CropWidth), typeof(double), typeof(RectStageEditor),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty CropHeightProperty =
+        DependencyProperty.Register(nameof(CropHeight), typeof(double), typeof(RectStageEditor),
+            new FrameworkPropertyMetadata(0.0, FrameworkPropertyMetadataOptions.AffectsRender));
+
+    public ImageSource? BackgroundImage { get => (ImageSource?)GetValue(BackgroundImageProperty); set => SetValue(BackgroundImageProperty, value); }
+    public double ImageWidth { get => (double)GetValue(ImageWidthProperty); set => SetValue(ImageWidthProperty, value); }
+    public double ImageHeight { get => (double)GetValue(ImageHeightProperty); set => SetValue(ImageHeightProperty, value); }
+    public double CropX { get => (double)GetValue(CropXProperty); set => SetValue(CropXProperty, value); }
+    public double CropY { get => (double)GetValue(CropYProperty); set => SetValue(CropYProperty, value); }
+    public double CropWidth { get => (double)GetValue(CropWidthProperty); set => SetValue(CropWidthProperty, value); }
+    public double CropHeight { get => (double)GetValue(CropHeightProperty); set => SetValue(CropHeightProperty, value); }
+
     private static DependencyProperty RegisterRect(string name, double defaultValue = 0.0) =>
         DependencyProperty.Register(name, typeof(double), typeof(RectStageEditor),
             new FrameworkPropertyMetadata(defaultValue,
@@ -44,10 +81,10 @@ public sealed class RectStageEditor : FrameworkElement
     private double _startX, _startY, _startW, _startH;
 
     private static readonly Brush StageBrush = Frozen(Color.FromRgb(0x17, 0x17, 0x1A));
-    private static readonly Brush RectBrush = Frozen(Color.FromArgb(0x50, 0x9A, 0xCD, 0x32));
+    private static readonly Brush RectBrush = Frozen(Color.FromArgb(0x50, 0x82, 0xBA, 0xF6));
     private static readonly Pen StagePen = FrozenPen(Color.FromRgb(0x3C, 0x3C, 0x44), 1);
-    private static readonly Pen RectPen = FrozenPen(Color.FromRgb(0x9A, 0xCD, 0x32), 2);
-    private static readonly Brush HandleBrush = Frozen(Color.FromRgb(0x9A, 0xCD, 0x32));
+    private static readonly Pen RectPen = FrozenPen(Color.FromRgb(0x82, 0xBA, 0xF6), 2);
+    private static readonly Brush HandleBrush = Frozen(Color.FromRgb(0x82, 0xBA, 0xF6));
 
     private static Brush Frozen(Color c) { var b = new SolidColorBrush(c); b.Freeze(); return b; }
     private static Pen FrozenPen(Color c, double t) { var p = new Pen(Frozen(c), t); p.Freeze(); return p; }
@@ -80,6 +117,29 @@ public sealed class RectStageEditor : FrameworkElement
     {
         var stage = ToScreen(0, 0, StageWidth, StageHeight);
         dc.DrawRectangle(StageBrush, StagePen, stage);
+
+        if (BackgroundImage is { } img)
+        {
+            dc.PushClip(new RectangleGeometry(stage));
+            if (CropWidth > 0 && CropHeight > 0 && ImageWidth > 0 && ImageHeight > 0 && img is BitmapSource bmp)
+            {
+                double sx = bmp.PixelWidth / ImageWidth, sy = bmp.PixelHeight / ImageHeight;
+                var pixelRect = new Int32Rect(
+                    (int)System.Math.Clamp(CropX * sx, 0, bmp.PixelWidth - 1),
+                    (int)System.Math.Clamp(CropY * sy, 0, bmp.PixelHeight - 1),
+                    (int)System.Math.Clamp(CropWidth * sx, 1, bmp.PixelWidth),
+                    (int)System.Math.Clamp(CropHeight * sy, 1, bmp.PixelHeight));
+                pixelRect.Width = System.Math.Min(pixelRect.Width, bmp.PixelWidth - pixelRect.X);
+                pixelRect.Height = System.Math.Min(pixelRect.Height, bmp.PixelHeight - pixelRect.Y);
+                try { dc.DrawImage(new CroppedBitmap(bmp, pixelRect), stage); }
+                catch { dc.DrawImage(img, stage); }
+            }
+            else
+            {
+                dc.DrawImage(img, stage);
+            }
+            dc.Pop();
+        }
 
         var rect = ToScreen(RectX, RectY, RectWidth, RectHeight);
         dc.DrawRectangle(RectBrush, RectPen, rect);

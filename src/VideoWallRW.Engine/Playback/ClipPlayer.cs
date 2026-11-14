@@ -35,6 +35,12 @@ public sealed class ClipPlayer : IDisposable
     /// <summary>
     /// Avança o relógio do clip. Chamar uma vez por frame na render thread.
     /// </summary>
+    /// <remarks>
+    /// Uma volta menor que isto é tratada como "sem duração real": o fim é anunciado
+    /// UMA vez (pro autopilot poder avançar) e não fica se repetindo a cada frame.
+    /// </remarks>
+    private const double MinCycleSeconds = 0.05;
+
     public void Tick(double dt)
     {
         if (State != PlaybackState.Playing || _source.State == SourceState.Arming) return;
@@ -54,7 +60,15 @@ public sealed class ClipPlayer : IDisposable
                 if (_clip.Autopilot != AutopilotAction.None)
                 {
                     RaiseEndReached();
-                    _ended = false;
+                    // SÓ re-arma o disparo se a volta tem duração REAL. Com um intervalo
+                    // degenerado (duração 0, sonda de duração falhou, ou In == Out por
+                    // trim/edição) o playhead passa do fim em TODO frame e isto dispararia
+                    // o autopilot 60-165x por segundo — cada disparo abrindo uma fonte
+                    // nova (FFmpeg + texturas). Era uma tempestade que estourava
+                    // memória/VRAM em segundos e derrubava o processo, além de travar a
+                    // sequência (nunca assentava no próximo clipe).
+                    if (outPoint - inPoint > MinCycleSeconds)
+                        _ended = false;
                 }
                 Playhead = Wrap(Playhead, inPoint, outPoint);
                 _source.Seek(Playhead);
@@ -136,11 +150,23 @@ public sealed class ClipPlayer : IDisposable
         ApplyAudioState();
     }
 
+    /// <summary>Duração usada quando a do clipe é inválida — ver <see cref="GetBounds"/>.</summary>
+    private const double FallbackCycleSeconds = 5.0;
+
     private (double In, double Out) GetBounds()
     {
         double duration = _clip.Source is FileImageSource && _clip.ImageDuration is not null
             ? Math.Max(0, _clip.ImageDuration.Value)
             : Math.Max(0, _source.Duration);
+        // A MÍDIA não tem duração utilizável (duração 0 / sonda falhou / arquivo
+        // quebrado): sem um fim válido o playhead passaria do fim em TODO frame e o
+        // autopilot dispararia 60-165x por segundo, abrindo uma fonte nova a cada vez
+        // até derrubar o processo. Nesse caso — e SÓ nesse — assume um ciclo padrão.
+        // Um trim curto FEITO DE PROPÓSITO pelo operador é respeitado: quem segura a
+        // tempestade ali é o guard do _ended (Tick) mais a trava por layer no engine.
+        if (!double.IsInfinity(duration) && duration < MinCycleSeconds)
+            return (0, FallbackCycleSeconds);
+
         double inPoint = Math.Clamp(_clip.InPoint ?? 0, 0, duration);
         double outPoint = Math.Clamp(_clip.OutPoint ?? duration, inPoint, duration);
         return (inPoint, outPoint);

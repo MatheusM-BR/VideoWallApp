@@ -3,44 +3,123 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:skia="clr-namespace:SkiaSharp.Views.WPF;assembly=SkiaSharp.Views.WPF"
         xmlns:vm="clr-namespace:VideoWallRW.App.ViewModels"
-        Title="Editor de imagem" Height="780" Width="1180"
-        WindowStartupLocation="CenterOwner"
-        Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
-  <DockPanel Margin="10">
-
-    <!-- Barra superior: ferramentas (as opções ficam no painel lateral, como no Paint 3D) -->
-    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
-      <ToggleButton Content="✂ Recortar" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Crop}}" Padding="10,5" Margin="0,0,3,0" />
-      <ToggleButton Content="⛶ Tela" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Canvas}}" Padding="10,5" Margin="0,0,3,0" />
-      <ToggleButton Content="🖌 Pincel" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Brush}}" Padding="10,5" Margin="0,0,3,0" />
-      <ToggleButton Content="⌫ Borracha" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Eraser}}" Padding="10,5" Margin="0,0,3,0" />
-      <ToggleButton Content="💧 Conta-gotas" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Eyedropper}}" Padding="10,5" Margin="0,0,3,0" />
-      <ToggleButton Content="🪣 Balde" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Bucket}}" Padding="10,5" Margin="0,0,3,0" />
-      <ToggleButton Content="⬜ Forma" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Shape}}" Padding="10,5" Margin="0,0,3,0" />
-      <ToggleButton Content="🅰 Texto" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Text}}" Padding="10,5" Margin="0,0,14,0" />
-
-      <Button Content="↶" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" Padding="10,5" Margin="0,0,2,0" ToolTip="Desfazer" />
-      <Button Content="↷" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" Padding="10,5" Margin="0,0,14,0" ToolTip="Refazer" />
-
-      <Button Content="💾 Salvar" Command="{Binding SaveCommand}" Padding="12,5" Margin="0,0,6,0" />
-      <!-- Arrastar direto pra célula da grade (salva automaticamente ao iniciar o arraste) -->
-      <Border Background="{StaticResource AccentDim}" BorderBrush="{StaticResource Accent}" BorderThickness="1"
-              CornerRadius="3" Padding="12,5" Cursor="Hand"
-              PreviewMouseLeftButtonDown="OnDragChipDown" PreviewMouseMove="OnDragChipMove"
-              ToolTip="Segure e arraste até a célula da grade onde a imagem deve entrar (salva automaticamente)">
-        <TextBlock Text="🖼 ARRASTE p/ célula" FontWeight="Bold" />
+        Title="Editor de imagem — VideoWallRW" Height="820" Width="1280" MinWidth="1000" MinHeight="680"
+        WindowStartupLocation="CenterOwner" FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Fg}" PreviewKeyDown="OnEditorKeyDown">
+  <Window.Resources><ResourceDictionary><ResourceDictionary.MergedDictionaries>
+    <ResourceDictionary Source="Themes/Auxiliary.xaml" />
+  </ResourceDictionary.MergedDictionaries>
+    <Style x:Key="PaintToolChoice" TargetType="RadioButton">
+      <Setter Property="Margin" Value="0,0,4,4" /><Setter Property="Padding" Value="6,9" />
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
+        <Border x:Name="Surface" Background="{StaticResource CellBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" /></Border>
+        <ControlTemplate.Triggers>
+          <Trigger Property="IsChecked" Value="True"><Setter TargetName="Surface" Property="Background" Value="{StaticResource SelectionBg}" /><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource Selection}" /></Trigger>
+          <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="White" /></Trigger>
+        </ControlTemplate.Triggers>
+      </ControlTemplate></Setter.Value></Setter>
+    </Style>
+  </ResourceDictionary></Window.Resources>
+  <Grid Margin="8" Background="{StaticResource Bg}">
+    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="30" /></Grid.RowDefinitions>
+    <Border Style="{StaticResource SurfacePanel}" Padding="14,10" Margin="0,0,0,6">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button Content="Desfazer" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" Margin="0,0,4,0" Padding="10,6" />
+          <Button Content="Refazer" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" Margin="0,0,16,0" Padding="10,6" />
+          <Button Content="Salvar imagem" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryAction}" />
+        </StackPanel>
+        <TextBlock Text="Editor de imagem" Style="{StaticResource PageTitle}" />
+      </DockPanel>
+    </Border>
+    <!-- UX do Paint 3D: categorias no topo, área de desenho ao centro e opções à direita. -->
+    <Border Grid.Row="1" Style="{StaticResource SurfacePanel}" Padding="8,2" Margin="0,0,0,6">
+      <StackPanel Orientation="Horizontal"><Button AutomationProperties.Name="Pincéis" Tag="{x:Static vm:EditorTool.Brush}" Click="OnEditorCategoryClick" ToolTip="Pincéis">
+  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource EditorCategory}"><Style.Triggers>
+    <DataTrigger Binding="{Binding IsPaintingTool}" Value="True">
+      <Setter Property="Background" Value="{StaticResource SelectionBg}" /><Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+    </DataTrigger>
+  </Style.Triggers></Style></Button.Style>
+  <StackPanel><TextBlock Text="✎" FontSize="21" HorizontalAlignment="Center" /><TextBlock Text="Pincéis" Margin="0,3,0,0" HorizontalAlignment="Center" /></StackPanel>
+</Button>
+<Button AutomationProperties.Name="Formas 2D" Tag="{x:Static vm:EditorTool.Shape}" Click="OnEditorCategoryClick" ToolTip="Formas 2D">
+  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource EditorCategory}"><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Shape}">
+      <Setter Property="Background" Value="{StaticResource SelectionBg}" /><Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+    </DataTrigger>
+  </Style.Triggers></Style></Button.Style>
+  <StackPanel><TextBlock Text="▱" FontSize="21" HorizontalAlignment="Center" /><TextBlock Text="Formas 2D" Margin="0,3,0,0" HorizontalAlignment="Center" /></StackPanel>
+</Button>
+<Button AutomationProperties.Name="Texto" Tag="{x:Static vm:EditorTool.Text}" Click="OnEditorCategoryClick" ToolTip="Texto">
+  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource EditorCategory}"><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Text}">
+      <Setter Property="Background" Value="{StaticResource SelectionBg}" /><Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+    </DataTrigger>
+  </Style.Triggers></Style></Button.Style>
+  <StackPanel><TextBlock Text="T" FontSize="21" HorizontalAlignment="Center" /><TextBlock Text="Texto" Margin="0,3,0,0" HorizontalAlignment="Center" /></StackPanel>
+</Button>
+<Button AutomationProperties.Name="Camadas" Tag="{x:Static vm:EditorTool.Layers}" Click="OnEditorCategoryClick" ToolTip="Camadas">
+  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource EditorCategory}"><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Layers}">
+      <Setter Property="Background" Value="{StaticResource SelectionBg}" /><Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+    </DataTrigger>
+  </Style.Triggers></Style></Button.Style>
+  <StackPanel><TextBlock Text="▧" FontSize="21" HorizontalAlignment="Center" /><TextBlock Text="Camadas" Margin="0,3,0,0" HorizontalAlignment="Center" /></StackPanel>
+</Button>
+<Button AutomationProperties.Name="Tela" Tag="{x:Static vm:EditorTool.Canvas}" Click="OnEditorCategoryClick" ToolTip="Tela">
+  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource EditorCategory}"><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Canvas}">
+      <Setter Property="Background" Value="{StaticResource SelectionBg}" /><Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+    </DataTrigger>
+  </Style.Triggers></Style></Button.Style>
+  <StackPanel><TextBlock Text="▣" FontSize="21" HorizontalAlignment="Center" /><TextBlock Text="Tela" Margin="0,3,0,0" HorizontalAlignment="Center" /></StackPanel>
+</Button>
+<Button AutomationProperties.Name="Recortar" Tag="{x:Static vm:EditorTool.Crop}" Click="OnEditorCategoryClick" ToolTip="Recortar">
+  <Button.Style><Style TargetType="Button" BasedOn="{StaticResource EditorCategory}"><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Crop}">
+      <Setter Property="Background" Value="{StaticResource SelectionBg}" /><Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+    </DataTrigger>
+  </Style.Triggers></Style></Button.Style>
+  <StackPanel><TextBlock Text="⌗" FontSize="21" HorizontalAlignment="Center" /><TextBlock Text="Recortar" Margin="0,3,0,0" HorizontalAlignment="Center" /></StackPanel>
+</Button></StackPanel>
+    </Border>
+    <Grid Grid.Row="2" x:Name="EditorWorkspace">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="*" MinWidth="520" /><ColumnDefinition Width="6" /><ColumnDefinition Width="0.34*" MinWidth="280" MaxWidth="360" /></Grid.ColumnDefinitions>
+      <Border Grid.Column="0" Style="{StaticResource SurfacePanel}" Padding="0">
+        <DockPanel>
+          <Border DockPanel.Dock="Top" BorderBrush="{StaticResource BorderDim}" BorderThickness="0,0,0,1" Padding="10,6">
+            <DockPanel><TextBlock DockPanel.Dock="Left" Text="ÁREA DE EDIÇÃO" Style="{StaticResource SectionTitle}" /><TextBlock HorizontalAlignment="Right" Foreground="{StaticResource FgDim}" FontSize="11"><Run Text="{Binding Bitmap.Width, Mode=OneWay}" /><Run Text=" × " /><Run Text="{Binding Bitmap.Height, Mode=OneWay}" /><Run Text=" px" /></TextBlock></DockPanel>
+          </Border>
+          <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource BorderDim}" BorderThickness="0,1,0,0" Padding="8,6">
+            <DockPanel>
+              <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                <Button AutomationProperties.Name="Afastar visualização" Content="−" Click="OnZoomOutClick" Width="28" ToolTip="Afastar visualização" />
+                <TextBlock x:Name="ZoomLabel" Text="100% do ajuste" Width="104" TextAlignment="Center" VerticalAlignment="Center" FontSize="11" />
+                <Button AutomationProperties.Name="Aproximar visualização" Content="+" Click="OnZoomInClick" Width="28" ToolTip="Aproximar visualização" Margin="0,0,6,0" />
+                <Button AutomationProperties.Name="Restaurar o enquadramento da imagem" Content="Ajustar à tela" Click="OnFitCanvasClick" ToolTip="Restaurar o enquadramento da imagem" />
+              </StackPanel>
+              <TextBlock Text="Roda do mouse para aproximar" TextTrimming="CharacterEllipsis" Foreground="{StaticResource FgDim}" FontSize="11" VerticalAlignment="Center" />
+            </DockPanel>
+          </Border>
+          <Border Background="{StaticResource InputBg}" ClipToBounds="True">
+            <skia:SKElement x:Name="Canvas" PaintSurface="OnPaintSurface" MouseDown="OnMouseDown" MouseMove="OnMouseMove" MouseUp="OnMouseUp" MouseWheel="OnCanvasMouseWheel" ToolTip="Roda do mouse: afasta/aproxima a visualização" />
+          </Border>
+        </DockPanel>
       </Border>
-    </StackPanel>
-
-    <TextBlock DockPanel.Dock="Bottom" Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" Margin="0,6,0,0"
-               TextTrimming="CharacterEllipsis" />
-
-    <!-- Painel lateral direito (estilo Paint 3D): opções da ferramenta ativa -->
-    <Border DockPanel.Dock="Right" Width="230" Margin="8,0,0,0" Background="{StaticResource PanelBg}"
-            BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="10">
-      <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-
+      <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Style="{StaticResource WorkspaceSplitter}" AutomationProperties.Name="Largura das opções da ferramenta" />
+      <Border Grid.Column="2" Style="{StaticResource SurfacePanel}" Padding="12">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Text="OPÇÕES DA FERRAMENTA" Style="{StaticResource SectionTitle}" Margin="0,0,0,16" />
+          <Border DockPanel.Dock="Bottom" Margin="0,12,0,0" BorderBrush="{StaticResource BorderDim}" BorderThickness="0,1,0,0" Padding="0,12,0,0">
+            <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Visible" /><Style.Triggers><DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Crop}"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger><DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Canvas}"><Setter Property="Visibility" Value="Collapsed" /></DataTrigger></Style.Triggers></Style></Border.Style>
+            <StackPanel>
+              <Border Background="{StaticResource SelectionBg}" BorderBrush="{StaticResource Selection}" BorderThickness="1" Padding="10,10" Cursor="Hand" PreviewMouseLeftButtonDown="OnDragChipDown" PreviewMouseMove="OnDragChipMove" ToolTip="Salva a imagem e inicia o arraste para uma célula da grade">
+                <TextBlock Text="Arraste para a grade" FontWeight="SemiBold" HorizontalAlignment="Center" />
+              </Border>
+              <TextBlock Text="A imagem é salva ao iniciar o arraste." TextWrapping="Wrap" Foreground="{StaticResource FgDim}" FontSize="11" Margin="0,6,0,0" />
+            </StackPanel>
+          </Border>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel>
           <!-- ═══ RECORTAR (Paint 3D: presets, W/H, fixar proporção, Cancelar/Concluído) ═══ -->
           <StackPanel>
             <StackPanel.Style>
@@ -63,8 +142,8 @@
               </ListBox.ItemsPanel>
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <Border Width="60" Height="42" Margin="1">
-                    <TextBlock Text="{Binding Name}" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  <Border Width="72" Height="42" Margin="1">
+                    <TextBlock Text="{Binding Name}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" />
                   </Border>
                 </DataTemplate>
               </ListBox.ItemTemplate>
@@ -82,16 +161,74 @@
                 <TextBox x:Name="CropH" LostFocus="OnCropFieldChanged" />
               </StackPanel>
             </Grid>
-            <CheckBox Content="Fixar proporção" IsChecked="{Binding LockAspect}" Margin="0,8,0,10" />
+            <TextBlock Text="A proporção é definida pelo enquadramento selecionado acima. Use Livre para ajustar sem proporção."
+                       TextWrapping="Wrap" Foreground="{StaticResource FgDim}" FontSize="10" Margin="0,8,0,10" />
+            <Button Content="Selecionar imagem inteira" Click="OnSelectFullCrop" Margin="0,0,0,8" Padding="0,6" />
             <Grid>
               <Grid.ColumnDefinitions>
                 <ColumnDefinition /><ColumnDefinition />
               </Grid.ColumnDefinitions>
-              <Button Grid.Column="0" Content="Cancelar" Click="OnCropCancel" Margin="0,0,3,0" Padding="0,6" />
-              <Button Grid.Column="1" Content="Concluído" Click="OnApplyCrop" Margin="3,0,0,0" Padding="0,6"
-                      Background="{StaticResource AccentDim}" BorderBrush="{StaticResource Accent}" FontWeight="Bold" />
+              <Button Grid.Column="0" Content="Redefinir" Click="OnCropCancel" Margin="0,0,3,0" Padding="0,6" />
+              <Button Grid.Column="1" Content="Aplicar recorte" Click="OnApplyCrop" Margin="3,0,0,0" Padding="0,6"
+                      Background="{StaticResource SelectionBg}" BorderBrush="{StaticResource Selection}" FontWeight="Bold" />
             </Grid>
-            <TextBlock Text="Arraste na imagem para selecionar; arraste os cantos para ajustar; arraste por dentro para mover."
+            <TextBlock Text="Arraste fora do quadro para criar outro recorte · dentro para mover · alças para ajustar · Enter aplica · Esc redefine"
+                       Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0" />
+          </StackPanel>
+
+          <!-- ═══ CAMADAS: sobrepor imagens (o "adesivo" do Paint 3D) ═══ -->
+          <StackPanel>
+            <StackPanel.Style>
+              <Style TargetType="StackPanel">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Layers}">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </StackPanel.Style>
+            <TextBlock Text="Camadas" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" />
+            <Button AutomationProperties.Name="Selecionar a imagem base" Click="OnSelectBaseLayer" HorizontalContentAlignment="Stretch" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" Padding="8" Margin="0,0,0,8" ToolTip="Selecionar a imagem base">
+              <DockPanel><TextBlock DockPanel.Dock="Left" Text="▣" FontSize="16" Margin="0,0,8,0" /><StackPanel><TextBlock Text="Imagem base" FontWeight="SemiBold" /><TextBlock Text="Use Recortar ou Tela para alterar" FontSize="10" Foreground="{StaticResource FgDim}" /></StackPanel></DockPanel>
+            </Button>
+            <Button Content="＋ Adicionar imagem" Click="OnAddLayer" Padding="0,6" Margin="0,0,0,8"
+                    Background="{StaticResource SelectionBg}" BorderBrush="{StaticResource Selection}" />
+
+            <!-- Mais alta primeiro, como em qualquer editor de camadas -->
+            <ListBox ItemsSource="{Binding Layers}" SelectedItem="{Binding ActiveLayer, Mode=TwoWay}"
+                     MaxHeight="220" Margin="0,0,0,6">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <DockPanel MinWidth="185">
+                    <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Visible}" Margin="0,0,5,0"
+                              VerticalAlignment="Center" ToolTip="Mostrar/ocultar" />
+                    <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center" />
+                  </DockPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition /><ColumnDefinition /><ColumnDefinition />
+              </Grid.ColumnDefinitions>
+              <Button AutomationProperties.Name="Subir (fica por cima)" Grid.Column="0" Content="▲" Command="{Binding MoveLayerUpCommand}" CommandParameter="{Binding ActiveLayer}"
+                      Margin="0,0,2,0" Padding="0,4" ToolTip="Subir (fica por cima)" />
+              <Button AutomationProperties.Name="Descer" Grid.Column="1" Content="▼" Command="{Binding MoveLayerDownCommand}" CommandParameter="{Binding ActiveLayer}"
+                      Margin="2,0" Padding="0,4" ToolTip="Descer" />
+              <Button AutomationProperties.Name="Remover camada" Grid.Column="2" Content="Excluir" Command="{Binding RemoveLayerCommand}" CommandParameter="{Binding ActiveLayer}"
+                      Margin="2,0,0,0" Padding="0,4" ToolTip="Remover camada" />
+            </Grid>
+
+            <TextBlock Text="Opacidade" FontSize="11" />
+            <Slider Minimum="0" Maximum="1" Value="{Binding ActiveLayer.Opacity, Mode=TwoWay, FallbackValue=1}"
+                    IsEnabled="{Binding HasLayers}" Margin="0,0,0,8" />
+
+            <Button Content="Mesclar camadas na imagem" Command="{Binding FlattenLayersCommand}"
+                    IsEnabled="{Binding HasLayers}" Padding="0,6" />
+            <TextBlock Text="Arraste a camada na imagem pra mover · alças dos cantos redimensionam (mantém proporção) · salvar já sai com tudo junto; mesclar só quando quiser fixar."
                        Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0" />
           </StackPanel>
 
@@ -109,28 +246,135 @@
             </StackPanel.Style>
             <TextBlock Text="Tela" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" />
             <TextBlock Text="Redimensionar a tela" Foreground="{StaticResource FgDim}" FontSize="11" Margin="0,0,0,6" />
+            <!-- Unidade (Paint 3D tem o mesmo seletor): em PORCENTAGEM os campos viram
+                 100/100 e o valor é relativo ao tamanho atual. -->
+            <ComboBox x:Name="TelaUnit" SelectedIndex="0" Margin="0,0,0,6" SelectionChanged="OnTelaUnitChanged">
+              <ComboBoxItem Content="Pixels" />
+              <ComboBoxItem Content="Porcentagem" />
+            </ComboBox>
             <Grid>
               <Grid.ColumnDefinitions>
                 <ColumnDefinition /><ColumnDefinition />
               </Grid.ColumnDefinitions>
               <StackPanel Grid.Column="0" Margin="0,0,4,0">
                 <TextBlock Text="Largura" FontSize="11" />
-                <TextBox x:Name="TelaW" TextChanged="OnTelaFieldChanged" />
+                <TextBox x:Name="TelaW" TextChanged="OnTelaFieldChanged"
+                         KeyDown="OnTelaKeyDown" LostFocus="OnTelaCommit" />
               </StackPanel>
               <StackPanel Grid.Column="1" Margin="4,0,0,0">
                 <TextBlock Text="Altura" FontSize="11" />
-                <TextBox x:Name="TelaH" TextChanged="OnTelaFieldChanged" />
+                <TextBox x:Name="TelaH" TextChanged="OnTelaFieldChanged"
+                         KeyDown="OnTelaKeyDown" LostFocus="OnTelaCommit" />
               </StackPanel>
             </Grid>
             <CheckBox Content="Fixar proporção" IsChecked="{Binding LockAspect}" Margin="0,8,0,4" />
-            <CheckBox Content="Redimensionar imagem com a tela" IsChecked="{Binding ResizeImageWithCanvas}" Margin="0,0,0,10" />
-            <Button Content="Aplicar" Click="OnApplyCanvas" Padding="0,6"
-                    Background="{StaticResource AccentDim}" BorderBrush="{StaticResource Accent}" FontWeight="Bold" />
+            <CheckBox Content="Redimensionar imagem com a tela" IsChecked="{Binding ResizeImageWithCanvas}" Margin="0,0,0,4" />
+            <CheckBox Content="Tela transparente" IsChecked="{Binding TransparentCanvas}" Margin="0,0,0,10"
+                      ToolTip="A área nova entra transparente em vez de branca" />
+            <Grid Margin="0,0,0,4"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+            <Button Grid.Column="0" Content="Redefinir" Click="OnResetCanvas" Padding="0,6" Margin="0,0,3,0" />
+            <Button Grid.Column="1" Content="Aplicar tamanho" Click="OnApplyCanvas" Padding="0,6" Margin="3,0,0,0"
+                    Background="{StaticResource SelectionBg}" BorderBrush="{StaticResource Selection}" FontWeight="Bold" />
+            </Grid>
             <TextBlock Text="Ou arraste as guias em qualquer borda/canto da imagem — a arte original sempre fica centralizada na tela nova."
                        Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0" />
           </StackPanel>
 
-          <!-- ═══ Ferramenta (cor, espessura, forma, balde, texto) — sempre visível ═══ -->
+
+<StackPanel>
+  <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Brush}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Eraser}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Bucket}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Eyedropper}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+  </Style.Triggers></Style></StackPanel.Style>
+<TextBlock Text="Pincéis" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6" />
+<TextBlock Text="Escolha como pintar ou preencher a imagem." TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,12" />
+<UniformGrid Columns="2">
+<RadioButton Content="Pincel" GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Brush}}" />
+<RadioButton Content="Borracha" GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Eraser}}" />
+<RadioButton Content="Preencher" GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Bucket}}" />
+<RadioButton Content="Conta-gotas" GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Eyedropper}}" />
+</UniformGrid>
+</StackPanel>
+<StackPanel>
+  <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Shape}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+  </Style.Triggers></Style></StackPanel.Style>
+<TextBlock Text="Formas 2D" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />          <TextBlock Text="Forma" FontSize="11" Margin="0,8,0,2" />
+          <ComboBox ItemsSource="{Binding Shapes}" SelectedItem="{Binding Shape}" />
+          <CheckBox Content="Preenchida" IsChecked="{Binding ShapeFilled}" Margin="0,4,0,0" />
+          <StackPanel Margin="0,6,0,0">
+            <StackPanel.Style>
+              <Style TargetType="StackPanel">
+                <Setter Property="Visibility" Value="Collapsed" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Shape}">
+                    <Setter Property="Visibility" Value="Visible" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </StackPanel.Style>
+            <TextBlock Text="Depois de desenhar, arraste por dentro pra mover ou os cantos pra redimensionar."
+                       Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6" />
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition /><ColumnDefinition />
+              </Grid.ColumnDefinitions>
+              <Button Grid.Column="0" Content="Cancelar" Click="OnCancelShape" Margin="0,0,3,0" Padding="0,6" />
+              <Button Grid.Column="1" Content="Concluir forma" Click="OnApplyShape" Margin="3,0,0,0" Padding="0,6"
+                      Background="{StaticResource SelectionBg}" BorderBrush="{StaticResource Selection}" FontWeight="Bold" />
+            </Grid>
+          </StackPanel>
+
+
+</StackPanel>
+<StackPanel>
+  <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Text}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+  </Style.Triggers></Style></StackPanel.Style>
+<TextBlock Text="Texto" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />          <TextBlock Text="Texto" FontSize="11" Margin="0,8,0,2" />
+          <TextBox Text="{Binding TextInput, UpdateSourceTrigger=PropertyChanged}" />
+          <DockPanel Margin="0,4,0,0">
+            <TextBlock DockPanel.Dock="Left" Text="Tamanho" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
+            <TextBox Text="{Binding TextSize, UpdateSourceTrigger=PropertyChanged}" Width="46" HorizontalAlignment="Left" />
+          </DockPanel>
+<TextBlock Text="Digite o conteúdo e clique na imagem para inserir." TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,8,0,0" />
+</StackPanel>
+<StackPanel>
+  <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Brush}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Eraser}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Shape}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+  </Style.Triggers></Style></StackPanel.Style>
+          <TextBlock Text="Pincel / contorno" FontSize="11" Margin="0,8,0,2" />
+          <DockPanel>
+            <TextBox DockPanel.Dock="Right" Text="{Binding BrushSize, UpdateSourceTrigger=PropertyChanged}" Width="36" Margin="6,0,0,0" />
+            <Slider Minimum="1" Maximum="100" Value="{Binding BrushSize}" VerticalAlignment="Center" />
+          </DockPanel>
+
+
+</StackPanel>
+<StackPanel>
+  <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Bucket}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+  </Style.Triggers></Style></StackPanel.Style>
+          <TextBlock Text="Tolerância do balde" FontSize="11" Margin="0,8,0,2" />
+          <DockPanel>
+            <TextBox DockPanel.Dock="Right" Text="{Binding BucketTolerance, UpdateSourceTrigger=PropertyChanged}" Width="36" Margin="6,0,0,0" />
+            <Slider Minimum="0" Maximum="128" Value="{Binding BucketTolerance}" VerticalAlignment="Center" />
+          </DockPanel>
+
+
+</StackPanel>
+<StackPanel>
+  <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers>
+    <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Brush}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Eyedropper}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Bucket}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Shape}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+<DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Text}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
+  </Style.Triggers></Style></StackPanel.Style>
           <TextBlock Text="Cores" FontSize="13" FontWeight="Bold" Margin="0,14,0,4" />
           <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
             <Border Background="{Binding BrushColorHex}" Width="26" Height="26" BorderBrush="{StaticResource Fg}"
@@ -175,57 +419,12 @@
             </ItemsControl>
           </StackPanel>
 
-          <TextBlock Text="Pincel / contorno" FontSize="11" Margin="0,8,0,2" />
-          <DockPanel>
-            <TextBox DockPanel.Dock="Right" Text="{Binding BrushSize, UpdateSourceTrigger=PropertyChanged}" Width="36" Margin="6,0,0,0" />
-            <Slider Minimum="1" Maximum="100" Value="{Binding BrushSize}" VerticalAlignment="Center" />
-          </DockPanel>
 
-          <TextBlock Text="Forma" FontSize="11" Margin="0,8,0,2" />
-          <ComboBox ItemsSource="{Binding Shapes}" SelectedItem="{Binding Shape}" />
-          <CheckBox Content="Preenchida" IsChecked="{Binding ShapeFilled}" Margin="0,4,0,0" />
-          <StackPanel Margin="0,6,0,0">
-            <StackPanel.Style>
-              <Style TargetType="StackPanel">
-                <Setter Property="Visibility" Value="Collapsed" />
-                <Style.Triggers>
-                  <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Shape}">
-                    <Setter Property="Visibility" Value="Visible" />
-                  </DataTrigger>
-                </Style.Triggers>
-              </Style>
-            </StackPanel.Style>
-            <TextBlock Text="Depois de desenhar, arraste por dentro pra mover ou os cantos pra redimensionar."
-                       Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6" />
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition /><ColumnDefinition />
-              </Grid.ColumnDefinitions>
-              <Button Grid.Column="0" Content="Cancelar" Click="OnCancelShape" Margin="0,0,3,0" Padding="0,6" />
-              <Button Grid.Column="1" Content="Concluir forma" Click="OnApplyShape" Margin="3,0,0,0" Padding="0,6"
-                      Background="{StaticResource AccentDim}" BorderBrush="{StaticResource Accent}" FontWeight="Bold" />
-            </Grid>
-          </StackPanel>
-
-          <TextBlock Text="Tolerância do balde" FontSize="11" Margin="0,8,0,2" />
-          <DockPanel>
-            <TextBox DockPanel.Dock="Right" Text="{Binding BucketTolerance, UpdateSourceTrigger=PropertyChanged}" Width="36" Margin="6,0,0,0" />
-            <Slider Minimum="0" Maximum="128" Value="{Binding BucketTolerance}" VerticalAlignment="Center" />
-          </DockPanel>
-
-          <TextBlock Text="Texto" FontSize="11" Margin="0,8,0,2" />
-          <TextBox Text="{Binding TextInput, UpdateSourceTrigger=PropertyChanged}" />
-          <DockPanel Margin="0,4,0,0">
-            <TextBlock DockPanel.Dock="Left" Text="Tamanho" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
-            <TextBox Text="{Binding TextSize, UpdateSourceTrigger=PropertyChanged}" Width="46" HorizontalAlignment="Left" />
-          </DockPanel>
-        </StackPanel>
-      </ScrollViewer>
-    </Border>
-
-    <Border BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Background="{StaticResource InputBg}" ClipToBounds="True">
-      <skia:SKElement x:Name="Canvas" PaintSurface="OnPaintSurface"
-                       MouseDown="OnMouseDown" MouseMove="OnMouseMove" MouseUp="OnMouseUp" />
-    </Border>
-  </DockPanel>
+</StackPanel>
+          </StackPanel></ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Grid>
+    <TextBlock Grid.Row="3" Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding StatusText}" Margin="4,0" />
+  </Grid>
 </Window>

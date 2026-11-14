@@ -31,17 +31,26 @@ public partial class MainWindow : Window
         _vm.OnClosing();
     }
 
+    private const string NdiDragFormat = "VideoWallRW.NdiSourceName";
+
     private void OnClipDrop(object sender, DragEventArgs e)
     {
+        if (sender is not FrameworkElement { DataContext: ViewModels.ClipViewModel clipVm }) return;
+
         if (e.Data.GetDataPresent(DataFormats.FileDrop))
         {
             if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
             {
-                if (sender is FrameworkElement fe && fe.DataContext is ViewModels.ClipViewModel clipVm)
-                {
-                    _vm.Grid.SetFiles(clipVm.LayerIndex, clipVm.ColumnIndex, files);
-                    e.Handled = true;
-                }
+                _vm.Grid.SetFiles(clipVm.LayerIndex, clipVm.ColumnIndex, files);
+                e.Handled = true;
+            }
+        }
+        else if (e.Data.GetDataPresent(NdiDragFormat))
+        {
+            if (e.Data.GetData(NdiDragFormat) is string sourceName)
+            {
+                _vm.SendNdiToCell(sourceName, clipVm.LayerIndex, clipVm.ColumnIndex);
+                e.Handled = true;
             }
         }
     }
@@ -75,6 +84,31 @@ public partial class MainWindow : Window
     {
         if (sender is ListBox { SelectedItem: string path })
             _vm.SendRecentSource(path);
+    }
+
+    private void OnNdiSourceDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListBox { SelectedItem: string name })
+            _vm.SendNdiToSelectedCell(name);
+    }
+
+    // ── Aba Sources > NDI: duplo-clique envia, arrastar solta nas células ──
+    private Point _ndiDragStart;
+
+    private void OnNdiListMouseDown(object sender, MouseButtonEventArgs e)
+        => _ndiDragStart = e.GetPosition(null);
+
+    private void OnNdiListMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        var pos = e.GetPosition(null);
+        if (Math.Abs(pos.X - _ndiDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _ndiDragStart.Y) < SystemParameters.MinimumVerticalDragDistance)
+            return;
+
+        if (sender is ListBox { SelectedItem: string name })
+            DragDrop.DoDragDrop((DependencyObject)sender,
+                new DataObject(NdiDragFormat, name), DragDropEffects.Copy);
     }
 
     private void OnEditImageClick(object sender, RoutedEventArgs e)
@@ -156,8 +190,10 @@ public partial class MainWindow : Window
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        // Espaço fora de um TextBox: Play/Pause global (todas as layers).
-        if (e.Key == Key.Space && Keyboard.FocusedElement is not TextBoxBase)
+        // Espaço mantém a ação nativa quando o operador usa um controle pelo teclado.
+        // Fora deles, alterna a troca automática global.
+        if (e.Key == Key.Space && Keyboard.Modifiers == ModifierKeys.None &&
+            Keyboard.FocusedElement is not (TextBoxBase or ButtonBase or ComboBox or Slider or Controls.ValueSlider or Controls.TransformGizmo))
         {
             _vm.ToggleMasterPause();
             e.Handled = true;
@@ -172,13 +208,16 @@ public partial class MainWindow : Window
             if (e.Key == Key.V && _vm.Grid.PasteClipboardClip()) { e.Handled = true; return; }
         }
 
-        if (Keyboard.FocusedElement is TextBoxBase || !_keymap.TryGetAction(e, out var action))
+        if (Keyboard.FocusedElement is TextBoxBase || !_keymap.TryGetAction(e, out var action, out var targetLayer))
             return;
 
         if (action.StartsWith("TriggerColumn", StringComparison.Ordinal) &&
             int.TryParse(action["TriggerColumn".Length..], out int column))
         {
-            _vm.Grid.TriggerColumnFromShortcut(column - 1);
+            if (targetLayer is { } layer)
+                _vm.Grid.TriggerClipFromShortcut(layer, column - 1);
+            else
+                _vm.Grid.TriggerColumnFromShortcut(column - 1);
         }
         else
         {
@@ -192,6 +231,8 @@ public partial class MainWindow : Window
                 case "SaveProject": _vm.SaveProjectCommand.Execute(null); break;
                 case "OpenProject": _vm.OpenProjectCommand.Execute(null); break;
                 case "NewProject": _vm.NewProjectCommand.Execute(null); break;
+                case "NextScene": _vm.SelectNextScene(); break;
+                case "PreviousScene": _vm.SelectPreviousScene(); break;
                 default: return;
             }
         }

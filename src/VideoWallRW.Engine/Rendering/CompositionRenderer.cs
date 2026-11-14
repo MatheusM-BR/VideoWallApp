@@ -424,45 +424,51 @@ public sealed class CompositionRenderer : IDisposable
         _compSrv.Dispose();
         _compRtv.Dispose();
         _compTexture.Dispose();
+        _captureRtv?.Dispose();
+        _captureTexture?.Dispose();
         _captureStaging?.Dispose();
     }
 
     // ── Composition Monitor: leitura da textura pra WPF (T17) ──────────────────
     // Fora do caminho normal do frame — só roda quando o operador liga o monitor
     // ao vivo. Textura Staging criada uma vez (mesmo tamanho/formato da composição).
+    private ID3D11Texture2D? _captureTexture;
+    private ID3D11RenderTargetView? _captureRtv;
     private ID3D11Texture2D? _captureStaging;
+    private int _captureWidth;
+    private int _captureHeight;
 
     /// <summary>Copia a composição já renderizada pro CPU (BGRA32). Chamar depois de
     /// <see cref="Render"/>. Custa um Map(Read) — evitar chamar todo frame; throttle
     /// no chamador (RenderThread).</summary>
     public unsafe bool TryCaptureComposition(ID3D11DeviceContext ctx, out byte[] pixelsBgra, out int width, out int height)
     {
-        width = _compWidth;
-        height = _compHeight;
+        EnsureCaptureTextures();
+        width = _captureWidth;
+        height = _captureHeight;
         pixelsBgra = [];
 
-        _captureStaging ??= _gfx.Device.CreateTexture2D(new Texture2DDescription
+        // Reduz na GPU antes do Map(Read). A UI nunca precisa ler a textura de saída
+        // inteira para os monitores de referência.
+        ctx.ClearRenderTargetView(_captureRtv!, new Color4(0, 0, 0, 1));
+        ctx.OMSetRenderTargets(_captureRtv!);
+        ctx.RSSetViewport(new Viewport(0, 0, _captureWidth, _captureHeight));
+        var full = new RectF(0, 0, _captureWidth, _captureHeight);
+        var position = SliceMath.ComputePosition(full, _captureWidth, _captureHeight);
+        var uv = SliceMath.ComputeUv(new Slice
         {
-            Width = (uint)_compWidth,
-            Height = (uint)_compHeight,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.B8G8R8A8_UNorm,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Staging,
-            CPUAccessFlags = CpuAccessFlags.Read,
-            BindFlags = BindFlags.None,
-        });
-
-        ctx.CopyResource(_captureStaging, _compTexture);
-        var mapped = ctx.Map(_captureStaging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+            InputRect = new RectF(0, 0, _compWidth, _compHeight)
+        }, _compWidth, _compHeight);
+        DrawSlice(ctx, _compSrv, position, uv, new ColorCorrection(), 1f);
+        ctx.CopyResource(_captureStaging!, _captureTexture!);
+        var mapped = ctx.Map(_captureStaging!, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
         try
         {
-            pixelsBgra = new byte[_compWidth * _compHeight * 4];
-            int rowBytes = _compWidth * 4;
+            pixelsBgra = new byte[_captureWidth * _captureHeight * 4];
+            int rowBytes = _captureWidth * 4;
             int rowPitch = (int)mapped.RowPitch;
             byte* basePtr = (byte*)mapped.DataPointer;
-            for (int y = 0; y < _compHeight; y++)
+            for (int y = 0; y < _captureHeight; y++)
             {
                 var srcRow = new Span<byte>(basePtr + (long)y * rowPitch, rowBytes);
                 srcRow.CopyTo(pixelsBgra.AsSpan(y * rowBytes, rowBytes));
@@ -473,6 +479,33 @@ public sealed class CompositionRenderer : IDisposable
             ctx.Unmap(_captureStaging, 0);
         }
         return true;
+    }
+
+    private void EnsureCaptureTextures()
+    {
+        if (_captureTexture is not null) return;
+        const int maxWidth = 480;
+        const int maxHeight = 270;
+        double scale = Math.Min(1.0, Math.Min((double)maxWidth / _compWidth, (double)maxHeight / _compHeight));
+        _captureWidth = Math.Max(1, (int)Math.Round(_compWidth * scale));
+        _captureHeight = Math.Max(1, (int)Math.Round(_compHeight * scale));
+        var gpu = new Texture2DDescription
+        {
+            Width = (uint)_captureWidth,
+            Height = (uint)_captureHeight,
+            MipLevels = 1,
+            ArraySize = 1,
+            Format = Format.B8G8R8A8_UNorm,
+            SampleDescription = new SampleDescription(1, 0),
+            Usage = ResourceUsage.Default,
+            BindFlags = BindFlags.RenderTarget,
+        };
+        _captureTexture = _gfx.Device.CreateTexture2D(gpu);
+        _captureRtv = _gfx.Device.CreateRenderTargetView(_captureTexture);
+        gpu.Usage = ResourceUsage.Staging;
+        gpu.BindFlags = BindFlags.None;
+        gpu.CPUAccessFlags = CpuAccessFlags.Read;
+        _captureStaging = _gfx.Device.CreateTexture2D(gpu);
     }
 }
 

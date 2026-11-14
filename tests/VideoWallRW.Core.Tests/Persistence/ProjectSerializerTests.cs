@@ -38,7 +38,11 @@ public class ProjectSerializerTests : IDisposable
         var screen = new Screen { Name = "Tela 1", MonitorDeviceName = @"\\.\DISPLAY1" };
         screen.Slices.Add(new Slice { Name = "Full", Rotation = Rotation.R90 });
         project.Output.Screens.Add(screen);
-        project.Snapshots.Add(new SceneSnapshot { Name = "Abertura", Hotkey = "Ctrl+1", MasterFader = 0.8 });
+        project.Snapshots.Add(new SceneSnapshot
+        {
+            Name = "Abertura", Hotkey = "Ctrl+1",
+            Grid = new Composition { MasterOpacity = 0.8 },
+        });
 
         ProjectSerializer.Save(_path, project);
         var loaded = ProjectSerializer.Load(_path);
@@ -47,7 +51,7 @@ public class ProjectSerializerTests : IDisposable
         Assert.Equal(Rotation.R90, loaded.Output.Screens[0].Slices[0].Rotation);
         Assert.Single(loaded.Snapshots);
         Assert.Equal("Abertura", loaded.Snapshots[0].Name);
-        Assert.Equal(0.8, loaded.Snapshots[0].MasterFader);
+        Assert.Equal(0.8, loaded.Snapshots[0].Grid.MasterOpacity);
     }
 
     [Fact]

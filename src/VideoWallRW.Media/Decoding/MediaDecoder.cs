@@ -30,6 +30,12 @@ public sealed unsafe class MediaDecoder : IDisposable
     private byte[] _audioScratch = [];
     private readonly Action<float[], int>? _onAudioSamples;
 
+    // Config de origem com que o _swsCtx foi construído — o contexto tem que ser
+    // recriado se QUALQUER uma mudar (antes só a resolução era comparada).
+    private int _swsSrcWidth = -1;
+    private int _swsSrcHeight = -1;
+    private AVPixelFormat _swsSrcFormat = AVPixelFormat.AV_PIX_FMT_NONE;
+
     public double Duration { get; }
     public int Width { get; }
     public int Height { get; }
@@ -292,6 +298,9 @@ public sealed unsafe class MediaDecoder : IDisposable
         }
     }
 
+    /// <summary>Folga no fim do buffer de áudio reamostrado — ver ResampleAndEmit.</summary>
+    private const int ResampleTailPadding = 256;
+
     private void ResampleAndEmit()
     {
         int maxOutSamples = ffmpeg.swr_get_out_samples(_swrCtx, _audioFrame->nb_samples);
@@ -299,15 +308,22 @@ public sealed unsafe class MediaDecoder : IDisposable
             return;
 
         int neededBytes = maxOutSamples * AudioOutChannels * sizeof(float);
-        if (_audioScratch.Length < neededBytes)
-            _audioScratch = new byte[neededBytes];
+        // Mesma folga de segurança do vídeo (ver SwsTailPadding em FillTarget): as
+        // rotinas SIMD do swresample também escrevem em blocos e podem passar do fim
+        // do buffer. Com o buffer justo, esse excesso caía na memória gerenciada
+        // seguinte e corrompia o heap — o mesmo mecanismo que derrubava o programa.
+        if (_audioScratch.Length < neededBytes + ResampleTailPadding)
+            _audioScratch = new byte[neededBytes + ResampleTailPadding];
 
         int converted;
         byte*[] inPlanes = _audioFrame->data;
         fixed (byte** inPtr = inPlanes)
         fixed (byte* outBufPtr = _audioScratch)
         {
-            byte*[] outPlanes = [outBufPtr];
+            // Mesmo cuidado do sws_scale: o swr_convert recebe um vetor de planos.
+            // Saída é PACKED (AV_SAMPLE_FMT_FLT, só usa o plano 0), mas manter os 8
+            // slots evita qualquer leitura fora do array gerenciado.
+            byte*[] outPlanes = [outBufPtr, null, null, null, null, null, null, null];
             fixed (byte** outPtr = outPlanes)
             {
                 converted = ffmpeg.swr_convert(_swrCtx, outPtr, maxOutSamples, inPtr, _audioFrame->nb_samples);
@@ -331,28 +347,55 @@ public sealed unsafe class MediaDecoder : IDisposable
             : rawPts * ffmpeg.av_q2d(_timeBase);
         _lastPts = pts;
 
-        int dstStride = Width * 4; // BGRA: 4 bytes por pixel, sem padding extra
+        int dstStride = Width * 4; // BGRA: 4 bytes por pixel
         int needed = dstStride * Height;
-        if (target.Pixels.Length < needed)
-            target.Pixels = new byte[needed];
+        // FOLGA OBRIGATÓRIA no fim do buffer: as rotinas SIMD do swscale escrevem em
+        // blocos de 16/32 bytes e podem passar ALÉM da última linha. Com o buffer
+        // dimensionado em exatamente stride*altura, esse excesso caía na memória
+        // gerenciada logo em seguida — corrompendo o heap. O estrago só aparecia
+        // depois, como "Internal CLR error / access violation" em outro ponto
+        // qualquer, o que tornava o crash impossível de rastrear. É por isso que o
+        // programa fechava na troca de clipe. (Mesma razão pela qual o FFmpeg
+        // recomenda av_image_alloc, que já reserva essa folga.)
+        // Uma LINHA inteira de folga (+64): é a margem que o próprio av_image_alloc do
+        // FFmpeg reserva, e cobre com sobra qualquer caminho SIMD do swscale. Custa
+        // ~7 KB por buffer de frame — irrelevante perto da segurança que dá.
+        int swsTailPadding = dstStride + 64;
+        if (target.Pixels.Length < needed + swsTailPadding)
+            target.Pixels = new byte[needed + swsTailPadding];
 
-        // Contexto sws reutilizado: recriar só se resolução/formato mudar.
+        // Contexto sws reutilizado: recriar se resolução OU FORMATO DE PIXEL mudar.
+        // Só comparar resolução deixava o contexto preso ao formato do primeiro frame —
+        // se o decoder passasse a entregar outro formato (mesmas dimensões), o swscale
+        // leria os planos da origem com o layout ERRADO.
+        var srcFormat = (AVPixelFormat)_frame->format;
         if (_swsCtx == null ||
-            _frame->width != Width || _frame->height != Height)
+            _frame->width != _swsSrcWidth || _frame->height != _swsSrcHeight || srcFormat != _swsSrcFormat)
         {
             if (_swsCtx != null) ffmpeg.sws_freeContext(_swsCtx);
             _swsCtx = ffmpeg.sws_getContext(
-                _frame->width, _frame->height, (AVPixelFormat)_frame->format,
+                _frame->width, _frame->height, srcFormat,
                 Width, Height, AVPixelFormat.AV_PIX_FMT_BGRA,
                 ffmpeg.SWS_BILINEAR, null, null, null);
             if (_swsCtx == null)
                 throw new MediaOpenException("sws_getContext falhou.");
+            _swsSrcWidth = _frame->width;
+            _swsSrcHeight = _frame->height;
+            _swsSrcFormat = srcFormat;
         }
 
         fixed (byte* dstPtr = target.Pixels)
         {
-            byte*[] dstData = [dstPtr];
-            int[] dstLinesize = [dstStride];
+            // Os arrays de destino PRECISAM ter os 4 planos que o swscale espera
+            // (uint8_t *dst[4] / int dstStride[4]). Com arrays de 1 elemento, o
+            // swscale lia os índices 1-3 FORA do array gerenciado, tratando lixo do
+            // heap como ponteiro. Com yuv420p (h264) ele nem toca nesses planos e
+            // passava despercebido; com RGBA (codec dxv/HAP dos vídeos da operação)
+            // ele entra no caminho com alpha que acessa os demais planos — era
+            // corrupção de heap silenciosa, que o GC depois transformava em
+            // access violation dentro do coreclr.
+            byte*[] dstData = [dstPtr, null, null, null];
+            int[] dstLinesize = [dstStride, 0, 0, 0];
             ffmpeg.sws_scale(_swsCtx, _frame->data, _frame->linesize, 0, _frame->height,
                 dstData, dstLinesize);
 

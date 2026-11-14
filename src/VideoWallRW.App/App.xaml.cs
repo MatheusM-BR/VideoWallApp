@@ -20,11 +20,35 @@ public partial class App : Application
     private AudioEngine? _audio;
     private HeartbeatClient? _heartbeat;
     private Mutex? _singleInstanceMutex;
+    private bool _sessionStarted;
     private Input.OscService? _osc;
     private Remote.RemoteWebService? _remoteWeb;
+    private Media.Ndi.NdiFinder? _ndiFinder;
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
+        // Verification mode is also used by the installer; never starts audio,
+        // rendering, network services or touches the user's recovery state.
+        bool verifyOnly = e.Args.Contains("--verify-package", StringComparer.OrdinalIgnoreCase);
+        string? integrityError = Security.PackageIntegrity.VerifyCurrentPackage();
+        if (integrityError is not null || verifyOnly)
+        {
+            if (integrityError is not null && !verifyOnly)
+                MessageBox.Show(integrityError, "RW VideoWall — integridade", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(integrityError is null ? 0 : 10);
+            return;
+        }
+
+        // Rede de segurança de produção: um erro inesperado na UI thread (ex.: uma
+        // sonda assíncrona terminando depois que a célula/coluna dela já foi removida)
+        // não pode derrubar o programa inteiro no meio de um evento ao vivo — melhor
+        // logar, avisar e continuar do que perder a composição toda.
+        DispatcherUnhandledException += OnDispatcherUnhandledException;
+        // + threads de background e Tasks órfãs (que a linha acima NÃO cobre e que
+        // matavam o processo "do nada", sem rastro no log) — relatório em
+        // %LocalAppData%\VideoWallRW\crashes\ pra análise posterior.
+        CrashReporter.Register();
+
         // O processo também cria seu próprio device D3D11 (RenderThread) além do que o WPF
         // usa internamente para desenhar suas próprias janelas — em algumas combinações de
         // GPU/driver isso deixa a janela do painel em branco até o primeiro repaint forçado.
@@ -35,20 +59,41 @@ public partial class App : Application
         // Instância única: duas cópias do programa brigam pelas saídas e tocam áudio
         // em dobro (som "picotado" e mute que parece não funcionar — cada instância
         // tem sua própria sessão WASAPI).
-        _singleInstanceMutex = new Mutex(true, @"Global\VideoWallRW-SingleInstance", out bool createdNew);
+        bool createdNew;
+        try
+        {
+            _singleInstanceMutex = new Mutex(true, @"Global\VideoWallRW-SingleInstance", out createdNew);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Another Windows user's session may own the global output lock.
+            createdNew = false;
+        }
         if (!createdNew)
         {
-            MessageBox.Show(
-                "O VideoWallRW já está aberto. Use a janela existente —\n" +
-                "duas cópias ao mesmo tempo brigam pelas saídas e pelo áudio.",
-                "VideoWallRW", MessageBoxButton.OK, MessageBoxImage.Warning);
+            if (!e.Args.Contains("--startup", StringComparer.OrdinalIgnoreCase))
+                MessageBox.Show(
+                    "O RW VideoWall já está aberto neste computador, possivelmente em outra sessão do Windows.\n" +
+                    "Use a instância existente para evitar conflito nas saídas e no áudio.",
+                    "RW VideoWall", MessageBoxButton.OK, MessageBoxImage.Warning);
             Shutdown(0);
             return;
         }
 
+        // Post-mortem ANTES do MarkSessionStart (que sobrescreve o sentinela): se a
+        // sessão anterior morreu sem despedida (crash nativo em FFmpeg/D3D11/NDI,
+        // kill, queda de energia — casos em que NENHUM handler .NET roda), monta um
+        // relatório com a cauda do log anterior + eventos de crash do Windows e avisa
+        // o operador onde ele está, pra poder enviar pra análise.
+        string? uncleanReport = CrashReporter.ReportUncleanExitIfAny();
+
         // T7.3: sentinela de sessão — se ainda existir no próximo start, o
         // encerramento anterior não foi limpo (crash), e a UI oferece recuperação.
         AutosaveService.MarkSessionStart();
+        _sessionStarted = true;
+
+        // Faxina dos caches (miniaturas/scrub/prévias NDI) a cada 5 dias, em background.
+        CacheMaintenance.RunIfDue();
 
         var logDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -97,6 +142,12 @@ public partial class App : Application
 
         _render = new RenderThread(_gfx);
 
+        // Descoberta de fontes NDI: fica rodando em background durante toda a sessão
+        // (a aba Sources só lê a lista atual) — se o runtime não estiver instalado,
+        // IsAvailable fica false e a UI mostra a mensagem de instalação em vez de travar.
+        _ndiFinder = new Media.Ndi.NdiFinder();
+        _ndiFinder.Start();
+
         // Factory injetada: cria VideoFileSource no contexto do App (que tem referência a Media).
         // Isso mantém Engine sem dependência direta de Media.
         var gfxRef = _gfx;
@@ -110,6 +161,7 @@ public partial class App : Application
                 {
                     Duration = clip.ImageDuration ?? defaultImageDuration
                 },
+                Core.Model.NdiSource n => new Media.Ndi.NdiVideoSource(gfxRef, n.SourceName),
                 _ => throw new NotSupportedException($"Tipo de fonte {clip.Source.GetType()} não é suportada por esta factory.")
             };
         });
@@ -118,7 +170,7 @@ public partial class App : Application
         _heartbeat = new HeartbeatClient();
 
         bool kiosk = e.Args.Any(a => a.Equals("--kiosk", StringComparison.OrdinalIgnoreCase));
-        var vm = new MainViewModel(_gfx, _render, kiosk);
+        var vm = new MainViewModel(_gfx, _render, kiosk, _ndiFinder);
         if (kiosk)
             ApplyKiosk(vm);
 
@@ -133,6 +185,13 @@ public partial class App : Application
         if (kiosk)
             window.WindowState = WindowState.Maximized;
         window.Show();
+
+        // Aviso do post-mortem na BARRA DE STATUS, nunca num diálogo modal: um modal
+        // no startup trava a interface bem na hora de montar o evento (e aparece também
+        // depois de um encerramento forçado ou queda de energia, que não são bugs).
+        // O caminho do relatório fica visível e o log guarda o registro completo.
+        if (uncleanReport is not null)
+            vm.StatusText = $"⚠ A última sessão fechou de forma inesperada — relatório: {uncleanReport}";
     }
 
     /// <summary>
@@ -183,6 +242,21 @@ public partial class App : Application
         return new VideoFileSource(gfx, path, audio);
     }
 
+    private static void OnDispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+    {
+        CrashReporter.Write("UI thread (recuperado — programa seguiu rodando)", e.Exception);
+        Log.Error(e.Exception, "Erro não tratado na UI thread — programa segue rodando");
+        try
+        {
+            MessageBox.Show(
+                $"Ocorreu um erro inesperado, mas o programa continua rodando:\n{e.Exception.Message}\n\n" +
+                "Se algo parecer errado na grade, salve o projeto e reabra pra garantir.",
+                "VideoWallRW — erro recuperado", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        catch { /* nem o aviso pode derrubar o handler */ }
+        e.Handled = true;
+    }
+
     private void OnExit(object sender, ExitEventArgs e)
     {
         // Ordem importa: parar a thread (que descarta as saídas) antes do device;
@@ -193,7 +267,9 @@ public partial class App : Application
         _render?.Stop();
         _audio?.Dispose();
         _gfx?.Dispose();
-        AutosaveService.MarkSessionClean();
+        _ndiFinder?.Dispose();
+        if (_sessionStarted)
+            AutosaveService.MarkSessionClean();
         Log.Information("VideoWallRW encerrado");
         Log.CloseAndFlush();
     }

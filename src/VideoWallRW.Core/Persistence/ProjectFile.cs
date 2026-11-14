@@ -14,11 +14,38 @@ public sealed class ProjectMeta
     /// <summary>Sequenciador de colunas (modo Instalação) rodando ou não — sem isso,
     /// reabrir sempre parava o sequenciador mesmo que estivesse ativo ao salvar.</summary>
     public bool SequencerRunning { get; set; }
+
+    /// <summary>Monitores com a saída LIGADA (checkbox da linha SAÍDAS) no momento do
+    /// save — reabrir o projeto religa os telões sozinho, sem o operador ter que
+    /// marcar cada monitor de novo (T32: "mantenha até a habilitação dos vídeos").</summary>
+    public List<string> EnabledOutputs { get; set; } = [];
+
+    /// <summary>
+    /// Vínculo (grupo de troca) de células que estão VAZIAS, na chave "layer:coluna".
+    /// Célula com mídia guarda o grupo no próprio Clip; a vazia não tem Clip onde
+    /// guardar, então ia embora ao salvar — por isso vive aqui.
+    /// </summary>
+    public Dictionary<string, Guid> BlankCellLinks { get; set; } = [];
+
+    /// <summary>
+    /// Cena que estava ABERTA no momento do save. Sem isto, reabrir o projeto não
+    /// destacava aba nenhuma: a grade voltava certa (vem de Composition, que é a
+    /// grade da cena aberta), mas nenhuma cena aparecia selecionada, e o operador
+    /// tinha que clicar na aba de novo pra "voltar" pra onde já estava. Null = o
+    /// projeto foi salvo sem cena aberta.
+    /// </summary>
+    public Guid? SelectedSceneId { get; set; }
 }
 
 /// <summary>
-/// Snapshot de cena (Fase 7 T7.5): captura o estado inteiro da grade — clip ativo
-/// por layer, opacidades — para disparar como preset com um atalho.
+/// Cena = uma grade completa e independente (layers, colunas, clipes com todas as
+/// configurações, master fader, blackout) — funciona como uma aba: abrir uma cena
+/// nova começa em branco, clicar numa cena existente troca a grade inteira pra a
+/// dela, e editar a grade com uma cena selecionada atualiza essa cena sozinho
+/// (ver MainViewModel.SyncSelectedSceneFromGrid). Campos antigos (ActiveColumns/
+/// LayerOpacities/MasterFader, versão "disparar preset" pré-T30) foram removidos —
+/// projetos salvos por essa versão anterior carregam com Grid vazio (Composition
+/// default), sem migração automática de dados antigos.
 /// </summary>
 public sealed class SceneSnapshot
 {
@@ -26,13 +53,18 @@ public sealed class SceneSnapshot
     public string Name { get; set; } = "Cena";
     public string? Hotkey { get; set; }
 
-    /// <summary>layerId (Guid) → coluna ativa (-1 = nenhuma).</summary>
-    public Dictionary<Guid, int> ActiveColumns { get; set; } = [];
+    public Composition Grid { get; set; } = new();
 
-    /// <summary>layerId (Guid) → opacidade.</summary>
-    public Dictionary<Guid, double> LayerOpacities { get; set; } = [];
-
-    public double MasterFader { get; set; } = 1.0;
+    /// <summary>
+    /// Vínculo (grupo de troca) das células VAZIAS desta cena, em "layer:coluna".
+    /// Célula com mídia guarda o grupo no próprio Clip, que já viaja dentro de
+    /// <see cref="Grid"/>; a vazia não tem Clip onde guardar. Antes existia só o
+    /// mapa global em <see cref="ProjectMeta.BlankCellLinks"/> — e como ele não
+    /// pertencia a cena nenhuma, trocar de cena levava junto os vínculos vazios da
+    /// cena anterior. Campo novo é opcional: projeto salvo antes dele carrega com o
+    /// dicionário vazio e cai no mapa global, sem migração.
+    /// </summary>
+    public Dictionary<string, Guid> BlankCellLinks { get; set; } = [];
 }
 
 /// <summary>

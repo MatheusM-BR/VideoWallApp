@@ -12,13 +12,22 @@ public sealed partial class KeymapEditorViewModel : ObservableObject
 
     [ObservableProperty] private string _statusText = "";
 
-    public KeymapEditorViewModel() => LoadEntries(KeymapService.LoadOrCreate(KeymapService.FilePath));
+    private readonly IReadOnlyList<LayerTargetOption> _layerOptions;
+
+    public KeymapEditorViewModel(IEnumerable<string> layerNames)
+    {
+        _layerOptions = [new LayerTargetOption(null, "Todas as camadas"),
+            .. layerNames.Select((name, index) => new LayerTargetOption(index, $"Camada {index + 1} · {name}"))];
+        LoadEntries(KeymapService.LoadOrCreate(KeymapService.FilePath));
+    }
 
     private void LoadEntries(Dictionary<string, string> map)
     {
         Entries.Clear();
+        var targets = KeymapService.LoadLayerTargets();
         foreach (var (action, gesture) in map.OrderBy(kv => kv.Key))
-            Entries.Add(new KeymapEntryViewModel(action, gesture));
+            Entries.Add(new KeymapEntryViewModel(action, gesture, _layerOptions,
+                targets.GetValueOrDefault(action)));
         CheckConflicts();
     }
 
@@ -30,6 +39,8 @@ public sealed partial class KeymapEditorViewModel : ObservableObject
     {
         var map = Entries.ToDictionary(e => e.Action, e => e.Gesture);
         KeymapService.Save(KeymapService.FilePath, map);
+        KeymapService.SaveLayerTargets(Entries.Where(e => e.IsColumnAction)
+            .ToDictionary(e => e.Action, e => e.SelectedLayer?.LayerIndex));
         StatusText = "Atalhos salvos.";
     }
 
@@ -60,13 +71,21 @@ public sealed partial class KeymapEntryViewModel : ObservableObject
     [ObservableProperty] private string _gesture;
     [ObservableProperty] private bool _hasConflict;
     [ObservableProperty] private bool _isCapturing;
+    [ObservableProperty] private LayerTargetOption? _selectedLayer;
+    public IReadOnlyList<LayerTargetOption> LayerOptions { get; }
+    public bool IsColumnAction => Action.StartsWith("TriggerColumn", StringComparison.Ordinal);
 
-    public KeymapEntryViewModel(string action, string gesture)
+    public KeymapEntryViewModel(string action, string gesture,
+        IReadOnlyList<LayerTargetOption> layerOptions, int? selectedLayerIndex)
     {
         Action = action;
         _gesture = gesture;
+        LayerOptions = layerOptions;
+        _selectedLayer = layerOptions.FirstOrDefault(x => x.LayerIndex == selectedLayerIndex) ?? layerOptions[0];
     }
 
     [RelayCommand]
     private void StartCapture() => IsCapturing = true;
 }
+
+public sealed record LayerTargetOption(int? LayerIndex, string Name);

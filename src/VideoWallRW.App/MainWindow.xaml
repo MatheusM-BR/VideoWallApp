@@ -2,71 +2,94 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:VideoWallRW.App.Controls"
-        Title="{Binding WindowTitle}" Height="860" Width="1180"
+        Title="{Binding WindowTitle}" Height="900" Width="1440" MinHeight="720" MinWidth="1100"
         WindowStartupLocation="CenterScreen" PreviewKeyDown="OnPreviewKeyDown"
+        FontFamily="Segoe UI" FontSize="12" UseLayoutRounding="True"
         Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
-  <DockPanel Margin="8">
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Themes/Workspace.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+  <Grid Margin="8" Background="{StaticResource Bg}">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="28" />
+    </Grid.RowDefinitions>
 
-    <!-- ═══ Barra superior: projeto + ferramentas + master (estilo Resolume: tudo numa régua) ═══ -->
-    <Border DockPanel.Dock="Top" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
-            BorderThickness="1" Padding="6" Margin="0,0,0,6">
+    <!-- Comandos globais permanecem visíveis em qualquer aba do inspetor. -->
+    <Border Grid.Row="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="10,8" Margin="0,0,0,6">
       <DockPanel>
-        <Menu DockPanel.Dock="Left" Background="Transparent" Margin="0,0,12,0">
-          <MenuItem Header="Arquivo" Style="{StaticResource TopMenuItem}" Margin="0,0,3,0">
-            <MenuItem Header="Novo" Command="{Binding NewProjectCommand}" />
-            <MenuItem Header="Abrir..." Command="{Binding OpenProjectCommand}" />
-            <Separator />
-            <MenuItem Header="Salvar" Command="{Binding SaveProjectCommand}" />
-            <MenuItem Header="Salvar como..." Command="{Binding SaveProjectAsCommand}" />
-          </MenuItem>
-          <MenuItem Header="Avançado" Style="{StaticResource TopMenuItem}">
-            <MenuItem Header="🖥 Advanced Output..." Command="{Binding OpenOutputSetupCommand}" />
-            <MenuItem Header="⚡ Conversor HAP..." Command="{Binding OpenHapConverterCommand}" />
-            <MenuItem Header="⌨ Atalhos..." Command="{Binding OpenKeymapEditorCommand}" />
-            <MenuItem Header="⚙ Instalação..." Command="{Binding OpenInstallationCommand}" />
-          </MenuItem>
-        </Menu>
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="0,0,14,0" VerticalAlignment="Center">
+          <Image Source="{StaticResource BrandMark}" Width="32" Height="32" Margin="0,0,8,0" AutomationProperties.Name="Remate Web" />
+          <StackPanel><TextBlock Text="RW VideoWall" FontSize="15" FontWeight="SemiBold" /><TextBlock Text="REMATE WEB" FontSize="11" Foreground="{StaticResource FgDim}" /></StackPanel>
 
-        <Button DockPanel.Dock="Left" Content="❓ Ajuda" Command="{Binding OpenHelpCommand}" Margin="0,0,12,0" />
-        <Button DockPanel.Dock="Left" Content="🗓 Agenda" Command="{Binding OpenAgendaCommand}" Margin="0,0,12,0" />
-
-        <ToggleButton DockPanel.Dock="Left" Content="▶ SEQ" IsChecked="{Binding SequencerRunning}"
-                      ToolTip="Sequenciador de colunas (Instalação)" Margin="0,0,3,0" />
-
-        <ToggleButton DockPanel.Dock="Right" Content="BLACKOUT" IsChecked="{Binding Blackout}"
-                      Style="{StaticResource BlackoutButton}" Padding="14,4" Margin="10,0,0,0" />
-        <!-- Autopilot global: liga/desliga o autopilot de TODAS as layers (Espaço) -->
-        <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding AutopilotAll}" Padding="16,4" Margin="10,0,0,0"
-                      FontWeight="Bold" FontSize="13"
-                      ToolTip="Autopilot geral: liga/desliga a troca automática de clipes em todas as layers — os vídeos continuam tocando (Espaço)">
-          <ToggleButton.Style>
-            <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
-              <Setter Property="Content" Value="⏸ AUTOPILOT OFF" />
-              <Style.Triggers>
-                <Trigger Property="IsChecked" Value="True">
-                  <Setter Property="Content" Value="▶ AUTOPILOT ON" />
-                  <Setter Property="Background" Value="{StaticResource AccentDim}" />
-                  <Setter Property="BorderBrush" Value="{StaticResource Accent}" />
-                </Trigger>
-              </Style.Triggers>
-            </Style>
-          </ToggleButton.Style>
-        </ToggleButton>
-        <Slider DockPanel.Dock="Right" Width="140" Minimum="0" Maximum="1" Value="{Binding MasterFader}"
-                VerticalAlignment="Center" ToolTip="Master fader" />
-        <TextBlock DockPanel.Dock="Right" Text="MASTER" Foreground="{StaticResource FgDim}" FontSize="10"
-                   FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
-        <Border />
+        </StackPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+            <TextBlock Text="SAÍDA" Style="{StaticResource SectionTitle}" Margin="0,0,7,0" />
+            <Slider Width="78" Minimum="0" Maximum="1" Value="{Binding MasterFader}" VerticalAlignment="Center" ToolTip="Intensidade geral da saída" AutomationProperties.Name="Intensidade geral da saída" />
+            <TextBlock Text="{Binding MasterFader, StringFormat={}{0:P0}}" Width="34" TextAlignment="Right" VerticalAlignment="Center" FontSize="11" />
+          </StackPanel>
+          <ToggleButton AutomationProperties.Name="Troca automática de clipes em todas as camadas (Espaço)" IsChecked="{Binding AutopilotAll}" Margin="0,0,12,0" Padding="10,5" ToolTip="Troca automática de clipes em todas as camadas (Espaço)">
+            <ToggleButton.Style>
+              <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+                <Setter Property="Content" Value="AUTO · DESL." />
+                <Style.Triggers><Trigger Property="IsChecked" Value="True"><Setter Property="Content" Value="AUTO · LIG." /></Trigger></Style.Triggers>
+              </Style>
+            </ToggleButton.Style>
+          </ToggleButton>
+          <ToggleButton IsChecked="{Binding Blackout}" Style="{StaticResource WorkspaceBlackout}" ToolTip="Corte imediato de todas as saídas; clique novamente para restaurar" AutomationProperties.Name="Blackout de todas as saídas" />
+        </StackPanel>
+        <WrapPanel VerticalAlignment="Center">
+          <Menu Background="Transparent" Margin="0,0,4,0">
+            <MenuItem Header="Arquivo" Style="{StaticResource TopMenuItem}" Margin="0,0,4,0">
+              <MenuItem Header="Novo projeto" Command="{Binding NewProjectCommand}" />
+              <MenuItem Header="Abrir projeto..." Command="{Binding OpenProjectCommand}" />
+              <Separator />
+              <MenuItem Header="Salvar" Command="{Binding SaveProjectCommand}" />
+              <MenuItem Header="Salvar como..." Command="{Binding SaveProjectAsCommand}" />
+            </MenuItem>
+            <MenuItem Header="Ferramentas" Style="{StaticResource TopMenuItem}">
+              <MenuItem Header="Mapear saídas..." Command="{Binding OpenOutputSetupCommand}" />
+              <MenuItem Header="Conversor HAP..." Command="{Binding OpenHapConverterCommand}" />
+              <MenuItem Header="Atalhos de teclado..." Command="{Binding OpenKeymapEditorCommand}" />
+              <MenuItem Header="Instalação..." Command="{Binding OpenInstallationCommand}" />
+              <Separator />
+              <MenuItem Header="Ajuda" Command="{Binding OpenHelpCommand}" />
+            </MenuItem>
+          </Menu>
+          <Button Content="Agenda" Command="{Binding OpenAgendaCommand}" Margin="0,0,4,0" />
+          <ToggleButton AutomationProperties.Name="Sequenciador de colunas configurado em Instalação" Content="Sequência" IsChecked="{Binding SequencerRunning}" ToolTip="Sequenciador de colunas configurado em Instalação" />
+        </WrapPanel>
       </DockPanel>
     </Border>
 
+    <Grid Grid.Row="1" x:Name="WorkspaceGrid">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" MinWidth="720" />
+        <ColumnDefinition Width="6" />
+        <ColumnDefinition Width="0.25*" MinWidth="240" MaxWidth="440" />
+      </Grid.ColumnDefinitions>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*" MinHeight="200" />
+        <RowDefinition Height="6" />
+        <RowDefinition Height="0.6*" MinHeight="300" MaxHeight="440" />
+      </Grid.RowDefinitions>
+      <DockPanel Grid.Column="0" Grid.Row="0">
     <!-- ═══ Cenas ═══ -->
-    <Border DockPanel.Dock="Top" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
-            BorderThickness="1" Padding="6" Margin="0,0,0,6">
+    <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
+            BorderThickness="1" Padding="6,4" Margin="0,6,0,0">
       <DockPanel>
-        <TextBlock DockPanel.Dock="Left" Text="CENAS" Foreground="{StaticResource FgDim}" FontSize="10"
+        <TextBlock DockPanel.Dock="Left" Text="CENAS" Foreground="{StaticResource FgDim}" FontSize="11"
                    FontWeight="Bold" VerticalAlignment="Center" Margin="2,0,8,0" />
-        <Button DockPanel.Dock="Left" Content="+ Salvar cena" Command="{Binding SaveSceneCommand}" Margin="0,0,8,0" />
+        <Button AutomationProperties.Name="Cria uma cena com grade em branco e já abre nela" DockPanel.Dock="Left" Content="+ Nova cena" Command="{Binding NewSceneCommand}" Margin="0,0,8,0"
+                ToolTip="Cria uma cena com grade em branco e já abre nela" />
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
         <ItemsControl ItemsSource="{Binding Scenes}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -74,307 +97,65 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate>
               <StackPanel Orientation="Horizontal" Margin="0,0,4,0"
-                          ToolTip="Clique dispara · botão direito renomeia/exclui">
+                          ToolTip="Clique abre esta cena (troca a grade inteira) · botão direito renomeia/exclui">
                 <StackPanel.ContextMenu>
                   <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
                     <MenuItem Header="Renomear..." Command="{Binding RenameCommand}" />
                     <MenuItem Header="Excluir" Command="{Binding RemoveCommand}" />
                   </ContextMenu>
                 </StackPanel.ContextMenu>
-                <Button Content="{Binding Name}" Command="{Binding TriggerCommand}" />
-                <Button Content="✕" Command="{Binding RemoveCommand}" Padding="4,3" Foreground="{StaticResource FgDim}"
-                        ToolTip="Excluir cena" />
+                <Button Content="{Binding Name}" Command="{Binding TriggerCommand}">
+                  <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                          <Setter Property="Background" Value="{StaticResource SelectionBg}" />
+                          <Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </Button.Style>
+                </Button>
               </StackPanel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
+        </ScrollViewer>
       </DockPanel>
     </Border>
 
-    <!-- ═══ Barra de status (rodapé) ═══ -->
-    <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
-            BorderThickness="1" Padding="6,3" Margin="0,6,0,0">
-      <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{StaticResource FgDim}"
-                 TextTrimming="CharacterEllipsis" />
-    </Border>
 
-    <!-- ═══ Saídas (monitores) — régua compacta no rodapé ═══ -->
-    <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
-            BorderThickness="1" Padding="6" Margin="0,6,0,0">
-      <DockPanel>
-        <TextBlock DockPanel.Dock="Left" Text="SAÍDAS" Foreground="{StaticResource FgDim}" FontSize="10"
-                   FontWeight="Bold" VerticalAlignment="Center" Margin="2,0,8,0" />
-        <Button DockPanel.Dock="Left" Content="↻" Command="{Binding RefreshMonitorsCommand}"
-                ToolTip="Atualizar monitores" Margin="0,0,8,0" />
-        <ItemsControl ItemsSource="{Binding Monitors}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate>
-              <Border Background="{StaticResource CellBg}" BorderBrush="{StaticResource BorderDim}"
-                      BorderThickness="1" CornerRadius="2" Padding="6,2" Margin="0,0,4,0">
-                <StackPanel Orientation="Horizontal">
-                  <CheckBox IsChecked="{Binding IsActive}" Content="{Binding Title}" FontSize="11" />
-                  <TextBlock Text="→" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" Margin="8,0,4,0" />
-                  <ComboBox ItemsSource="{Binding RouteOptions}" SelectedIndex="{Binding SelectedRouteIndex}"
-                            Width="120" FontSize="11" ToolTip="O que este monitor exibe: a composição inteira ou uma layer isolada" />
-                  <TextBlock Text="{Binding FpsText}" Foreground="{StaticResource Accent}" FontSize="11"
-                             FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0" />
-                </StackPanel>
-              </Border>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </DockPanel>
-    </Border>
-
-    <!-- ═══ Faixa inferior estilo Resolume Arena: monitores + Clip (Transport/Autopilot/Clip/Transform) ═══ -->
-    <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
-            BorderThickness="1" Padding="8" Margin="0,6,0,0">
-      <DockPanel>
-
-        <!-- Composition Monitor / Preview Monitor: mesma captura ao vivo da composição
-             (readback de textura do D3D11, ~12fps), atrás de um toggle desligado por
-             padrão — ligar custa uma sincronização de GPU por frame capturado. -->
-        <StackPanel DockPanel.Dock="Left" Width="176" Margin="0,0,10,0">
-          <DockPanel Margin="0,0,0,3">
-            <ToggleButton DockPanel.Dock="Right" IsChecked="{Binding CompositionMonitorEnabled}"
-                          Padding="4,0" FontSize="9" Content="●"
-                          ToolTip="Ligar/desligar captura ao vivo da composição (custa desempenho de GPU)" />
-            <TextBlock Text="COMPOSITION MONITOR" Foreground="{StaticResource FgDim}" FontSize="9" FontWeight="Bold" />
-          </DockPanel>
-          <Border Height="99" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1">
-            <Grid>
-              <Image Source="{Binding CompositionMonitorBitmap}" Stretch="Uniform"
-                     Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
-              <!-- Sem captura ao vivo: mostra a thumbnail do clip ativo no topo da pilha,
-                   em vez de deixar o monitor mudo — só cai pro texto se nada estiver no ar. -->
-              <Image Source="{Binding ActiveClipThumbnailPath}" Stretch="Uniform"
-                     Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
-              <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
-                         Visibility="{Binding ShowMonitorPlaceholderText, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
-                <Run Text="×" />
-                <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
-                <LineBreak />
-                <Run Text="sem preview ao vivo — ligue no ●" FontSize="9" />
-              </TextBlock>
-            </Grid>
-          </Border>
-          <TextBlock Text="PREVIEW MONITOR" Foreground="{StaticResource FgDim}" FontSize="9"
-                     FontWeight="Bold" Margin="0,8,0,3" />
-          <Border Height="99" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1">
-            <Grid>
-              <Image Source="{Binding CompositionMonitorBitmap}" Stretch="Uniform"
-                     Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
-              <Image Source="{Binding ActiveClipThumbnailPath}" Stretch="Uniform"
-                     Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
-              <TextBlock Foreground="{StaticResource FgDim}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"
-                         Visibility="{Binding ShowMonitorPlaceholderText, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" />
-                <Run Text="×" />
-                <Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
-              </TextBlock>
-            </Grid>
-          </Border>
-        </StackPanel>
-
-        <Grid DataContext="{Binding Grid.SelectedClip}" IsEnabled="{Binding HasMedia}">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="200" />
-            <ColumnDefinition Width="330" />
-            <ColumnDefinition Width="270" />
-          </Grid.ColumnDefinitions>
-
-          <!-- ── TRANSPORT: nome, timeline/trim com agulha de reprodução, velocidade ── -->
-          <Border Grid.Column="0" Margin="0,0,8,0" Background="{StaticResource InputBg}"
-                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
-            <DockPanel>
-              <TextBlock DockPanel.Dock="Top" Text="TRANSPORT" Foreground="{StaticResource FgDim}" FontSize="10"
-                         FontWeight="Bold" Margin="0,0,0,6" />
-              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
-                <TextBlock DockPanel.Dock="Left" Text="Nome" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
-              </DockPanel>
-              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                <TextBlock Text="In / Out (s)" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <TextBox Width="60" Text="{Binding InPointText, UpdateSourceTrigger=LostFocus}" />
-                <TextBlock Text=" / " VerticalAlignment="Center" />
-                <TextBox Width="60" Text="{Binding OutPointText, UpdateSourceTrigger=LostFocus}" />
-              </StackPanel>
-              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-                <TextBlock Text="Duração" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <TextBox Width="60" Text="{Binding ImageDurationText, UpdateSourceTrigger=LostFocus}"
-                         ToolTip="Duração no ar (imagem) ou trim (vídeo) — aplica aos dois tipos de mídia" />
-              </StackPanel>
-              <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                <TextBlock DockPanel.Dock="Left" Text="Velocidade" VerticalAlignment="Center" Margin="0,0,6,0" />
-                <TextBlock DockPanel.Dock="Right" Text="{Binding Speed, StringFormat={}{0:F1}×}" VerticalAlignment="Center" Margin="6,0,0,0" />
-                <Slider Minimum="0.1" Maximum="4" Value="{Binding Speed, Mode=TwoWay}" VerticalAlignment="Center" />
-              </DockPanel>
-              <!-- Trim estilo Resolume: barra da duração inteira, alças arrastáveis de In/Out, agulha do playhead -->
-              <controls:TrimBar Height="30"
-                                Duration="{Binding Duration}"
-                                InPoint="{Binding TrimIn, Mode=TwoWay}"
-                                OutPoint="{Binding TrimOut, Mode=TwoWay}"
-                                ScrubSeconds="{Binding ScrubSeconds, Mode=OneWayToSource}"
-                                Playhead="{Binding PlayheadSeconds}" />
-            </DockPanel>
-          </Border>
-
-          <!-- ── AUTOPILOT: modo de loop + ação ao terminar ── -->
-          <Border Grid.Column="1" Margin="0,0,8,0" Background="{StaticResource InputBg}"
-                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
-            <StackPanel>
-              <TextBlock Text="AUTOPILOT" Foreground="{StaticResource FgDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,6" />
-              <TextBlock Text="Modo" FontSize="11" Margin="0,0,0,2" />
-              <ComboBox ItemsSource="{Binding DataContext.Grid.PlayModes, RelativeSource={RelativeSource AncestorType=Window}}"
-                        SelectedItem="{Binding PlayMode, Mode=TwoWay}" Margin="0,0,0,8" />
-              <TextBlock Text="Ao terminar" FontSize="11" Margin="0,0,0,2" />
-              <ComboBox ItemsSource="{Binding DataContext.Grid.AutopilotActions, RelativeSource={RelativeSource AncestorType=Window}}"
-                        SelectedItem="{Binding Autopilot, Mode=TwoWay}" />
-            </StackPanel>
-          </Border>
-
-          <!-- ── CLIP: resize + dimensões nativas do arquivo, volume ── -->
-          <Border Grid.Column="2" Margin="0,0,8,0" Background="{StaticResource InputBg}"
-                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-              </Grid.ColumnDefinitions>
-              <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-              </Grid.RowDefinitions>
-              <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Text="CLIP" Foreground="{StaticResource FgDim}" FontSize="10"
-                         FontWeight="Bold" Margin="0,0,0,6" />
-              <TextBlock Grid.Row="1" VerticalAlignment="Center" Text="Resize" Margin="0,0,6,4" />
-              <ComboBox Grid.Row="1" Grid.Column="1"
-                        ItemsSource="{Binding DataContext.Grid.ResizeModes, RelativeSource={RelativeSource AncestorType=Window}}"
-                        SelectedItem="{Binding Resize, Mode=TwoWay}" Margin="0,0,0,4" />
-              <!-- Horizontal e vertical separados (T22/T24): o slide "volante" abaixo de
-                   cada um sempre volta pro centro ao soltar — arrastar pra um lado
-                   aumenta/diminui a largura/altura EFETIVA em pixel continuamente
-                   enquanto segura, cada eixo no seu slide. -->
-              <TextBlock Grid.Row="2" VerticalAlignment="Center" Text="Largura" Margin="0,0,6,2" />
-              <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding EffectiveWidth, TargetNullValue=—, StringFormat={}{0}px}"
-                         Foreground="{StaticResource FgDim}" Margin="0,0,0,2"
-                         ToolTip="Largura efetiva (nativa × escala)" />
-              <Border Grid.Row="3" Grid.Column="1" Margin="0,0,0,6">
-                <controls:CenterSnapSlider JogCommand="{Binding JogWidthCommand}"
-                                            ToolTip="Arraste e segure pra aumentar/diminuir a largura — solta e volta pro centro" />
-              </Border>
-              <TextBlock Grid.Row="4" VerticalAlignment="Center" Text="Altura" Margin="0,0,6,2" />
-              <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding EffectiveHeight, TargetNullValue=—, StringFormat={}{0}px}"
-                         Foreground="{StaticResource FgDim}" Margin="0,0,0,2"
-                         ToolTip="Altura efetiva (nativa × escala)" />
-              <Border Grid.Row="5" Grid.Column="1" Margin="0,0,0,6">
-                <controls:CenterSnapSlider JogCommand="{Binding JogHeightCommand}"
-                                            ToolTip="Arraste e segure pra aumentar/diminuir a altura — solta e volta pro centro" />
-              </Border>
-              <TextBlock Grid.Row="6" VerticalAlignment="Center" Text="Volume" Margin="0,0,6,0" />
-              <DockPanel Grid.Row="6" Grid.Column="1">
-                <CheckBox DockPanel.Dock="Right" Content="Mute" IsChecked="{Binding Mute, Mode=TwoWay}" Margin="10,0,0,0" />
-                <Slider Minimum="0" Maximum="1" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" />
-              </DockPanel>
-            </Grid>
-          </Border>
-
-          <!-- Transform interativo (estilo Resolume Arena): palco no formato real da
-               composição, com a miniatura do clip dentro dele; 4 cantos + 4 arestas
-               redimensionam simetricamente em torno do centro, arrastar por dentro move X/Y -->
-          <Border Grid.Column="3"
-                  Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
-                  CornerRadius="2">
-            <DockPanel Margin="6">
-              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,5">
-                <Button DockPanel.Dock="Right" Content="↺ Reset" Command="{Binding ResetTransformCommand}"
-                        Padding="6,2" FontSize="10" ToolTip="Redefinir posição/escala" />
-                <TextBlock Text="TRANSFORMAR" Foreground="{StaticResource FgDim}" FontSize="10"
-                           FontWeight="Bold" VerticalAlignment="Center" />
-              </DockPanel>
-
-              <Grid DockPanel.Dock="Bottom" Margin="0,5,0,0">
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="X" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
-                <TextBlock Grid.Row="0" Grid.Column="1" Text="Y" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
-                <TextBlock Grid.Row="0" Grid.Column="2" Text="ESCALA H" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
-                <TextBlock Grid.Row="0" Grid.Column="3" Text="ESCALA V" FontSize="9" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
-                <TextBox Grid.Row="1" Grid.Column="0" Text="{Binding PositionX, Mode=TwoWay, StringFormat=F2}"
-                          ToolTip="Posição X (fração da composição)" Margin="0,1,2,0" TextAlignment="Center" />
-                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PositionY, Mode=TwoWay, StringFormat=F2}"
-                          ToolTip="Posição Y (fração da composição)" Margin="2,1,2,0" TextAlignment="Center" />
-                <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding ScaleX, Mode=TwoWay, StringFormat=F2}"
-                          ToolTip="Escala horizontal" Margin="2,1,2,0" TextAlignment="Center" />
-                <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding ScaleY, Mode=TwoWay, StringFormat=F2}"
-                          ToolTip="Escala vertical" Margin="2,1,0,0" TextAlignment="Center" />
-              </Grid>
-
-              <controls:TransformGizmo PositionX="{Binding PositionX, Mode=TwoWay}"
-                                        PositionY="{Binding PositionY, Mode=TwoWay}"
-                                        ScaleX="{Binding ScaleX, Mode=TwoWay}"
-                                        ScaleY="{Binding ScaleY, Mode=TwoWay}"
-                                        StageWidth="{Binding DataContext.Grid.Model.Width, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        StageHeight="{Binding DataContext.Grid.Model.Height, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        Thumbnail="{Binding PreviewImagePath}" />
-            </DockPanel>
-          </Border>
-        </Grid>
-      </DockPanel>
-    </Border>
-
-    <!-- ═══ Área central: grade (esq.) + dock Files/Preview (dir.), como no Resolume ═══ -->
-    <Grid>
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*" />
-        <ColumnDefinition Width="250" />
-      </Grid.ColumnDefinitions>
-
-    <Border Grid.Column="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
+    <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
             BorderThickness="1" Padding="6">
       <DockPanel>
         <!-- Mini-toolbar da composição -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
-          <Button Content="📂 Carregar mídia" Command="{Binding OpenVideoCommand}" Margin="0,0,3,0" />
-          <Button Content="+ Layer" Command="{Binding Grid.AddLayerCommand}" Margin="0,0,3,0" />
-          <Button Content="+ Coluna" Command="{Binding Grid.AddColumnCommand}" Margin="0,0,3,0" />
-          <Button Content="↶ Desfazer" Command="{Binding Grid.UndoGridCommand}" IsEnabled="{Binding Grid.CanUndoGrid}"
-                  Margin="0,0,3,0" ToolTip="Restaura a grade ao estado anterior à última ação" />
-          <TextBlock Text="  arraste arquivos para as células" Foreground="{StaticResource FgDim}"
-                     FontSize="11" VerticalAlignment="Center" />
-        </StackPanel>
+        <DockPanel DockPanel.Dock="Top" Margin="2,0,2,5">
+          <TextBlock DockPanel.Dock="Left" Text="COMPOSIÇÃO" Style="{StaticResource SectionTitle}" Margin="0,0,16,0" />
+          <WrapPanel>
+            <Button AutomationProperties.Name="Importar mídia para a grade" Content="+ Mídia" Command="{Binding OpenVideoCommand}" Margin="0,0,4,0" ToolTip="Importar mídia para a grade" />
+            <Button Content="+ Camada" Command="{Binding Grid.AddLayerCommand}" Margin="0,0,4,0" />
+            <Button Content="+ Coluna" Command="{Binding Grid.AddColumnCommand}" Margin="0,0,4,0" />
+            <Button AutomationProperties.Name="Desfazer a última alteração da grade" Content="↶" Command="{Binding Grid.UndoGridCommand}" IsEnabled="{Binding Grid.CanUndoGrid}" ToolTip="Desfazer a última alteração da grade" />
+            <Button AutomationProperties.Name="Refazer a alteração desfeita" Content="↷" Command="{Binding Grid.RedoGridCommand}" IsEnabled="{Binding Grid.CanRedoGrid}" ToolTip="Refazer a alteração desfeita" Margin="4,0,0,0" />
+          </WrapPanel>
+        </DockPanel>
+        <DockPanel DockPanel.Dock="Bottom" Margin="4,4,4,0">
+          <TextBlock Text="Miniatura: disparar   ·   Nome: editar   ·   Ctrl+clique: agrupar" Foreground="{StaticResource FgDim}" FontSize="11" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
 
         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
           <StackPanel>
 
             <!-- Cabeçalho de colunas: botões que disparam a coluna inteira (Resolume) -->
             <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-              <Border Width="154" />
+              <TextBlock Width="178" Text="CAMADAS" Style="{StaticResource SectionTitle}" Padding="8,0,0,0" />
               <ItemsControl ItemsSource="{Binding Grid.Columns}">
                 <ItemsControl.ItemsPanel>
                   <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate>
-                    <Button Width="104" Margin="2,0" Padding="0,4" FontWeight="Bold"
+                    <Button AutomationProperties.Name="Clique dispara a coluna · botão direito para opções" Width="128" Margin="2,0" Padding="0,3" FontWeight="Bold"
                             Content="{Binding Converter={StaticResource IncrementConverter}}"
                             Command="{Binding DataContext.Grid.TriggerColumnCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                             CommandParameter="{Binding}"
@@ -403,30 +184,42 @@
                   <DockPanel Margin="0,0,0,4">
 
                     <!-- Painel da layer (nome, X, B/S, blend, V, transição) -->
-                    <Border DockPanel.Dock="Left" Width="150" Margin="2,0" Background="{StaticResource CellBg}"
+                    <Border DockPanel.Dock="Left" Width="174" Margin="2,0" Background="{StaticResource CellBg}"
                             BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="5">
                       <Border.ContextMenu>
                         <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
-                          <MenuItem Header="Duplicar layer" Click="OnLayerDuplicate" />
-                          <MenuItem Header="Limpar layer (tirar do ar)" Command="{Binding ClearCommand}" />
+                          <MenuItem Header="Duplicar camada" Click="OnLayerDuplicate" />
+                          <MenuItem Header="Limpar camada (tirar do ar)" Command="{Binding ClearCommand}" />
                           <Separator />
-                          <MenuItem Header="Remover layer" Click="OnLayerRemove"
-                                    ToolTip="Remove a layer inteira da grade (pelo menos uma layer sempre fica)" />
+                          <!-- Linha de ENTRADA AO VIVO: fica de fora do disparo de coluna
+                               (atalho numérico, número da coluna, sequenciador e OSC), pra
+                               a câmera/NDI não cair quando o operador troca a coluna. -->
+                          <MenuItem Header="📌 Fixa — atalho de coluna não troca esta camada"
+                                    IsCheckable="True" IsChecked="{Binding IgnoreColumnTrigger, Mode=TwoWay}"
+                                    ToolTip="Marque na linha da câmera/entrada ao vivo: disparar a coluna inteira pula esta camada. Clicar direto na célula continua funcionando." />
+                          <Separator />
+                          <MenuItem Header="Remover camada" Click="OnLayerRemove"
+                                    ToolTip="Remove a camada inteira da grade (pelo menos uma camada sempre fica)" />
                         </ContextMenu>
                       </Border.ContextMenu>
                       <StackPanel>
                         <DockPanel Margin="0,0,0,4">
-                          <Button DockPanel.Dock="Right" Content="✕" Command="{Binding ClearCommand}"
-                                  Padding="5,1" FontSize="10" ToolTip="Limpar layer (tirar do ar)" />
+                          <Button AutomationProperties.Name="Limpar camada (tirar do ar)" DockPanel.Dock="Right" Content="✕" Command="{Binding ClearCommand}"
+                                  Padding="5,1" FontSize="11" ToolTip="Limpar camada (tirar do ar)" />
+                          <!-- Marca de layer FIXA: o operador precisa ver de relance qual
+                               linha o atalho de coluna não vai mexer. -->
+                          <TextBlock DockPanel.Dock="Right" Text="📌" FontSize="11" VerticalAlignment="Center"
+                                     Margin="0,0,3,0" ToolTip="Camada fixa: atalho de coluna não troca esta linha"
+                                     Visibility="{Binding IgnoreColumnTrigger, Converter={StaticResource BoolToVisibilityConverter}}" />
                           <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}" FontWeight="Bold" FontSize="12"
                                    VerticalAlignment="Center" BorderThickness="0" Background="Transparent"
-                                   Margin="0,0,4,0" ToolTip="Nome da layer (clique para editar)" />
+                                   Margin="0,0,4,0" ToolTip="Nome da camada (clique para editar)" />
                         </DockPanel>
                         <!-- Autopilot da layer: ON/OFF + ação aplicada a todos os clips -->
                         <DockPanel Margin="0,0,0,4">
-                          <ToggleButton DockPanel.Dock="Left" IsChecked="{Binding AutopilotEnabled}" Padding="5,1"
-                                        FontSize="10" Margin="0,0,3,0"
-                                        ToolTip="Autopilot desta layer: OFF = clip que termina segura no último frame">
+                          <ToggleButton AutomationProperties.Name="Autopilot desta camada: OFF = clipe que termina segura no último quadro" DockPanel.Dock="Left" IsChecked="{Binding AutopilotEnabled}" Padding="5,1"
+                                        FontSize="11" Margin="0,0,3,0"
+                                        ToolTip="Autopilot desta camada: OFF = clipe que termina segura no último quadro">
                             <ToggleButton.Style>
                               <Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
                                 <Setter Property="Content" Value="⏸" />
@@ -440,26 +233,26 @@
                               </Style>
                             </ToggleButton.Style>
                           </ToggleButton>
-                          <ComboBox FontSize="10" ToolTip="Autopilot da layer inteira: o que fazer quando cada clip termina (aplica a todos os clips)"
+                          <ComboBox FontSize="11" ToolTip="Autopilot da camada inteira: o que fazer quando cada clipe termina (aplica a todos os clipes)"
                                     ItemsSource="{Binding DataContext.Grid.AutopilotActions, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    SelectedItem="{Binding LayerAutopilot, Mode=TwoWay}" />
+                                    SelectedItem="{Binding LayerAutopilot, Mode=TwoWay}"  ItemTemplate="{StaticResource OperationLabelTemplate}" />
                         </DockPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                          <ToggleButton Content="B" IsChecked="{Binding Bypass}" Padding="7,1" FontSize="10"
+                          <ToggleButton AutomationProperties.Name="Bypass" Content="B" IsChecked="{Binding Bypass}" Padding="7,1" FontSize="11"
                                         ToolTip="Bypass" Margin="0,0,3,0" />
-                          <ToggleButton Content="S" IsChecked="{Binding Solo}" Padding="7,1" FontSize="10"
+                          <ToggleButton AutomationProperties.Name="Solo" Content="S" IsChecked="{Binding Solo}" Padding="7,1" FontSize="11"
                                         ToolTip="Solo" Margin="0,0,3,0" />
-                          <ComboBox Width="86" FontSize="10"
+                          <ComboBox Width="86" FontSize="11"
                                     ItemsSource="{Binding DataContext.Grid.BlendModes, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    SelectedItem="{Binding Blend, Mode=TwoWay}" />
+                                    SelectedItem="{Binding Blend, Mode=TwoWay}"  ItemTemplate="{StaticResource OperationLabelTemplate}" />
                         </StackPanel>
                         <DockPanel Margin="0,0,0,2">
-                          <TextBlock DockPanel.Dock="Left" Text="V" FontSize="10" Width="12"
+                          <TextBlock DockPanel.Dock="Left" Text="Opac." FontSize="11" Width="36"
                                      Foreground="{StaticResource FgDim}" VerticalAlignment="Center" />
                           <Slider Minimum="0" Maximum="1" Value="{Binding Opacity, Mode=TwoWay}" ToolTip="Opacidade" />
                         </DockPanel>
                         <DockPanel>
-                          <TextBlock DockPanel.Dock="Left" Text="T" FontSize="10" Width="12"
+                          <TextBlock DockPanel.Dock="Left" Text="Trans." FontSize="11" Width="36"
                                      Foreground="{StaticResource FgDim}" VerticalAlignment="Center" />
                           <Slider Minimum="0" Maximum="5" Value="{Binding TransitionSeconds, Mode=TwoWay}"
                                   ToolTip="Transição (s)" />
@@ -474,7 +267,7 @@
                       </ItemsControl.ItemsPanel>
                       <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                          <Border Width="104" Height="86" Margin="2,0" CornerRadius="2"
+                          <Border Width="128" Height="136" Margin="2,0" CornerRadius="2"
                                   AllowDrop="True" Drop="OnClipDrop" PreviewMouseLeftButtonDown="OnCellPreviewMouseDown">
                             <Border.ContextMenu>
                               <ContextMenu DataContext="{Binding Path=PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
@@ -482,7 +275,7 @@
                                 <MenuItem Header="Editar imagem..." Click="OnEditImageClick" />
                                 <Separator />
                                 <MenuItem Header="Vincular células selecionadas (Ctrl+clique)" Click="OnLinkCells"
-                                          ToolTip="Marque 2+ células com Ctrl+clique antes de usar isso — trocar uma troca todas" />
+                                          ToolTip="Marque 2+ células com Ctrl+clique (podem estar vazias) — importar/editar uma passa pra todas" />
                                 <MenuItem Header="Desvincular célula" Click="OnUnlinkCell"
                                           Visibility="{Binding LinkGroupId, Converter={StaticResource NotNullToVisibilityConverter}}" />
                               </ContextMenu>
@@ -502,7 +295,7 @@
                                     <Setter Property="BorderThickness" Value="2" />
                                   </DataTrigger>
                                   <DataTrigger Binding="{Binding IsMultiSelected}" Value="True">
-                                    <Setter Property="BorderBrush" Value="#FF3FA9F5" />
+                                    <Setter Property="BorderBrush" Value="{StaticResource Selection}" />
                                     <Setter Property="BorderThickness" Value="2" />
                                   </DataTrigger>
                                 </Style.Triggers>
@@ -510,7 +303,7 @@
                             </Border.Style>
                             <DockPanel>
                               <!-- Barra de nome (embaixo): clique SELECIONA o clip sem colocar no ar -->
-                              <Button DockPanel.Dock="Bottom" Height="19" Command="{Binding SelectCommand}"
+                              <Button AutomationProperties.Name="Selecionar para edição (não coloca no ar)" DockPanel.Dock="Bottom" Height="27" Command="{Binding SelectCommand}"
                                       AllowDrop="True" Padding="3,0" BorderThickness="0,1,0,0"
                                       ToolTip="Selecionar para edição (não coloca no ar)">
                                 <Button.Style>
@@ -518,12 +311,12 @@
                                     <Setter Property="Background" Value="{StaticResource InputBg}" />
                                     <Style.Triggers>
                                       <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                        <Setter Property="Background" Value="{StaticResource AccentDim}" />
+                                        <Setter Property="Background" Value="{StaticResource SelectionBg}" />
                                       </DataTrigger>
                                     </Style.Triggers>
                                   </Style>
                                 </Button.Style>
-                                <TextBlock Text="{Binding Name}" FontSize="9" TextTrimming="CharacterEllipsis">
+                                <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis">
                                   <TextBlock.Style>
                                     <Style TargetType="TextBlock">
                                       <Setter Property="Foreground" Value="{StaticResource FgDim}" />
@@ -537,13 +330,19 @@
                                 </TextBlock>
                               </Button>
                               <!-- Preview (em cima): clique COLOCA NO AR -->
-                              <Button Command="{Binding TriggerCommand}" AllowDrop="True"
+                              <Button AutomationProperties.Name="Disparar (colocar no ar)" Command="{Binding TriggerCommand}" AllowDrop="True"
                                       Background="Transparent" BorderThickness="0" Padding="0"
                                       ToolTip="Disparar (colocar no ar)">
                                 <Grid ClipToBounds="True" Background="{StaticResource InputBg}">
                                   <!-- Uniform (não UniformToFill): o operador precisa ver o
                                        enquadramento REAL do arquivo, sem cortar nada. -->
                                   <Image Source="{Binding ThumbnailPath}" Stretch="Uniform" />
+                                  <TextBlock Text="+" FontSize="22" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                             Visibility="{Binding HasMedia, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+                                  <Border Background="{StaticResource AccentDim}" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="5,2" Margin="4"
+                                          Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}}" IsHitTestVisible="False">
+                                    <TextBlock Text="▶ ATIVO" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Accent}" />
+                                  </Border>
                                   <TextBlock Text="🔗" FontSize="11" HorizontalAlignment="Right" VerticalAlignment="Top"
                                              Margin="0,1,2,0"
                                              ToolTip="Célula vinculada a um grupo de troca — trocar uma troca todas"
@@ -564,23 +363,30 @@
       </DockPanel>
     </Border>
 
-    <!-- ═══ Dock direito: abas FILES / SOURCES + PREVIEW do clip selecionado ═══ -->
-    <DockPanel Grid.Column="1" Margin="6,0,0,0">
 
+      </DockPanel>
+      <GridSplitter Grid.Column="0" Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Style="{StaticResource WorkspaceSplitter}" ToolTip="Ajustar altura da grade e do inspetor" AutomationProperties.Name="Altura da grade e do inspetor" />
+      <GridSplitter Grid.Column="1" Grid.RowSpan="3" Width="6" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                    ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Style="{StaticResource WorkspaceSplitter}" ToolTip="Ajustar largura da biblioteca" AutomationProperties.Name="Largura da biblioteca" />
+    <!-- ═══ Dock direito: abas FILES / SOURCES + PREVIEW do clip selecionado ═══ -->
+    <DockPanel Grid.Column="2" Grid.RowSpan="3" Margin="0" Background="{StaticResource PanelBg}">
+
+      <TextBlock DockPanel.Dock="Top" Text="BIBLIOTECA" Style="{StaticResource SectionTitle}" Margin="10,10,0,10" />
       <!-- Abas FILES / SOURCES, estilo Resolume -->
       <UniformGrid DockPanel.Dock="Top" Rows="1" Columns="2" Margin="0,0,0,4">
-        <ToggleButton Content="Files" IsChecked="{Binding ShowSourcesTab, Converter={StaticResource InverseBoolConverter}}"
+        <ToggleButton Style="{StaticResource SelectionToggle}" Content="Arquivos" IsChecked="{Binding ShowSourcesTab, Converter={StaticResource InverseBoolConverter}}"
                       Padding="0,4" />
-        <ToggleButton Content="Sources" IsChecked="{Binding ShowSourcesTab}" Padding="0,4" />
+        <ToggleButton Style="{StaticResource SelectionToggle}" Content="Fontes / NDI" IsChecked="{Binding ShowSourcesTab}" Padding="0,4" />
       </UniformGrid>
 
       <!-- PREVIEW (embaixo das pastas): mostra o arquivo clicado na lista Files -->
       <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
               BorderThickness="1" Padding="6" Margin="0,6,0,0" DataContext="{Binding FileBrowser.SelectedItem}">
         <StackPanel>
-          <TextBlock Text="PREVIEW" Foreground="{StaticResource FgDim}" FontSize="10" FontWeight="Bold" Margin="0,0,0,4" />
+          <TextBlock Text="MINIATURA DO ARQUIVO" Foreground="{StaticResource FgDim}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4" />
           <Border Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
-                  Height="128" ClipToBounds="True">
+                  Height="104" ClipToBounds="True">
             <Image Source="{Binding ThumbnailPath}" Stretch="Uniform" />
           </Border>
           <TextBlock Text="{Binding Name}" FontSize="11" FontWeight="SemiBold" Margin="0,4,0,0"
@@ -589,37 +395,39 @@
         </StackPanel>
       </Border>
 
+      <Grid>
       <!-- FILES (navegador de pastas) -->
       <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
               Padding="6" Visibility="{Binding ShowSourcesTab, Converter={StaticResource InverseBoolToVisibilityConverter}}">
         <DockPanel>
           <DockPanel DockPanel.Dock="Top" Margin="0,0,0,4">
-            <TextBlock DockPanel.Dock="Left" Text="FILES" Foreground="{StaticResource FgDim}" FontSize="10"
+            <TextBlock DockPanel.Dock="Left" Text="PASTA" Foreground="{StaticResource FgDim}" FontSize="11"
                        FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0" />
-            <Button DockPanel.Dock="Right" Content="↻" Command="{Binding FileBrowser.RefreshCommand}"
-                    Padding="5,1" FontSize="10" ToolTip="Atualizar" />
-            <Button DockPanel.Dock="Right" Content="⬆" Command="{Binding FileBrowser.NavigateUpCommand}"
-                    Padding="5,1" FontSize="10" Margin="0,0,3,0" ToolTip="Pasta acima" />
-            <Button DockPanel.Dock="Right" Content="📂" Command="{Binding FileBrowser.BrowseCommand}"
-                    Padding="5,1" FontSize="10" Margin="0,0,3,0" ToolTip="Escolher pasta..." />
+            <Button AutomationProperties.Name="Atualizar" DockPanel.Dock="Right" Content="↻" Command="{Binding FileBrowser.RefreshCommand}"
+                    Padding="5,1" FontSize="11" ToolTip="Atualizar" />
+            <Button AutomationProperties.Name="Pasta acima" DockPanel.Dock="Right" Content="⬆" Command="{Binding FileBrowser.NavigateUpCommand}"
+                    Padding="5,1" FontSize="11" Margin="0,0,3,0" ToolTip="Pasta acima" />
+            <Button AutomationProperties.Name="Escolher pasta..." DockPanel.Dock="Right" Content="📂" Command="{Binding FileBrowser.BrowseCommand}"
+                    Padding="5,1" FontSize="11" Margin="0,0,3,0" ToolTip="Escolher pasta..." />
             <Border />
           </DockPanel>
-          <TextBlock DockPanel.Dock="Top" Text="{Binding FileBrowser.CurrentFolder}" FontSize="9"
+          <TextBlock DockPanel.Dock="Top" Text="{Binding FileBrowser.CurrentFolder}" FontSize="11"
                      Foreground="{StaticResource FgDim}" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"
                      ToolTip="{Binding FileBrowser.CurrentFolder}" />
-          <TextBlock DockPanel.Dock="Bottom" Text="duplo-clique envia p/ célula · arraste p/ grade" FontSize="9"
+          <TextBlock DockPanel.Dock="Bottom" Text="duplo-clique envia p/ célula · arraste p/ grade" FontSize="11"
                      Foreground="{StaticResource FgDim}" Margin="0,4,0,0" />
           <ListBox x:Name="FileList" ItemsSource="{Binding FileBrowser.Items}"
+                   HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                    SelectedItem="{Binding FileBrowser.SelectedItem, Mode=TwoWay}"
                    MouseDoubleClick="OnFileListDoubleClick"
                    PreviewMouseLeftButtonDown="OnFileListMouseDown"
                    PreviewMouseMove="OnFileListMouseMove">
             <ListBox.ItemTemplate>
               <DataTemplate>
-                <StackPanel Orientation="Horizontal">
-                  <TextBlock Text="{Binding Icon}" FontSize="11" Margin="0,0,5,0" />
-                  <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis" />
-                </StackPanel>
+                <DockPanel ToolTip="{Binding Name}" Margin="2,4">
+                  <TextBlock DockPanel.Dock="Left" Text="{Binding Icon}" FontSize="12" Margin="0,0,7,0" />
+                  <TextBlock Text="{Binding Name}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                </DockPanel>
               </DataTemplate>
             </ListBox.ItemTemplate>
           </ListBox>
@@ -630,23 +438,48 @@
       <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
               Padding="6" Visibility="{Binding ShowSourcesTab, Converter={StaticResource BoolToVisibilityConverter}}">
         <DockPanel>
-          <TextBlock DockPanel.Dock="Top" Text="SOURCES" Foreground="{StaticResource FgDim}" FontSize="10"
+          <TextBlock DockPanel.Dock="Top" Text="FONTES" Foreground="{StaticResource FgDim}" FontSize="11"
                      FontWeight="Bold" Margin="0,0,0,4" />
 
-          <!-- NDI: sem o runtime instalado, a seção fica visível mas desabilitada. -->
+          <!-- NDI (T29): lista ao vivo das fontes vistas na rede, atualizada pelo
+               NdiFinder — se o runtime não estiver instalado/registrado, mostra a
+               mensagem de instalação em vez da lista (sem travar a aba inteira). -->
           <Border DockPanel.Dock="Bottom" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}"
-                  BorderThickness="1" Padding="6" Margin="0,6,0,0">
-            <StackPanel IsEnabled="False">
+                  BorderThickness="1" Padding="6" Margin="0,6,0,0" Height="280" MinHeight="220" MaxHeight="380"
+                  Visibility="{Binding NdiAvailable, Converter={StaticResource BoolToVisibilityConverter}}">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Top" Text="NDI" FontSize="11" FontWeight="Bold"
+                         Foreground="{StaticResource FgDim}" Margin="0,0,0,3" />
+              <TextBlock DockPanel.Dock="Top" Text="nenhuma fonte encontrada na rede"
+                         FontSize="11" Foreground="{StaticResource FgDim}" FontStyle="Italic"
+                         Visibility="{Binding NdiSources.Count, Converter={StaticResource ZeroToVisibilityConverter}, FallbackValue=Collapsed}" />
+              <ListBox ItemsSource="{Binding NdiSources}" MouseDoubleClick="OnNdiSourceDoubleClick"
+                       PreviewMouseLeftButtonDown="OnNdiListMouseDown" PreviewMouseMove="OnNdiListMouseMove">
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <StackPanel Orientation="Horizontal" ToolTip="{Binding}">
+                      <TextBlock Text="📡" FontSize="11" Margin="0,0,5,0" />
+                      <TextBlock Text="{Binding}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </DockPanel>
+          </Border>
+          <Border DockPanel.Dock="Bottom" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}"
+                  BorderThickness="1" Padding="6" Margin="0,6,0,0"
+                  Visibility="{Binding NdiAvailable, Converter={StaticResource InverseBoolToVisibilityConverter}}">
+            <StackPanel>
               <TextBlock Text="NDI" FontSize="11" FontWeight="Bold" Foreground="{StaticResource FgDim}" />
-              <TextBlock Text="Instale o NDI Runtime pra listar fontes de rede aqui."
-                         FontSize="10" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,3,0,0" />
+              <TextBlock Text="{Binding NdiUnavailableReason, FallbackValue='Instale o NDI Runtime/Tools pra listar fontes de rede aqui.'}"
+                         FontSize="11" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,3,0,0" />
             </StackPanel>
           </Border>
 
-          <TextBlock DockPanel.Dock="Bottom" Text="duplo-clique envia p/ célula selecionada" FontSize="9"
+          <TextBlock DockPanel.Dock="Bottom" Text="duplo-clique envia p/ célula selecionada · arraste p/ grade" FontSize="11"
                      Foreground="{StaticResource FgDim}" Margin="0,6,0,0" />
 
-          <TextBlock DockPanel.Dock="Top" Text="Recentes" FontSize="10" Foreground="{StaticResource FgDim}" Margin="0,0,0,3" />
+          <TextBlock DockPanel.Dock="Top" Text="Recentes" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,0,0,3" />
           <ListBox ItemsSource="{Binding Grid.RecentSources}" MouseDoubleClick="OnRecentSourceDoubleClick">
             <ListBox.ItemTemplate>
               <DataTemplate>
@@ -659,8 +492,284 @@
           </ListBox>
         </DockPanel>
       </Border>
+      </Grid>
     </DockPanel>
-    </Grid>
 
-  </DockPanel>
+      <Grid Grid.Row="2" Grid.Column="0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="208" /><ColumnDefinition Width="6" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="8">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <DockPanel Margin="0,0,0,5">
+              <ToggleButton AutomationProperties.Name="Ativar visualização em movimento da composição" DockPanel.Dock="Right" Content="Capturar" IsChecked="{Binding CompositionMonitorEnabled}" Padding="5,2" FontSize="11" ToolTip="Ativar visualização em movimento da composição" />
+              <TextBlock Text="SAÍDA" Style="{StaticResource SectionTitle}" />
+            </DockPanel>
+            <Border Grid.Row="1" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" ClipToBounds="True">
+              <Grid>
+                <Image Source="{Binding CompositionMonitorBitmap}" Stretch="Uniform" Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource BoolToVisibilityConverter}}" />
+                <Image Source="{Binding ActiveClipThumbnailPath}" Stretch="Uniform" Visibility="{Binding CompositionMonitorEnabled, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+                <TextBlock Text="Sem mídia ativa" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource FgDim}" Visibility="{Binding ShowMonitorPlaceholderText, Converter={StaticResource BoolToVisibilityConverter}}" />
+                <Border Background="{StaticResource InputBg}" Visibility="{Binding Blackout, Converter={StaticResource BoolToVisibilityConverter}}">
+                  <TextBlock Text="BLACKOUT ATIVO" Foreground="{StaticResource DangerText}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                </Border>
+              </Grid>
+            </Border>
+            <TextBlock Grid.Row="2" FontSize="11" Margin="0,4,0,8" Foreground="{StaticResource FgDim}">
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Text" Value="Miniatura · captura desligada" />
+                  <Style.Triggers><DataTrigger Binding="{Binding CompositionMonitorEnabled}" Value="True"><Setter Property="Text" Value="Composição · captura ao vivo" /></DataTrigger></Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+            <DockPanel Grid.Row="3" Margin="0,0,0,5">
+              <TextBlock DockPanel.Dock="Right" Text="QUADRO" Foreground="{StaticResource Selection}" FontSize="11" VerticalAlignment="Center" />
+              <TextBlock Text="CLIPE SELECIONADO" Style="{StaticResource SectionTitle}" />
+            </DockPanel>
+            <Border Grid.Row="4" Background="{StaticResource InputBg}" BorderBrush="{StaticResource Selection}" BorderThickness="1" ClipToBounds="True">
+              <Grid>
+                <Image Source="{Binding Grid.SelectedClip.PreviewImagePath}" Stretch="Uniform" />
+                <TextBlock Text="Selecione um clipe" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource FgDim}"
+                           Visibility="{Binding Grid.SelectedClip.HasMedia, Converter={StaticResource InverseBoolToVisibilityConverter}, FallbackValue=Visible}" />
+              </Grid>
+            </Border>
+            <TextBlock Grid.Row="5" Text="Miniatura / quadro de edição" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,4,0,0" />
+          </Grid>
+        </Border>
+        <Border Grid.Column="2" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="8">
+          <DockPanel>
+            <DockPanel DockPanel.Dock="Top" Margin="2,0,2,8">
+              <TextBlock DockPanel.Dock="Left" Text="CLIPE" Style="{StaticResource SectionTitle}" Margin="0,0,10,0" />
+              <TextBlock Text="{Binding Grid.SelectedClip.Name, TargetNullValue=Nenhum clipe selecionado}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{StaticResource Selection}" />
+            </DockPanel>
+            <Grid>
+              <DockPanel x:Name="ClipInspector" DataContext="{Binding Grid.SelectedClip}"
+                         IsEnabled="{Binding HasMedia, FallbackValue=False}">
+                <Border DockPanel.Dock="Top" Background="{StaticResource SelectionBg}" Padding="8,5" Margin="0,0,0,6"
+                        Visibility="{Binding IsActive, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}">
+                  <TextBlock Text="CLIPE ATIVO · alterações podem afetar a saída imediatamente" TextWrapping="Wrap" FontSize="12" AutomationProperties.LiveSetting="Polite" />
+                </Border>
+                <Border DockPanel.Dock="Top" BorderBrush="{StaticResource DangerText}" BorderThickness="1" Padding="8,5" Margin="0,0,0,6"
+                        Visibility="{Binding HasTimingError, Converter={StaticResource BoolToVisibilityConverter}, FallbackValue=Collapsed}">
+                  <TextBlock Text="{Binding TimingError}" Foreground="{StaticResource DangerText}" TextWrapping="Wrap" FontSize="12" AutomationProperties.LiveSetting="Polite" />
+                </Border>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                <Grid MinWidth="860" MinHeight="220"
+                      Width="{Binding ViewportWidth, RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
+                      Height="{Binding ViewportHeight, RelativeSource={RelativeSource AncestorType=ScrollViewer}}">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1.1*" />
+                    <ColumnDefinition Width="1*" />
+                  </Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0" MinHeight="164" Margin="0,8,8,0">
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="165" /></Grid.ColumnDefinitions>
+          <!-- ── TRANSPORT: nome, timeline/trim com agulha de reprodução, velocidade ── -->
+          <Border Grid.Column="0" Margin="0,0,8,0" Background="{StaticResource InputBg}"
+                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
+            <DockPanel>
+              <TextBlock DockPanel.Dock="Top" Text="REPRODUÇÃO" Foreground="{StaticResource FgDim}" FontSize="11"
+                         FontWeight="Bold" Margin="0,0,0,6" />
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <TextBlock DockPanel.Dock="Left" Text="Nome" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}" />
+              </DockPanel>
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="Entrada / saída" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox Width="52" AutomationProperties.Name="Entrada em segundos" Text="{Binding InPointText, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}" />
+                <TextBlock Text=" / " VerticalAlignment="Center" />
+                <TextBox Width="52" AutomationProperties.Name="Saída em segundos" Text="{Binding OutPointText, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}" />
+              </StackPanel>
+              <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                <TextBlock Text="Duração" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBox Width="60" Text="{Binding ImageDurationText, UpdateSourceTrigger=PropertyChanged, ValidatesOnDataErrors=True}" AutomationProperties.Name="Duração em segundos"
+                         ToolTip="Duração no ar (imagem) ou trim (vídeo) — aplica aos dois tipos de mídia" />
+              </StackPanel>
+              <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="Volume" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <CheckBox DockPanel.Dock="Right" Content="Silenciar" IsChecked="{Binding Mute, Mode=TwoWay}" Margin="8,0,0,0" />
+                <Slider Minimum="0" Maximum="1" Value="{Binding Volume, Mode=TwoWay}" VerticalAlignment="Center" AutomationProperties.Name="Volume do clipe" />
+              </DockPanel>
+              <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                <TextBlock DockPanel.Dock="Left" Text="Velocidade" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding Speed, StringFormat={}{0:F1}×}" VerticalAlignment="Center" Margin="6,0,0,0" />
+                <Slider Minimum="0.1" Maximum="4" Value="{Binding Speed, Mode=TwoWay}" VerticalAlignment="Center" />
+              </DockPanel>
+              <!-- Trim estilo Resolume: barra da duração inteira, alças arrastáveis de In/Out, agulha do playhead -->
+              <controls:TrimBar Height="30"
+                                Duration="{Binding Duration}"
+                                InPoint="{Binding TrimIn, Mode=TwoWay}"
+                                OutPoint="{Binding TrimOut, Mode=TwoWay}"
+                                ScrubSeconds="{Binding ScrubSeconds, Mode=OneWayToSource}"
+                                Playhead="{Binding PlayheadSeconds}"
+                                SeekSeconds="{Binding TimelineSeekSeconds, Mode=OneWayToSource}" />
+            </DockPanel>
+          </Border>
+
+
+          <!-- ── AUTOPILOT: modo de loop + ação ao terminar ── -->
+          <Border Grid.Column="1" Margin="0,0,8,0" Background="{StaticResource InputBg}"
+                  BorderBrush="{StaticResource BorderDim}" BorderThickness="1" CornerRadius="2" Padding="8">
+            <StackPanel>
+              <TextBlock Text="TROCA AUTOMÁTICA" Foreground="{StaticResource FgDim}" FontSize="11" FontWeight="Bold" Margin="0,0,0,6" />
+              <TextBlock Text="Modo" FontSize="11" Margin="0,0,0,2" />
+              <ComboBox ItemsSource="{Binding DataContext.Grid.PlayModes, RelativeSource={RelativeSource AncestorType=Window}}"
+                        SelectedItem="{Binding PlayMode, Mode=TwoWay}" Margin="0,0,0,8"  ItemTemplate="{StaticResource OperationLabelTemplate}" />
+              <TextBlock Text="Ao terminar" FontSize="11" Margin="0,0,0,2" />
+              <ComboBox ItemsSource="{Binding DataContext.Grid.AutopilotActions, RelativeSource={RelativeSource AncestorType=Window}}"
+                        SelectedItem="{Binding Autopilot, Mode=TwoWay}"  ItemTemplate="{StaticResource OperationLabelTemplate}" />
+            </StackPanel>
+          </Border>
+
+
+                    </Grid>
+                <Grid Grid.Column="1" Margin="0,8,0,0">          <!-- Transform interativo (estilo Resolume Arena): palco no formato real da
+               composição, com a miniatura do clip dentro dele; 4 cantos + 4 arestas
+               redimensionam simetricamente em torno do centro, arrastar por dentro move X/Y -->
+          <Border Grid.Column="0"
+                  Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
+                  CornerRadius="2">
+            <DockPanel Background="{StaticResource Bg}" Margin="6">
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,5">
+                <Button AutomationProperties.Name="Centralizar e restaurar o tamanho definido pelo enquadramento" DockPanel.Dock="Right" Content="↺ Redefinir" Command="{Binding ResetTransformCommand}"
+                        Padding="6,2" FontSize="11" ToolTip="Centralizar e restaurar o tamanho definido pelo enquadramento" />
+                <TextBlock Text="TAMANHO E POSIÇÃO" Foreground="{StaticResource FgDim}" FontSize="11"
+                           FontWeight="Bold" VerticalAlignment="Center" />
+              </DockPanel>
+
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                <TextBlock DockPanel.Dock="Left" Text="Enquadramento" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <Grid>
+                <ComboBox ItemsSource="{Binding DataContext.Grid.ResizeModes, RelativeSource={RelativeSource AncestorType=Window}}"
+                          SelectedItem="{Binding Resize, Mode=TwoWay}">
+                  <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Converter={StaticResource ResizeModeLabelConverter}}" /></DataTemplate></ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock Text="Padrão da camada" Margin="6,0,24,0" VerticalAlignment="Center" IsHitTestVisible="False"
+                           Visibility="{Binding Resize, Converter={StaticResource NullToVisibilityConverter}}" />
+                </Grid>
+              </DockPanel>
+              <Grid DockPanel.Dock="Bottom" Margin="0,5,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="X" FontSize="11" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Text="Y" FontSize="11" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="LARGURA (px)" FontSize="11" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="ALTURA (px)" FontSize="11" Foreground="{StaticResource FgDim}" HorizontalAlignment="Center" />
+                <!-- X/Y conservam a posição relativa. Tamanho exibe e aceita pixels
+                     após o enquadramento; a escala permanece interna e ligada ao gizmo. -->
+                <controls:ValueSlider Grid.Row="1" Grid.Column="0" Margin="0,1,2,0"
+                                      Value="{Binding PositionX, Mode=TwoWay}" Minimum="-1" Maximum="1" DefaultValue="0"
+                                      InputTitle="Posição horizontal" ToolTip="Posição X · Shift = fino · duplo-clique = centro · direito = digitar" />
+                <controls:ValueSlider Grid.Row="1" Grid.Column="1" Margin="2,1,2,0"
+                                      Value="{Binding PositionY, Mode=TwoWay}" Minimum="-1" Maximum="1" DefaultValue="0"
+                                      InputTitle="Posição vertical" ToolTip="Posição Y · Shift = fino · duplo-clique = centro · direito = digitar" />
+                <controls:ValueSlider Grid.Row="1" Grid.Column="2" Margin="2,1,2,0"
+                                      Value="{Binding ScaleX, Mode=TwoWay}" Minimum="0.05" Maximum="8" DefaultValue="1"
+                                      Format="F0" Unit=" px" InputTitle="Largura na composição (px)"
+                                      ToolTip="Largura na composição · arraste para ajustar · Shift = fino · duplo-clique = tamanho do enquadramento · direito = digitar pixels"
+                                      AutomationProperties.Name="Largura na composição em pixels">
+                  <controls:ValueSlider.DisplayMultiplier>
+                    <MultiBinding Converter="{StaticResource ClipBaseDimensionConverter}" ConverterParameter="Width">
+                      <Binding Path="SourceWidth" /><Binding Path="SourceHeight" />
+                      <Binding Path="DataContext.Grid.Model.Width" RelativeSource="{RelativeSource AncestorType=Window}" />
+                      <Binding Path="DataContext.Grid.Model.Height" RelativeSource="{RelativeSource AncestorType=Window}" />
+                      <Binding Path="Resize" />
+                    </MultiBinding>
+                  </controls:ValueSlider.DisplayMultiplier>
+                </controls:ValueSlider>
+                <controls:ValueSlider Grid.Row="1" Grid.Column="3" Margin="2,1,0,0"
+                                      Value="{Binding ScaleY, Mode=TwoWay}" Minimum="0.05" Maximum="8" DefaultValue="1"
+                                      Format="F0" Unit=" px" InputTitle="Altura na composição (px)"
+                                      ToolTip="Altura na composição · arraste para ajustar · Shift = fino · duplo-clique = tamanho do enquadramento · direito = digitar pixels"
+                                      AutomationProperties.Name="Altura na composição em pixels">
+                  <controls:ValueSlider.DisplayMultiplier>
+                    <MultiBinding Converter="{StaticResource ClipBaseDimensionConverter}" ConverterParameter="Height">
+                      <Binding Path="SourceWidth" /><Binding Path="SourceHeight" />
+                      <Binding Path="DataContext.Grid.Model.Width" RelativeSource="{RelativeSource AncestorType=Window}" />
+                      <Binding Path="DataContext.Grid.Model.Height" RelativeSource="{RelativeSource AncestorType=Window}" />
+                      <Binding Path="Resize" />
+                    </MultiBinding>
+                  </controls:ValueSlider.DisplayMultiplier>
+                </controls:ValueSlider>
+              </Grid>
+
+              <controls:TransformGizmo ToolTip="Arraste para mover e redimensionar · setas = 1 px · Shift+setas = 10 px · Home = centralizar" AutomationProperties.Name="Posição e tamanho do clipe na composição" MinHeight="90" PositionX="{Binding PositionX, Mode=TwoWay}"
+                                        PositionY="{Binding PositionY, Mode=TwoWay}"
+                                        ScaleX="{Binding ScaleX, Mode=TwoWay}"
+                                        ScaleY="{Binding ScaleY, Mode=TwoWay}"
+                                        StageWidth="{Binding DataContext.Grid.Model.Width, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        StageHeight="{Binding DataContext.Grid.Model.Height, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        SourceWidth="{Binding SourceWidth, FallbackValue=0, TargetNullValue=0}"
+                                        SourceHeight="{Binding SourceHeight, FallbackValue=0, TargetNullValue=0}"
+                                        ClipResizeMode="{Binding Resize}"
+                                        Thumbnail="{Binding PreviewImagePath}" />
+            </DockPanel>
+          </Border>
+</Grid>
+                </Grid>
+                </ScrollViewer>
+              </DockPanel>
+              <Border Background="{StaticResource PanelBg}" Visibility="{Binding Grid.SelectedClip.HasMedia, Converter={StaticResource InverseBoolToVisibilityConverter}, FallbackValue=Visible}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="330">
+                  <TextBlock Text="Prepare o próximo conteúdo" FontSize="16" FontWeight="SemiBold" TextAlignment="Center" Margin="0,0,0,8" />
+                  <TextBlock Text="Clique no nome de um clipe para ajustar reprodução, imagem e posição. Para adicionar conteúdo, arraste um arquivo da biblioteca para a grade." TextWrapping="Wrap" TextAlignment="Center" Foreground="{StaticResource FgDim}" />
+                </StackPanel>
+              </Border>
+            </Grid>
+          </DockPanel>
+        </Border>
+      </Grid>
+    </Grid>
+    <!-- ═══ Saídas (monitores) — régua compacta no rodapé ═══ -->
+    <Border Grid.Row="2" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
+            BorderThickness="1" Padding="6" Margin="0,6,0,0">
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Left" Text="SAÍDAS" Foreground="{StaticResource FgDim}" FontSize="11"
+                   FontWeight="Bold" VerticalAlignment="Center" Margin="2,0,8,0" />
+        <Button DockPanel.Dock="Right" Content="Mapear saídas" Command="{Binding OpenOutputSetupCommand}" Margin="8,0,0,0" />
+        <Button AutomationProperties.Name="Atualizar monitores" DockPanel.Dock="Left" Content="↻" Command="{Binding RefreshMonitorsCommand}"
+                ToolTip="Atualizar monitores" Margin="0,0,8,0" />
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <ItemsControl ItemsSource="{Binding Monitors}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Border Background="{StaticResource CellBg}" BorderBrush="{StaticResource BorderDim}"
+                      BorderThickness="1" CornerRadius="2" Padding="6,2" Margin="0,0,4,0">
+                <StackPanel Orientation="Horizontal">
+                  <CheckBox IsChecked="{Binding IsActive}" Content="{Binding Title}" FontSize="11" />
+                  <TextBlock Text="→" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" Margin="8,0,4,0" />
+                  <ComboBox ItemsSource="{Binding RouteOptions}" SelectedIndex="{Binding SelectedRouteIndex}"
+                            Width="120" FontSize="11" ToolTip="O que este monitor exibe: a composição inteira ou uma camada isolada" />
+                  <TextBlock Text="{Binding FpsText}" Foreground="{StaticResource Accent}" FontSize="11"
+                             FontWeight="Bold" VerticalAlignment="Center" Margin="8,0,0,0" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        </ScrollViewer>
+      </DockPanel>
+    </Border>
+
+
+    <DockPanel Grid.Row="3" Margin="4,4,4,0">
+      <TextBlock DockPanel.Dock="Right" FontSize="11" Foreground="{StaticResource FgDim}" Margin="16,0,0,0" VerticalAlignment="Center">
+        <Run Text="{Binding Grid.Model.Width, Mode=OneWay}" /><Run Text=" × " /><Run Text="{Binding Grid.Model.Height, Mode=OneWay}" />
+      </TextBlock>
+      <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="{StaticResource FgDim}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip="{Binding StatusText}" />
+    </DockPanel>
+  </Grid>
 </Window>

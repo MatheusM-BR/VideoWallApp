@@ -12,8 +12,14 @@ namespace VideoWallRW.Core.Model;
 [JsonDerivedType(typeof(FileVideoSource), "fileVideo")]
 [JsonDerivedType(typeof(FileImageSource), "fileImage")]
 [JsonDerivedType(typeof(SolidColorSource), "solidColor")]
+[JsonDerivedType(typeof(NdiSource), "ndi")]
 public abstract record SourceDescriptor;
 
 public sealed record FileVideoSource(string Path) : SourceDescriptor;
 public sealed record FileImageSource(string Path) : SourceDescriptor;
 public sealed record SolidColorSource(uint Rgba) : SourceDescriptor;
+
+/// <summary>Fonte de rede NDI — identificada pelo nome que a rede anuncia
+/// (ex.: "DESKTOP-ABC (Câmera 1)"), não por IP: a reconexão em SetClipFactory
+/// resolve o nome de novo via NDI find a cada abertura do clip.</summary>
+public sealed record NdiSource(string SourceName) : SourceDescriptor;

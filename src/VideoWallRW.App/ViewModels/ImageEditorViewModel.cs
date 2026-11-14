@@ -7,7 +7,7 @@ using SkiaSharp;
 
 namespace VideoWallRW.App.ViewModels;
 
-public enum EditorTool { Crop, Canvas, Brush, Eraser, Eyedropper, Bucket, Shape, Text }
+public enum EditorTool { Crop, Canvas, Brush, Eraser, Eyedropper, Bucket, Shape, Text, Layers }
 
 public enum ShapeKind { Retângulo, Elipse, Linha }
 
@@ -25,11 +25,23 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     private const int MaxUndo = 20;
     private readonly string _sourcePath;
     private readonly Action<string, string>? _onSaved; // célula em edição: Salvar atualiza no ar
-    private readonly Stack<SKBitmap> _undoStack = new();
-    private readonly Stack<SKBitmap> _redoStack = new();
+    private sealed record EditorSnapshot(SKBitmap Bitmap, List<EditorLayer> Layers) : IDisposable
+    {
+        public void Dispose()
+        {
+            Bitmap.Dispose();
+            foreach (var layer in Layers) layer.Dispose();
+        }
+    }
+    private readonly Stack<EditorSnapshot> _undoStack = new();
+    private readonly Stack<EditorSnapshot> _redoStack = new();
 
     [ObservableProperty] private SKBitmap _bitmap;
-    [ObservableProperty] private EditorTool _tool = EditorTool.Crop;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPaintingTool))]
+    private EditorTool _tool = EditorTool.Crop;
+
+    public bool IsPaintingTool => Tool is EditorTool.Brush or EditorTool.Eraser or EditorTool.Bucket or EditorTool.Eyedropper;
     [ObservableProperty] private SKColor _brushColor = SKColors.Red;
     [ObservableProperty] private string _brushColorHex = "#FF0000";
     [ObservableProperty] private int _brushSize = 12;
@@ -47,6 +59,11 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     /// <summary>Painel Tela: marcado = a imagem estica junto com a tela; desmarcado =
     /// só a tela muda (imagem ancorada no canto, área nova branca).</summary>
     [ObservableProperty] private bool _resizeImageWithCanvas = true;
+
+    /// <summary>Painel Tela: área nova entra TRANSPARENTE em vez de branca (Paint 3D
+    /// tem o mesmo interruptor). Útil pra logo/banner que vai por cima de outra arte —
+    /// com fundo branco a moldura apareceria como uma tarja no telão.</summary>
+    [ObservableProperty] private bool _transparentCanvas;
 
     public List<AspectPreset> AspectPresets { get; }
     public IReadOnlyList<ShapeKind> Shapes { get; } = Enum.GetValues<ShapeKind>();
@@ -116,7 +133,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     private void PushUndo()
     {
-        _undoStack.Push(Bitmap.Copy());
+        _undoStack.Push(CaptureSnapshot());
         while (_undoStack.Count > MaxUndo)
         {
             var arr = _undoStack.ToArray();
@@ -124,18 +141,36 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
             _undoStack.Clear();
             for (int i = arr.Length - 2; i >= 0; i--) _undoStack.Push(arr[i]);
         }
-        foreach (var b in _redoStack) b.Dispose();
+        foreach (var snapshot in _redoStack) snapshot.Dispose();
         _redoStack.Clear();
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
+    }
+
+    private EditorSnapshot CaptureSnapshot()
+        => new(Bitmap.Copy(), Layers.Select(layer => layer.Clone()).ToList());
+
+    private void RestoreSnapshot(EditorSnapshot snapshot)
+    {
+        Bitmap.Dispose();
+        foreach (var layer in Layers) layer.Dispose();
+        Layers.Clear();
+        Bitmap = snapshot.Bitmap;
+        foreach (var layer in snapshot.Layers)
+        {
+            AttachLayer(layer);
+            Layers.Add(layer);
+        }
+        ActiveLayer = Layers.LastOrDefault();
+        OnPropertyChanged(nameof(HasLayers));
     }
 
     [RelayCommand]
     private void Undo()
     {
         if (_undoStack.Count == 0) return;
-        _redoStack.Push(Bitmap);
-        Bitmap = _undoStack.Pop();
+        _redoStack.Push(CaptureSnapshot());
+        RestoreSnapshot(_undoStack.Pop());
         BitmapChanged?.Invoke();
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
@@ -145,8 +180,8 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     private void Redo()
     {
         if (_redoStack.Count == 0) return;
-        _undoStack.Push(Bitmap);
-        Bitmap = _redoStack.Pop();
+        _undoStack.Push(CaptureSnapshot());
+        RestoreSnapshot(_redoStack.Pop());
         BitmapChanged?.Invoke();
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
@@ -155,6 +190,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     // ── Pincel / borracha ────────────────────────────────────────────────────
 
     public void BeginStroke() => PushUndo();
+    public void BeginLayerTransform() => PushUndo();
 
     public void PaintStroke(SKPoint from, SKPoint to)
     {
@@ -276,10 +312,18 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         if (r.Width <= 0 || r.Height <= 0) return;
 
         PushUndo();
+        var oldBitmap = Bitmap;
         var cropped = new SKBitmap(new SKImageInfo(r.Width, r.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
         using (var canvas = new SKCanvas(cropped))
-            canvas.DrawBitmap(Bitmap, r, new SKRect(0, 0, r.Width, r.Height));
+            canvas.DrawBitmap(oldBitmap, r, new SKRect(0, 0, r.Width, r.Height));
         Bitmap = cropped;
+        oldBitmap.Dispose();
+        foreach (var layer in Layers)
+        {
+            layer.X -= r.Left;
+            layer.Y -= r.Top;
+        }
+        StatusText = $"Recorte aplicado: {r.Width} × {r.Height} px.";
         BitmapChanged?.Invoke();
     }
 
@@ -287,11 +331,23 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     public void ApplyResize(int width, int height)
     {
         if (width <= 0 || height <= 0) return;
+        int oldWidth = Bitmap.Width, oldHeight = Bitmap.Height;
+        var oldBitmap = Bitmap;
         PushUndo();
-        var resized = Bitmap.Resize(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul),
+        var resized = oldBitmap.Resize(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul),
             SKFilterQuality.High);
         if (resized is null) return;
         Bitmap = resized;
+        oldBitmap.Dispose();
+        float scaleX = width / (float)Math.Max(oldWidth, 1);
+        float scaleY = height / (float)Math.Max(oldHeight, 1);
+        foreach (var layer in Layers)
+        {
+            layer.X *= scaleX;
+            layer.Y *= scaleY;
+            layer.Scale *= Math.Min(scaleX, scaleY);
+        }
+        StatusText = $"Imagem e camadas redimensionadas para {width} × {height} px.";
         BitmapChanged?.Invoke();
     }
 
@@ -303,15 +359,23 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     {
         if (width <= 0 || height <= 0) return;
         PushUndo();
+        var oldBitmap = Bitmap;
         var canvasBitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
         using (var canvas = new SKCanvas(canvasBitmap))
         {
-            canvas.Clear(SKColors.White);
+            canvas.Clear(TransparentCanvas ? SKColors.Transparent : SKColors.White);
             float offsetX = (width - Bitmap.Width) / 2f;
             float offsetY = (height - Bitmap.Height) / 2f;
-            canvas.DrawBitmap(Bitmap, offsetX, offsetY);
+            canvas.DrawBitmap(oldBitmap, offsetX, offsetY);
+            foreach (var layer in Layers)
+            {
+                layer.X += offsetX;
+                layer.Y += offsetY;
+            }
         }
         Bitmap = canvasBitmap;
+        oldBitmap.Dispose();
+        StatusText = $"Tela alterada para {width} × {height} px; conteúdo centralizado.";
         BitmapChanged?.Invoke();
     }
 
@@ -335,6 +399,127 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     // ── Salvar ───────────────────────────────────────────────────────────────
 
     // Toda edição vai pra pasta padrão da operação (C:\Video Wall), nunca sobrescreve o original.
+    // ── Camadas sobrepostas (estilo "adesivo" do Paint 3D) ────────────────────
+    // A arte base é o Bitmap; estas ficam POR CIMA, na ordem da lista (a última é a
+    // mais alta). Transformações e mudanças estruturais entram no mesmo histórico
+    // da imagem base, para desfazer preservar a composição inteira.
+
+    public ObservableCollection<EditorLayer> Layers { get; } = [];
+
+    /// <summary>Camada selecionada — é a que a ferramenta "Camadas" move/redimensiona.</summary>
+    [ObservableProperty] private EditorLayer? _activeLayer;
+
+    public bool HasLayers => Layers.Count > 0;
+
+    /// <summary>Importa uma imagem como camada nova, centralizada e já cabendo na arte
+    /// (se vier maior que a base, entra reduzida — senão ficaria fora da tela).</summary>
+    public void AddImageLayer(string path)
+    {
+        try
+        {
+            var bmp = SKBitmap.Decode(path);
+            if (bmp is null) { StatusText = $"Não consegui abrir: {Path.GetFileName(path)}"; return; }
+
+            float scale = 1f;
+            float maxW = Bitmap.Width * 0.8f, maxH = Bitmap.Height * 0.8f;
+            if (bmp.Width > maxW || bmp.Height > maxH)
+                scale = Math.Min(maxW / bmp.Width, maxH / bmp.Height);
+
+            var layer = new EditorLayer(bmp, Path.GetFileNameWithoutExtension(path),
+                (Bitmap.Width - bmp.Width * scale) / 2f,
+                (Bitmap.Height - bmp.Height * scale) / 2f)
+            { Scale = scale };
+
+            PushUndo();
+            AttachLayer(layer);
+            Layers.Add(layer);
+            ActiveLayer = layer;
+            OnPropertyChanged(nameof(HasLayers));
+            StatusText = $"Camada adicionada: {layer.Name} — arraste na imagem pra posicionar";
+            BitmapChanged?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Falha ao adicionar camada: {ex.Message}";
+        }
+    }
+
+    private void AttachLayer(EditorLayer layer)
+        => layer.PropertyChanged += (_, _) => BitmapChanged?.Invoke();
+
+    partial void OnActiveLayerChanged(EditorLayer? value) => BitmapChanged?.Invoke();
+
+    [RelayCommand]
+    private void RemoveLayer(EditorLayer? layer)
+    {
+        layer ??= ActiveLayer;
+        if (layer is null) return;
+        PushUndo();
+        Layers.Remove(layer);
+        if (ReferenceEquals(ActiveLayer, layer)) ActiveLayer = Layers.LastOrDefault();
+        layer.Dispose();
+        OnPropertyChanged(nameof(HasLayers));
+        BitmapChanged?.Invoke();
+    }
+
+    [RelayCommand]
+    private void MoveLayerUp(EditorLayer? layer)
+    {
+        layer ??= ActiveLayer;
+        int i = layer is null ? -1 : Layers.IndexOf(layer);
+        if (i < 0 || i >= Layers.Count - 1) return;
+        PushUndo();
+        Layers.Move(i, i + 1);
+        BitmapChanged?.Invoke();
+    }
+
+    [RelayCommand]
+    private void MoveLayerDown(EditorLayer? layer)
+    {
+        layer ??= ActiveLayer;
+        int i = layer is null ? -1 : Layers.IndexOf(layer);
+        if (i <= 0) return;
+        PushUndo();
+        Layers.Move(i, i - 1);
+        BitmapChanged?.Invoke();
+    }
+
+    /// <summary>Queima todas as camadas na arte base. Desfazível (é destrutivo).</summary>
+    [RelayCommand]
+    private void FlattenLayers()
+    {
+        if (Layers.Count == 0) return;
+        PushUndo();
+        using (var canvas = new SKCanvas(Bitmap))
+            foreach (var layer in Layers) layer.Draw(canvas);
+
+        foreach (var layer in Layers) layer.Dispose();
+        Layers.Clear();
+        ActiveLayer = null;
+        OnPropertyChanged(nameof(HasLayers));
+        StatusText = "Camadas mescladas na imagem.";
+        BitmapChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Base + camadas num bitmap só. Usado pra salvar (o arquivo tem que sair com tudo)
+    /// sem destruir a separação em memória — o operador segue editando as camadas
+    /// depois de salvar.
+    /// </summary>
+    public SKBitmap ComposeFlattened()
+    {
+        if (Layers.Count == 0) return Bitmap;
+        var flat = new SKBitmap(new SKImageInfo(Bitmap.Width, Bitmap.Height,
+            SKColorType.Bgra8888, SKAlphaType.Premul));
+        using (var canvas = new SKCanvas(flat))
+        {
+            canvas.Clear(SKColors.Transparent);
+            canvas.DrawBitmap(Bitmap, 0, 0);
+            foreach (var layer in Layers) layer.Draw(canvas);
+        }
+        return flat;
+    }
+
     public string SaveTargetPath => Path.Combine(
         AppPaths.EnsureMediaRoot(),
         Path.GetFileNameWithoutExtension(_sourcePath) + "-edit.png");
@@ -342,10 +527,14 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Save()
     {
-        using var image = SKImage.FromBitmap(Bitmap);
+        // Salva a composição (base + camadas), mas mantém as camadas separadas em
+        // memória — salvar não pode "queimar" o que o operador ainda está ajustando.
+        var composed = ComposeFlattened();
+        using var image = SKImage.FromBitmap(composed);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         using (var stream = File.Create(SaveTargetPath))
             data.SaveTo(stream);
+        if (!ReferenceEquals(composed, Bitmap)) composed.Dispose();
         StatusText = $"Salvo: {SaveTargetPath} — arraste o chip \"🖼\" até uma célula da grade";
         // Editando a imagem de uma célula: salvar já atualiza o clip no ar.
         _onSaved?.Invoke(SaveTargetPath, Path.GetFileNameWithoutExtension(_sourcePath));
@@ -361,7 +550,8 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         Bitmap.Dispose();
-        foreach (var b in _undoStack) b.Dispose();
-        foreach (var b in _redoStack) b.Dispose();
+        foreach (var layer in Layers) layer.Dispose();
+        foreach (var snapshot in _undoStack) snapshot.Dispose();
+        foreach (var snapshot in _redoStack) snapshot.Dispose();
     }
 }

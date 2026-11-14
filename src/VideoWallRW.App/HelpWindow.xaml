@@ -1,95 +1,34 @@
 <Window x:Class="VideoWallRW.App.HelpWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Ajuda — Como usar o VideoWallRW" Height="700" Width="820"
+        Title="Ajuda — RW VideoWall" Height="740" Width="860" MinHeight="500" MinWidth="600"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
-  <DockPanel Margin="14">
-    <TextBlock DockPanel.Dock="Top" Text="Guia rápido de operação" FontSize="20" FontWeight="Bold" Margin="0,0,0,4" />
-    <TextBlock DockPanel.Dock="Top" Text="Passo a passo do dia a dia — do carregar mídia ao colocar no telão."
-               Foreground="{StaticResource FgDim}" Margin="0,0,0,14" />
-
+  <DockPanel Background="{StaticResource Bg}" Margin="12">
+    <Border DockPanel.Dock="Top" Style="{StaticResource SurfacePanel}" Margin="0,0,0,12">
+      <DockPanel>
+        <Image DockPanel.Dock="Left" Source="{StaticResource BrandMark}" Width="42" Height="42" Margin="0,0,12,0" />
+        <StackPanel><TextBlock Text="RW VideoWall · Remate Web" Style="{StaticResource PageTitle}" /><TextBlock Text="Guia de operação" Foreground="{StaticResource FgDim}" Margin="0,4,0,0" /></StackPanel>
+      </DockPanel>
+    </Border>
     <ScrollViewer VerticalScrollBarVisibility="Auto">
       <StackPanel>
-
-        <TextBlock Text="1. Carregar mídia" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
-          Use o painel <Bold>FILES</Bold> (canto superior direito) para navegar até a pasta com os vídeos/imagens —
-          ele já abre em <Italic>C:\Video Wall</Italic>, a pasta padrão da operação. Arraste o arquivo direto para
-          a célula da grade onde ele deve entrar, ou dê duplo-clique para mandar para a célula selecionada.
-        </TextBlock>
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
-          Fotos e vídeos já entram com <Bold>Autopilot: PlayNextClip</Bold> (avançam sozinhos pro próximo) e fotos
-          ficam <Bold>7 segundos</Bold> no ar por padrão — ajustável no painel CLIP.
-        </TextBlock>
-
-        <TextBlock Text="2. Disparar clipes" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
-          Clique na <Bold>miniatura</Bold> da célula (parte de cima) para colocar o clipe no ar. Clique no
-          <Bold>nome</Bold> (barra de baixo) para só selecionar, sem trocar o que está tocando — assim dá pra ajustar
-          um clipe sem interromper o telão. O número da coluna no topo dispara a coluna inteira (todas as layers).
-        </TextBlock>
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
-          Botão direito na célula: <Bold>Limpar célula</Bold>, <Bold>Editar imagem...</Bold>. Botão direito na
-          coluna: limpar, clonar, adicionar antes/depois, remover. Botão direito na layer: duplicar, limpar.
-        </TextBlock>
-
-        <TextBlock Text="3. Controles gerais" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
-          <Bold>BLACKOUT</Bold> escurece a saída sem mexer no master fader — desligar volta exatamente de onde
-          estava. <Bold>AUTOPILOT ON/OFF</Bold> (barra superior ou tecla <Bold>Espaço</Bold>) liga/desliga a troca
-          automática em todas as layers de uma vez; cada layer também tem seu próprio botão ▶/⏸.
-        </TextBlock>
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
-          <Bold>Ctrl+C</Bold> / <Bold>Ctrl+V</Bold> com uma célula selecionada copia e cola o clipe (com todas as
-          configurações) para outra célula.
-        </TextBlock>
-
-        <TextBlock Text="4. Saídas (monitores/telões)" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
-          Na linha <Bold>SAÍDAS</Bold> (rodapé), marque o monitor para ativá-lo. O combo ao lado escolhe o que ele
-          exibe: a <Bold>composição inteira</Bold> (todas as layers misturadas) ou uma <Bold>layer isolada</Bold>.
-        </TextBlock>
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
-          Para recortar/posicionar em vários projetores ou telas recortadas, use <Bold>Avançado → Advanced
-          Output...</Bold> — lá dá pra criar múltiplos slices por tela, cada um com seu recorte de entrada e posição
-          de saída, arrastando direto no canvas.
-        </TextBlock>
-
-        <TextBlock Text="5. Cenas" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
-          <Bold>+ Salvar cena</Bold> guarda o estado inteiro da grade (clipe ativo e opacidade de cada layer, master
-          fader) num botão — um clique dispara tudo de volta. Botão direito no chip da cena: renomear ou excluir
-          (com confirmação).
-        </TextBlock>
-
-        <TextBlock Text="6. Editor de imagem" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,4">
-          Abre pelo menu de contexto de uma célula de imagem ("Editar imagem...") ou pelos botões da Agenda/PDF.
-          As ferramentas ficam na barra de cima; as opções de cada ferramenta aparecem no painel à direita —
-          igual ao Paint 3D. <Bold>Recortar</Bold> tem presets de proporção e o quadro fica móvel/redimensionável
-          depois de criado. <Bold>Tela</Bold> redimensiona a imagem ou só a moldura, com guias arrastáveis.
-        </TextBlock>
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
-          Depois de editar, arraste o chip <Bold>"🖼 ARRASTE p/ célula"</Bold> até a célula da grade onde a imagem
-          deve entrar. Se você abriu o editor a partir de uma célula existente, <Bold>Salvar</Bold> já atualiza o
-          clipe no ar, sem precisar arrastar de novo.
-        </TextBlock>
-
-        <TextBlock Text="7. Agenda de leilões" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,14">
-          O botão <Bold>🗓 Agenda</Bold> busca os leilões do dia no site, baixa banners em alta resolução e permite
-          extrair páginas de catálogos em PDF como imagem — tudo salvo em <Italic>C:\Video Wall\Agenda\...</Italic>,
-          pronto pra arrastar pra grade.
-        </TextBlock>
-
-        <TextBlock Text="8. Modo instalação fixa" FontSize="15" FontWeight="Bold" Foreground="{StaticResource Accent}" Margin="0,0,0,4" />
-        <TextBlock TextWrapping="Wrap" Margin="0,0,0,6">
-          Em <Bold>Avançado → Instalação...</Bold> dá pra configurar um sequenciador automático de colunas, regras
-          de agenda (horário/dia da semana) e pastas monitoradas (arquivos novos viram clipes sozinhos). Ligar
-          "Iniciar com o Windows" faz o programa abrir automaticamente sem operador — útil pra telões fixos.
-        </TextBlock>
-
+        <TextBlock Text="1. Preparar e disparar conteúdo" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,16">Na <Bold>Biblioteca → Arquivos</Bold>, escolha a pasta e arraste a mídia para uma célula. O duplo-clique envia o arquivo para a grade. Clique no <Bold>nome do clipe</Bold> para selecionar e editar; clique na <Bold>miniatura</Bold> para disparar. O número acima de uma coluna dispara seus clipes, respeitando camadas fixas. Ctrl+clique agrupa células. Ctrl+C e Ctrl+V copiam e colam o clipe selecionado quando o foco está fora de um campo de texto.</TextBlock>
+        <TextBlock Text="2. Editar com atenção à saída" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,16">O painel <Bold>Tamanho e posição</Bold> reúne enquadramento, X/Y e largura/altura em pixels. O botão direito ou Enter abre a digitação do valor; setas ajustam e Shift permite ajuste fino. Home restaura o valor padrão. As alças da imagem alteram os mesmos valores. No quadro visual, as setas movem 1 px; Shift+seta move 10 px; Home centraliza. <Bold>Um clipe ativo pode alterar a saída imediatamente durante a edição.</Bold> O aviso no inspetor identifica esse caso. Valores de tempo inválidos ficam destacados; os últimos tempos válidos são preservados enquanto você corrige.</TextBlock>
+        <TextBlock Text="3. Entender os monitores e as cores" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,16"><Bold>Azul</Bold> indica seleção e edição; <Bold>verde</Bold>, operação habilitada ou clipe conectado; <Bold>vermelho</Bold>, blackout ou erro. O selo ATIVO identifica o clipe conectado à camada, não confirma o sinal do monitor físico. O quadro do clipe selecionado é uma miniatura ou quadro de edição, sem reprodução independente. No monitor <Bold>Saída</Bold>, Capturar liga a visualização em movimento da composição; desligado, aparece uma miniatura. Essa captura não confirma a conexão física das telas.</TextBlock>
+        <TextBlock Text="4. Controles gerais e saídas" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,16"><Bold>BLACKOUT</Bold> escurece todas as saídas; desligá-lo restaura a imagem, mas não retrocede o tempo de reprodução. O controle Saída ajusta a intensidade geral. <Bold>AUTO</Bold> liga ou desliga a troca automática nas camadas; os botões de cada camada permitem ajustes individuais. Espaço alterna a troca automática fora dos campos e controles interativos; Ctrl+Espaço é o atalho global padrão. Desligar AUTO não é pausar o vídeo. Na régua <Bold>Saídas</Bold>, marque a tela e escolha sua origem. Em <Bold>Ferramentas → Mapear saídas</Bold>, configure recortes, orientação e cor. Identificar telas ajuda a reconhecer cada destino.</TextBlock>
+        <TextBlock Text="5. Cenas e projetos" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,16">Cada cena contém sua grade de camadas e clipes. <Bold>+ Nova cena</Bold> cria uma grade em branco. Selecionar uma cena troca a grade de operação; não é uma prévia isolada da saída. Alterações atualizam a cena em memória. Use <Bold>Arquivo → Salvar</Bold> ou Ctrl+S para gravar o projeto. Botão direito na cena permite renomear ou excluir. Page Down e Page Up percorrem as cenas; os atalhos podem ser alterados em <Bold>Ferramentas → Atalhos de teclado</Bold>.</TextBlock>
+        <TextBlock Text="6. Editor de imagem, Agenda e PDF" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,16">Abra o editor pelo menu de contexto de uma imagem ou por <Bold>Agenda → Salvar e abrir no editor</Bold>. Na tela de PDF, escolha a página e use <Bold>Exportar e abrir no editor</Bold>. No editor, selecione a ferramenta na barra superior e ajuste suas opções à direita. Recortar mostra a seleção e as dimensões; Aplicar recorte confirma. Tela permite mudar o tamanho; Camadas organiza sobreposições. Salvar grava a composição; se o editor foi aberto de uma célula, a imagem desse clipe é atualizada, inclusive quando está ativa. Ctrl+Z e Ctrl+Y desfazem e refazem as edições disponíveis.</TextBlock>
+        <TextBlock Text="7. Fontes de rede e instalação fixa" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,16">Em <Bold>Biblioteca → Fontes / NDI</Bold>, selecione uma fonte de vídeo por rede e arraste para a grade. A ausência de fontes ou do runtime NDI é indicada no painel. Fontes ao vivo não têm duração de arquivo. Em <Bold>Ferramentas → Instalação</Bold>, configure a sequência de colunas, horários e pastas monitoradas. Em <Bold>Ferramentas → Conversor HAP</Bold>, prepare arquivos de vídeo para a reprodução.</TextBlock>
+        <TextBlock Text="8. Teclado e organização da janela" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,8" />
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,16">Use Tab e Shift+Tab para navegar; o contorno azul mostra o foco. Espaço aciona o botão ou caixa que estiver em foco. Enter/F2 permite digitar nos controles de tamanho e posição. Arraste os divisores para distribuir o espaço; eles também aceitam foco e setas. Quando o inspetor não couber na largura disponível, use a rolagem para acessar todos os ajustes. A área mínima de trabalho é de 1100 × 720 unidades lógicas do Windows; o espaço físico necessário aumenta com a escala de tela.</TextBlock>
       </StackPanel>
     </ScrollViewer>
   </DockPanel>

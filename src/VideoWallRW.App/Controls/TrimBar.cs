@@ -41,20 +41,25 @@ public sealed class TrimBar : FrameworkElement
         nameof(Playhead), typeof(double), typeof(TrimBar),
         new FrameworkPropertyMetadata(-1.0, FrameworkPropertyMetadataOptions.AffectsRender));
 
+    public static readonly DependencyProperty SeekSecondsProperty = DependencyProperty.Register(
+        nameof(SeekSeconds), typeof(double), typeof(TrimBar),
+        new FrameworkPropertyMetadata(-1.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault));
+
     public double Playhead { get => (double)GetValue(PlayheadProperty); set => SetValue(PlayheadProperty, value); }
+    public double SeekSeconds { get => (double)GetValue(SeekSecondsProperty); set => SetValue(SeekSecondsProperty, value); }
 
     public double Duration { get => (double)GetValue(DurationProperty); set => SetValue(DurationProperty, value); }
     public double InPoint { get => (double)GetValue(InPointProperty); set => SetValue(InPointProperty, value); }
     public double OutPoint { get => (double)GetValue(OutPointProperty); set => SetValue(OutPointProperty, value); }
     public double ScrubSeconds { get => (double)GetValue(ScrubSecondsProperty); set => SetValue(ScrubSecondsProperty, value); }
 
-    private enum DragTarget { None, In, Out }
+    private enum DragTarget { None, Playhead, In, Out }
     private DragTarget _dragging = DragTarget.None;
     private double _dragValue; // valor provisório durante o arraste (segundos)
 
     private static readonly Brush TrackBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x17, 0x17, 0x1A)));
-    private static readonly Brush RangeBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x4A, 0x5E, 0x28)));
-    private static readonly Brush HandleBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x9A, 0xCD, 0x32)));
+    private static readonly Brush RangeBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x25, 0x43, 0x65)));
+    private static readonly Brush HandleBrush = Frozen(new SolidColorBrush(Color.FromRgb(0x82, 0xBA, 0xF6)));
     private static readonly Pen BorderPen = FrozenPen(Color.FromRgb(0x3C, 0x3C, 0x44));
     private static readonly Brush TextBrush = Frozen(new SolidColorBrush(Color.FromRgb(0xDF, 0xDF, 0xDF)));
 
@@ -95,9 +100,10 @@ public sealed class TrimBar : FrameworkElement
         dc.DrawRectangle(HandleBrush, null, new Rect(outX - HandleWidth / 2, 0, HandleWidth, ActualHeight));
 
         // Agulha da posição atual de reprodução (vídeo no ar).
-        if (Playhead >= 0)
+        double visiblePlayhead = _dragging == DragTarget.Playhead ? _dragValue : Playhead;
+        if (visiblePlayhead >= 0)
         {
-            double px = ToX(Playhead);
+            double px = ToX(visiblePlayhead);
             dc.DrawRectangle(Brushes.White, null, new Rect(px - 1, 0, 2, ActualHeight));
         }
 
@@ -123,10 +129,18 @@ public sealed class TrimBar : FrameworkElement
         double inX = ToX(InPoint);
         double outX = ToX(OutPoint <= 0 ? Duration : OutPoint);
 
-        // Pega a alça mais próxima do clique (dentro de qualquer distância — clicar no
-        // meio move a alça mais próxima, igual ao trim do Resolume).
-        _dragging = System.Math.Abs(x - inX) <= System.Math.Abs(x - outX) ? DragTarget.In : DragTarget.Out;
+        // In/Out só recebem o clique diretamente sobre a alça. O restante da faixa
+        // move a agulha de reprodução.
+        const double handleHitRadius = HandleWidth / 2 + 2;
+        double inDistance = System.Math.Abs(x - inX);
+        double outDistance = System.Math.Abs(x - outX);
+        _dragging = inDistance <= handleHitRadius && inDistance <= outDistance
+            ? DragTarget.In
+            : outDistance <= handleHitRadius
+                ? DragTarget.Out
+                : DragTarget.Playhead;
         _dragValue = ToSeconds(x);
+        ConstrainDragValue();
         ScrubSeconds = _dragValue;
         CaptureMouse();
         InvalidateVisual();
@@ -137,11 +151,7 @@ public sealed class TrimBar : FrameworkElement
     {
         if (_dragging == DragTarget.None) return;
         _dragValue = ToSeconds(e.GetPosition(this).X);
-
-        // Não deixa as alças se cruzarem (margem mínima de 0.05s).
-        double outEff = OutPoint <= 0 ? Duration : OutPoint;
-        if (_dragging == DragTarget.In) _dragValue = System.Math.Min(_dragValue, outEff - 0.05);
-        else _dragValue = System.Math.Max(_dragValue, InPoint + 0.05);
+        ConstrainDragValue();
 
         ScrubSeconds = _dragValue;
         InvalidateVisual();
@@ -156,9 +166,21 @@ public sealed class TrimBar : FrameworkElement
 
         // Commit só aqui (uma escrita no binding, um UpdateClip no engine).
         if (target == DragTarget.In) InPoint = System.Math.Max(_dragValue, 0);
-        else OutPoint = System.Math.Min(_dragValue, Duration);
+        else if (target == DragTarget.Out) OutPoint = System.Math.Min(_dragValue, Duration);
+        else SeekSeconds = _dragValue;
         ScrubSeconds = -1; // fim do arraste — o preview volta pro thumbnail normal
         InvalidateVisual();
         e.Handled = true;
+    }
+
+    private void ConstrainDragValue()
+    {
+        double outEff = OutPoint <= 0 ? Duration : OutPoint;
+        if (_dragging == DragTarget.In)
+            _dragValue = System.Math.Clamp(_dragValue, 0, System.Math.Max(0, outEff - 0.05));
+        else if (_dragging == DragTarget.Out)
+            _dragValue = System.Math.Clamp(_dragValue, System.Math.Min(Duration, InPoint + 0.05), Duration);
+        else if (_dragging == DragTarget.Playhead)
+            _dragValue = System.Math.Clamp(_dragValue, InPoint, outEff);
     }
 }

@@ -1,18 +1,19 @@
 <Window x:Class="VideoWallRW.App.KeymapEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Atalhos de teclado" Height="520" Width="420"
-        WindowStartupLocation="CenterOwner"
+        Title="Atalhos de teclado" Height="580" Width="720"
+        MinWidth="700" MinHeight="480" WindowStartupLocation="CenterOwner"
         Background="{StaticResource Bg}" Foreground="{StaticResource Fg}"
         PreviewKeyDown="OnPreviewKeyDown">
-  <DockPanel Margin="10">
-    <TextBlock DockPanel.Dock="Top" Text="Clique em 'Redefinir' e aperte a nova combinação de teclas."
+  <DockPanel Background="{StaticResource Bg}" Margin="10">
+<Border DockPanel.Dock="Top" Style="{StaticResource SurfacePanel}" Margin="0,0,0,10"><StackPanel><TextBlock Text="Atalhos de teclado" Style="{StaticResource PageTitle}" /><TextBlock Text="Configure os comandos usados durante a operação." Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
+    <TextBlock DockPanel.Dock="Top" Text="Defina a tecla e, nos disparos de coluna, escolha qual camada deve receber o comando."
                TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{StaticResource FgDim}" />
     <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}" Foreground="{StaticResource Accent}" Margin="0,0,0,8" />
 
     <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
       <Button DockPanel.Dock="Left" Content="Restaurar padrão" Command="{Binding ResetToDefaultCommand}" Padding="8,4" Margin="0,0,6,0" />
-      <Button DockPanel.Dock="Right" Content="Salvar" Command="{Binding SaveCommand}" Padding="12,4" HorizontalAlignment="Right" />
+      <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryAction}" Content="Salvar" Command="{Binding SaveCommand}" Padding="12,4" HorizontalAlignment="Right" />
     </DockPanel>
 
     <ListBox ItemsSource="{Binding Entries}">
@@ -20,11 +21,12 @@
         <DataTemplate>
           <Grid Margin="0,3">
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="160" />
-              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="155" />
+              <ColumnDefinition Width="120" />
+              <ColumnDefinition Width="190" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <TextBlock Grid.Column="0" Text="{Binding Action}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="0" Text="{Binding Action, Converter={StaticResource OperationLabelConverter}}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Action, Converter={StaticResource OperationLabelConverter}}" VerticalAlignment="Center" />
             <TextBlock Grid.Column="1" VerticalAlignment="Center" Margin="6,0">
               <TextBlock.Style>
                 <Style TargetType="TextBlock">
@@ -42,7 +44,10 @@
                 </Style>
               </TextBlock.Style>
             </TextBlock>
-            <Button Grid.Column="2" Content="Redefinir" Padding="6,2" Command="{Binding StartCaptureCommand}" />
+            <ComboBox Grid.Column="2" ItemsSource="{Binding LayerOptions}" SelectedItem="{Binding SelectedLayer}"
+                      DisplayMemberPath="Name" Margin="6,0" IsEnabled="{Binding IsColumnAction}"
+                      ToolTip="Camada que será acionada por este atalho" />
+            <Button Grid.Column="3" Content="Redefinir" Padding="6,2" Command="{Binding StartCaptureCommand}" />
           </Grid>
         </DataTemplate>
       </ListBox.ItemTemplate>

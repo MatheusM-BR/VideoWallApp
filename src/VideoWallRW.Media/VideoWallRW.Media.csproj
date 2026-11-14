@@ -25,4 +25,13 @@
     <Content Include="$(MSBuildThisFileDirectory)..\..\third_party\ffmpeg\*.dll" Condition="Exists('$(MSBuildThisFileDirectory)..\..\third_party\ffmpeg\')" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- Runtime do NDI embutido: a DLL vai junto do app pra receber NDI SEM instalar o
+       NDI Tools/Runtime na máquina. NdiInterop procura ela ao lado do exe primeiro
+       (ver NativeLibrary.SetDllImportResolver). A licença exige distribuir o texto
+       Processing.NDI.Lib.Licenses.txt junto — por isso ele também é copiado. -->
+  <ItemGroup>
+    <Content Include="$(MSBuildThisFileDirectory)..\..\third_party\ndi\Processing.NDI.Lib.x64.dll" Condition="Exists('$(MSBuildThisFileDirectory)..\..\third_party\ndi\Processing.NDI.Lib.x64.dll')" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+    <Content Include="$(MSBuildThisFileDirectory)..\..\third_party\ndi\Processing.NDI.Lib.Licenses.txt" Condition="Exists('$(MSBuildThisFileDirectory)..\..\third_party\ndi\Processing.NDI.Lib.Licenses.txt')" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+
 </Project>

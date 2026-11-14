@@ -56,6 +56,38 @@ public sealed class Clip
         Source = source;
     }
 
+    /// <summary>
+    /// Mesmo conteúdo, mas com um ID ESCOLHIDO. Usado na propagação de grupos de troca:
+    /// a célula destino recebe a mídia/configuração da origem mas MANTÉM a identidade
+    /// dela. Sem isso, cada propagação trocava o Id do clip da célula e o autopilot
+    /// perdia a coluna atual (Array.FindIndex → -1), voltando pra coluna 0 em vez de
+    /// avançar — e o UpdateClip não casava mais com o clip no ar.
+    /// </summary>
+    public Clip CloneWithId(Guid id)
+    {
+        var copy = Clone();
+        return new Clip(copy.Source)
+        {
+            Id = id,
+            Name = copy.Name,
+            PlayMode = copy.PlayMode,
+            Speed = copy.Speed,
+            InPoint = copy.InPoint,
+            OutPoint = copy.OutPoint,
+            ImageDuration = copy.ImageDuration,
+            DurationSeconds = copy.DurationSeconds,
+            Resize = copy.Resize,
+            Volume = copy.Volume,
+            Mute = copy.Mute,
+            Autopilot = copy.Autopilot,
+            PositionX = copy.PositionX,
+            PositionY = copy.PositionY,
+            ScaleX = copy.ScaleX,
+            ScaleY = copy.ScaleY,
+            LinkGroupId = copy.LinkGroupId,
+        };
+    }
+
     /// <summary>Criar um deep clone (novo ID) caso seja duplicado.</summary>
     public Clip Clone()
     {

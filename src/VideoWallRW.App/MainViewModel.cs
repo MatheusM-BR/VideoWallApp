@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -27,6 +28,63 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly DispatcherTimer _autosaveTimer;
     private readonly DispatcherTimer _runtimeStateTimer;
     private readonly WatchFolderManager _watchFolders;
+    private readonly Media.Ndi.NdiFinder? _ndiFinder;
+
+    /// <summary>Fontes NDI vistas na rede agora — aba Sources (T29). Populada pelo
+    /// NdiFinder (thread própria de descoberta) e espelhada aqui via Dispatcher.</summary>
+    public ObservableCollection<string> NdiSources { get; } = [];
+    public bool NdiAvailable { get; }
+    public string? NdiUnavailableReason { get; }
+
+    private void OnNdiSourcesChanged(IReadOnlyList<string> sources)
+    {
+        Application.Current?.Dispatcher.BeginInvoke(() =>
+        {
+            // Atualiza por DIFERENÇA, nunca Clear()+re-add: a descoberta NDI publica a
+            // cada ~1s mesmo sem novidade, e reconstruir a lista inteira zerava o
+            // SelectedItem do ListBox uma vez por segundo — o duplo-clique e o arraste
+            // pra célula falhavam silenciosamente por "nada selecionado".
+            for (int i = NdiSources.Count - 1; i >= 0; i--)
+                if (!sources.Contains(NdiSources[i]))
+                    NdiSources.RemoveAt(i);
+
+            foreach (var s in sources)
+                if (!NdiSources.Contains(s))
+                    NdiSources.Add(s);
+        });
+    }
+
+    /// <summary>Duplo-clique numa fonte NDI (aba Sources): igual a SendFileToSelectedCell,
+    /// mas cria um Clip com NdiSource em vez de FileVideoSource/FileImageSource.</summary>
+    [RelayCommand]
+    public void SendNdiToSelectedCell(string sourceName)
+    {
+        int layerIndex, columnIndex;
+        if (Grid.SelectedClip is { } selected)
+            (layerIndex, columnIndex) = (selected.LayerIndex, selected.ColumnIndex);
+        else if (PickTargetCell() is { } cell)
+            (layerIndex, columnIndex) = cell;
+        else return;
+
+        SendNdiToCell(sourceName, layerIndex, columnIndex);
+    }
+
+    /// <summary>Arrastar uma fonte NDI (aba Sources) direto numa célula da grade —
+    /// mesmo destino final de SendNdiToSelectedCell, mas a célula já vem escolhida
+    /// pelo drop (igual ao arraste de arquivo do painel Files).</summary>
+    public void SendNdiToCell(string sourceName, int layerIndex, int columnIndex)
+    {
+        Grid.SetClip(layerIndex, columnIndex, new Core.Model.Clip(new Core.Model.NdiSource(sourceName))
+        {
+            Name = sourceName,
+            Resize = Core.Model.ResizeMode.Fit,
+            // Fonte ao vivo: não existe "próximo clip" quando ela "termina" (ela nunca
+            // termina) — autopilot aqui não faz sentido semântico, mesmo já protegido
+            // pela Duration=Infinity do NdiVideoSource.
+            Autopilot = Core.Model.AutopilotAction.None,
+        });
+        StatusText = $"Enviado para a grade: NDI — {sourceName}";
+    }
 
     // Janelas "de origem" (Agenda, importador de PDF) fecham sozinhas ao abrir o
     // editor de imagem — do contrário elas ficam por cima atrapalhando o arraste
@@ -37,10 +95,15 @@ public sealed partial class MainViewModel : ObservableObject
     public ObservableCollection<MonitorViewModel> Monitors { get; } = [];
     public ObservableCollection<SceneViewModel> Scenes { get; } = [];
 
+    /// <summary>Cena "aberta" agora (T30) — null quando nenhuma cena foi selecionada
+    /// (grade "solta", sem aba nenhuma ativa). Editar a grade com uma cena selecionada
+    /// atualiza essa cena sozinho, ver <see cref="SyncSelectedSceneFromGrid"/>.</summary>
+    [ObservableProperty] private SceneViewModel? _selectedScene;
+
     [ObservableProperty] private string _statusText = "Pronto — marque um monitor para ativar a saída.";
     [ObservableProperty] private double _masterFader = 1.0;
     [ObservableProperty] private bool _blackout;
-    [ObservableProperty] private string _windowTitle = "VideoWallRW — Novo projeto";
+    [ObservableProperty] private string _windowTitle = "RW VideoWall — Novo projeto";
     [ObservableProperty] private bool _sequencerRunning;
 
     /// <summary>Autopilot global: liga/desliga o autopilot de TODAS as layers de uma
@@ -72,6 +135,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnActiveClipThumbnailPathChanged(string? value) => OnPropertyChanged(nameof(ShowMonitorPlaceholderText));
 
+    private void OnEngineClipTriggered(int layerIndex, int columnIndex)
+        => Application.Current?.Dispatcher.BeginInvoke(() =>
+            Grid.MarkClipTriggeredFromEngine(layerIndex, columnIndex));
+
     /// <summary>Percorre as layers em ordem — a última com um clip ativo é a que renderiza
     /// por cima (CompositionRenderer itera 0..N blendando cada uma sobre a anterior).</summary>
     private void RefreshActiveClipThumbnail()
@@ -83,6 +150,57 @@ public sealed partial class MainViewModel : ObservableObject
                 thumb = path;
         }
         ActiveClipThumbnailPath = thumb;
+    }
+
+    // Deduplica o disparo do PNG: guarda o último caminho por fonte NDI (a fonte
+    // publica a cada 30s; encode fora da thread de captura).
+    private readonly Dictionary<string, string> _ndiSnapshotPaths = new();
+
+    /// <summary>Chamado na thread de captura NDI (~30s): gera um PNG reduzido do frame
+    /// e usa como miniatura de toda célula que aponta pra essa fonte NDI.</summary>
+    private void OnNdiSnapshot(string sourceName, byte[] bgra, int width, int height, int stride)
+    {
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                // Miniatura pequena (largura ~360px) — barata e suficiente pra célula.
+                int targetW = Math.Min(width, 360);
+                int targetH = Math.Max(1, (int)(height * (targetW / (double)width)));
+
+                var src = System.Windows.Media.Imaging.BitmapSource.Create(
+                    width, height, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, bgra, stride);
+                var scaled = new System.Windows.Media.Imaging.TransformedBitmap(
+                    src, new System.Windows.Media.ScaleTransform(targetW / (double)width, targetH / (double)height));
+                scaled.Freeze(); // congelado = seguro pra encodar fora da UI thread
+
+                string dir = Path.Combine(Path.GetTempPath(), "VideoWallRW", "ndi-thumbs");
+                Directory.CreateDirectory(dir);
+                // Nome ÚNICO por snapshot — o WPF cacheia imagem por caminho, então
+                // reusar o mesmo nome mostraria o frame velho; o anterior é apagado depois.
+                string safe = string.Concat(sourceName.Select(c => char.IsLetterOrDigit(c) ? c : '_'));
+                string path = Path.Combine(dir, $"{safe}-{DateTime.Now.Ticks}.png");
+
+                var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(scaled));
+                using (var fs = File.Create(path))
+                    encoder.Save(fs);
+
+                Application.Current?.Dispatcher.BeginInvoke(() =>
+                {
+                    string? old = _ndiSnapshotPaths.GetValueOrDefault(sourceName);
+                    _ndiSnapshotPaths[sourceName] = path;
+                    foreach (var layer in Grid.Layers)
+                        foreach (var cell in layer.Clips)
+                            if (cell.Model?.Source is Core.Model.NdiSource n && n.SourceName == sourceName)
+                                cell.ThumbnailPath = path;
+                    // O anterior já não é exibido por ninguém (todos migraram pro novo) — apaga.
+                    if (old is not null && old != path)
+                        try { File.Delete(old); } catch { /* melhor esforço */ }
+                });
+            }
+            catch { /* prévia é best-effort, nunca atrapalha a operação */ }
+        });
     }
 
     private void OnCompositionFrameCaptured(byte[] pixelsBgra, int width, int height)
@@ -106,28 +224,50 @@ public sealed partial class MainViewModel : ObservableObject
 
     private readonly bool _kiosk;
 
-    public MainViewModel(GraphicsDevice gfx, RenderThread render, bool kiosk = false)
+    public MainViewModel(GraphicsDevice gfx, RenderThread render, bool kiosk = false,
+        Media.Ndi.NdiFinder? ndiFinder = null)
     {
         _gfx = gfx;
         _render = render;
         _kiosk = kiosk;
 
+        _ndiFinder = ndiFinder;
+        NdiAvailable = ndiFinder?.IsAvailable ?? false;
+        NdiUnavailableReason = ndiFinder?.UnavailableReason;
+        if (ndiFinder is not null)
+        {
+            foreach (var s in ndiFinder.CurrentSources) NdiSources.Add(s);
+            ndiFinder.SourcesChanged += OnNdiSourcesChanged;
+        }
+
         var compModel = new Composition { ColumnCount = 8 };
-        compModel.AddLayer(new Layer { Name = "Layer 3" });
-        compModel.AddLayer(new Layer { Name = "Layer 2" });
-        compModel.AddLayer(new Layer { Name = "Layer 1" }); // Base
+        compModel.AddLayer(new Layer { Name = "Camada 3" });
+        compModel.AddLayer(new Layer { Name = "Camada 2" });
+        compModel.AddLayer(new Layer { Name = "Camada 1" }); // Base
 
         Grid = new CompositionViewModel(compModel, _render);
         Grid.SyncToEngine();
         Grid.Changed += MarkDirty;
         Grid.Changed += RefreshMonitorRouteOptions; // layers mudaram → combos de roteamento também
+        Grid.Changed += SyncSelectedSceneFromGrid; // T30: cada edição já atualiza a cena aberta
+        Grid.Changed += EnsureColumnShortcuts;     // atalho pra cada coluna do projeto
+        // Edição de propriedade (volume, duração, resize, transform, opacidade de
+        // layer...) não passa pelo Changed estrutural. Só precisa sujar o projeto —
+        // a cena aberta é congelada nos dois momentos que importam (trocar de cena e
+        // salvar), em vez de clonar a composição inteira a cada tick de slider.
+        Grid.Edited += MarkDirty;
+        EnsureCurrentGridHasScene();
         _watchFolders = new WatchFolderManager(Grid, Dispatcher.CurrentDispatcher);
         FileBrowser = new FileBrowserViewModel(SendFileToSelectedCell);
 
         _render.StatsUpdated += OnStatsUpdated;
         _render.EngineFailed += OnEngineFailed;
         _render.CompositionFrameCaptured += OnCompositionFrameCaptured;
+        _render.ClipTriggered += OnEngineClipTriggered;
+        // Prévia da célula NDI a cada 30s (fonte no ar publica o frame; aqui vira PNG).
+        Media.Ndi.NdiSnapshotHub.SnapshotReady += OnNdiSnapshot;
         RefreshMonitors();
+        EnsureColumnShortcuts(); // grade inicial já garante os atalhos de coluna
 
         // T7.3: autosave a cada 120s.
         _autosaveTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(120) };
@@ -193,12 +333,17 @@ public sealed partial class MainViewModel : ObservableObject
             Monitors.Add(new MonitorViewModel(info, _render, OnMonitorRouteChanged)
             {
                 IsActive = previouslyActive.Contains(info.DeviceName),
+                // Depois do IsActive de propósito: restaurar o estado anterior ao
+                // reenumerar monitores não é edição do operador, não pode sujar o projeto.
+                Edited = MarkDirty,
             });
         RefreshMonitorRouteOptions();
     }
 
     /// <summary>Preenche o combo "Composição / Layer N" de cada monitor com os nomes
-    /// atuais das layers e a seleção salva no OutputSetup.</summary>
+    /// atuais das layers e a seleção salva no OutputSetup. Também espelha o nome dado
+    /// à tela no Advanced Output pro rodapé SAÍDAS (pedido do operador: renomear lá
+    /// troca o nome aqui também).</summary>
     private void RefreshMonitorRouteOptions()
     {
         var layerNames = Grid.Layers.Select(l => l.Name).ToList();
@@ -206,6 +351,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             var screen = _outputSetup.Screens.FirstOrDefault(s => s.MonitorDeviceName == monitor.Info.DeviceName);
             monitor.SetRouteOptions(layerNames, screen?.SourceLayerIndex);
+            monitor.CustomName = screen?.Name;
         }
     }
 
@@ -232,11 +378,13 @@ public sealed partial class MainViewModel : ObservableObject
     private void OpenOutputSetup()
     {
         var vm = new OutputSetupViewModel(_render, MonitorEnumerator.Enumerate(_gfx),
-            () => Grid.Model.Width, () => Grid.Model.Height);
+            () => Grid.Model.Width, () => Grid.Model.Height,
+            () => CompositionMonitorEnabled ? CompositionMonitorBitmap : null);
         vm.LoadFromModel(_outputSetup);
         var window = new OutputSetupWindow(vm) { Owner = Application.Current.MainWindow };
         window.ShowDialog();
         _outputSetup = vm.ToModel();
+        RefreshMonitorRouteOptions(); // nome/roteamento editados lá refletem no rodapé na hora
         MarkDirty();
     }
 
@@ -359,10 +507,26 @@ public sealed partial class MainViewModel : ObservableObject
     /// <summary>MainWindow escuta para recarregar o KeymapService sem precisar reiniciar o app.</summary>
     public event Action? KeymapChanged;
 
+    private int _keymapColumns = -1;
+
+    /// <summary>Toda coluna do projeto tem atalho (T: "acompanha a quantidade máxima de
+    /// colunas do projeto, independente da cena"). Só mexe no arquivo quando o número de
+    /// colunas realmente muda — Grid.Changed dispara a cada edição de célula.</summary>
+    private void EnsureColumnShortcuts()
+    {
+        int columns = Grid.Model.ColumnCount;
+        if (columns == _keymapColumns) return;
+        _keymapColumns = columns;
+        Input.KeymapService.EnsureColumns(Input.KeymapService.FilePath, columns);
+        KeymapChanged?.Invoke();
+    }
+
     [RelayCommand]
     private void OpenKeymapEditor()
     {
-        var window = new KeymapEditorWindow(new KeymapEditorViewModel()) { Owner = Application.Current.MainWindow };
+        var names = Grid.Model.Layers.Select((layer, index) =>
+            string.IsNullOrWhiteSpace(layer.Name) ? $"Camada {index + 1}" : layer.Name);
+        var window = new KeymapEditorWindow(new KeymapEditorViewModel(names)) { Owner = Application.Current.MainWindow };
         window.ShowDialog();
         KeymapChanged?.Invoke();
     }
@@ -392,12 +556,13 @@ public sealed partial class MainViewModel : ObservableObject
         if (!ConfirmDiscardChanges()) return;
 
         var compModel = new Composition { ColumnCount = 8 };
-        compModel.AddLayer(new Layer { Name = "Layer 1" });
+        compModel.AddLayer(new Layer { Name = "Camada 1" });
         Grid.ReplaceModel(compModel);
         _outputSetup = new OutputSetup();
         _render.Post(new SyncOutputSetup(_outputSetup));
+        SelectedScene = null;
         Scenes.Clear();
-        _render.Post(new SyncScenes([]));
+        EnsureCurrentGridHasScene();
         _installation = new InstallationConfig();
         _render.Post(new SyncInstallation(_installation));
         _watchFolders.Clear();
@@ -446,10 +611,25 @@ public sealed partial class MainViewModel : ObservableObject
         _outputSetup = project.Output;
         _render.Post(new SyncOutputSetup(_outputSetup));
 
+        Grid.ImportBlankCellLinks(project.Meta.BlankCellLinks); // vínculos de células vazias
+
+        SelectedScene = null; // cenas antigas foram descartadas — evita referência solta
         Scenes.Clear();
         foreach (var scene in project.Snapshots)
-            Scenes.Add(new SceneViewModel(scene, _render, RemoveSceneInternal));
+            Scenes.Add(NewSceneViewModel(scene));
         _render.Post(new SyncScenes(project.Snapshots));
+
+        // Reabre na mesma aba em que o projeto foi salvo. Sem trocar a grade: ela já
+        // veio de project.Composition, que É a grade dessa cena (BuildProjectFile
+        // congela a cena aberta a partir da grade antes de gravar). Chamar SelectScene
+        // aqui faria um ReplaceModel redundante — e sujaria o projeto recém-aberto.
+        if (project.Meta.SelectedSceneId is { } openScene)
+        {
+            SelectedScene = Scenes.FirstOrDefault(s => s.Id == openScene);
+            if (SelectedScene is not null)
+                SelectedScene.IsSelected = true;
+        }
+        EnsureCurrentGridHasScene();
 
         _installation = project.Installation;
         _render.Post(new SyncInstallation(_installation));
@@ -469,6 +649,12 @@ public sealed partial class MainViewModel : ObservableObject
         MasterFader = project.Composition.MasterOpacity;
         Blackout = project.Composition.Blackout;
         RefreshMonitorRouteOptions();
+
+        // T32: religa os telões que estavam LIGADOS no save — setar IsActive dispara
+        // o EnableOutput de verdade via OnIsActiveChanged; monitores que não existem
+        // mais nesta máquina são simplesmente ignorados.
+        foreach (var monitor in Monitors)
+            monitor.IsActive = project.Meta.EnabledOutputs.Contains(monitor.Info.DeviceName);
     }
 
     private void CheckMissingMedia(Composition composition)
@@ -570,6 +756,10 @@ public sealed partial class MainViewModel : ObservableObject
 
     private ProjectFile BuildProjectFile()
     {
+        // Idem SelectScene: garante que a cena ABERTA vá pro arquivo com as últimas
+        // edições de propriedade, que não passam pelo Changed estrutural.
+        SyncSelectedSceneFromGrid();
+
         Grid.Model.MasterOpacity = MasterFader;
         Grid.Model.Blackout = Blackout;
         return new ProjectFile
@@ -582,6 +772,9 @@ public sealed partial class MainViewModel : ObservableObject
             {
                 AutopilotAllEnabled = AutopilotAll,
                 SequencerRunning = SequencerRunning,
+                EnabledOutputs = Monitors.Where(m => m.IsActive).Select(m => m.Info.DeviceName).ToList(),
+                BlankCellLinks = Grid.ExportBlankCellLinks(),
+                SelectedSceneId = SelectedScene?.Id,
             },
         };
     }
@@ -615,7 +808,10 @@ public sealed partial class MainViewModel : ObservableObject
     public void ToggleSequencer() => SequencerRunning = !SequencerRunning;
 
     partial void OnSequencerRunningChanged(bool value)
-        => _render.Post(new SetSequencerRunning(value));
+    {
+        _render.Post(new SetSequencerRunning(value));
+        MarkDirty(); // vai pro arquivo (ProjectMeta.SequencerRunning)
+    }
 
     private void Autosave()
     {
@@ -646,7 +842,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void UpdateWindowTitle()
     {
         string name = _currentProjectPath is null ? "Novo projeto" : Path.GetFileName(_currentProjectPath);
-        WindowTitle = $"VideoWallRW — {name}{(_isDirty ? " *" : "")}";
+        WindowTitle = $"RW VideoWall — {name}{(_isDirty ? " *" : "")}";
     }
 
     public bool CanCloseWithoutPrompt() => !_isDirty || ConfirmDiscardChanges();
@@ -656,23 +852,129 @@ public sealed partial class MainViewModel : ObservableObject
         try { Autosave(); } catch { /* melhor esforço no fechamento */ }
     }
 
-    // ── Fase 7: cenas ────────────────────────────────────────────────────────
+    // ── Cenas (T30): cada cena é uma grade completa e independente, como uma aba ──
 
     [RelayCommand]
-    private void SaveScene()
+    private void NewScene()
     {
-        var (columns, opacities) = Grid.CaptureSceneState();
+        // A composição inicial podia estar fora de qualquer cena. Antes de abrir a
+        // nova grade, registra o estado atual para que ele continue acessível.
+        EnsureCurrentGridHasScene();
+        SyncSelectedSceneFromGrid();
+
+        var blank = new Composition { ColumnCount = 8 };
+        blank.AddLayer(new Layer { Name = "Camada 3" });
+        blank.AddLayer(new Layer { Name = "Camada 2" });
+        blank.AddLayer(new Layer { Name = "Camada 1" });
+
+        var snapshot = new SceneSnapshot { Name = $"Cena {Scenes.Count + 1}", Grid = blank };
+        var vm = NewSceneViewModel(snapshot);
+        Scenes.Add(vm);
+        _render.Post(new SyncScenes(Scenes.Select(s => s.Model).ToList()));
+        SelectScene(vm); // "abrir uma cena nova é um cenário limpo" — já entra nela
+        MarkDirty();
+    }
+
+    /// <summary>Garante que a grade visível pertença a uma cena. Projetos novos e
+    /// arquivos antigos sem SelectedSceneId deixam de ter uma composição “solta”
+    /// que desaparece quando o operador cria a próxima cena.</summary>
+    private void EnsureCurrentGridHasScene()
+    {
+        if (SelectedScene is not null) return;
+
+        var grid = Grid.Model.Clone();
         var snapshot = new SceneSnapshot
         {
             Name = $"Cena {Scenes.Count + 1}",
-            ActiveColumns = columns,
-            LayerOpacities = opacities,
-            MasterFader = MasterFader,
+            Grid = grid,
+            BlankCellLinks = Grid.ExportBlankCellLinks(),
         };
-        Scenes.Add(new SceneViewModel(snapshot, _render, RemoveSceneInternal));
+        var scene = NewSceneViewModel(snapshot);
+        Scenes.Add(scene);
+        SelectedScene = scene;
+        scene.IsSelected = true;
         _render.Post(new SyncScenes(Scenes.Select(s => s.Model).ToList()));
+    }
+
+    /// <summary>Troca a grade inteira da tela do operador pra a da cena clicada — como
+    /// trocar de aba. A cena que sai é congelada aqui mesmo, na primeira linha: o sync
+    /// contínuo do Grid.Changed só enxerga mudança ESTRUTURAL, então ajuste de
+    /// propriedade (volume, duração, resize, transform) só entra por este caminho.</summary>
+    private void SelectScene(SceneViewModel scene)
+    {
+        if (ReferenceEquals(SelectedScene, scene)) return;
+
+        // Congela a cena que está SAINDO com o estado atual da grade. Edições de
+        // propriedade de clip/layer não disparam Changed, então o sync contínuo não
+        // as tinha visto: sem esta linha, ajustar volume/duração/resize e clicar em
+        // outra aba fazia a cena voltar com a versão velha, perdendo o ajuste.
+        SyncSelectedSceneFromGrid();
+
+        if (SelectedScene is not null)
+            SelectedScene.IsSelected = false;
+        SelectedScene = scene;
+        scene.IsSelected = true;
+
+        // Lê os valores da cena ANTES de mexer em qualquer coisa: atribuir MasterFader/
+        // Blackout dispara SyncSelectedSceneFromGrid, que sobrescreve scene.Model.Grid
+        // com um clone carimbado com os valores AINDA da cena anterior. Sem guardar
+        // antes (e sem suprimir o sync durante a troca), o Blackout salvo era perdido
+        // e a cena abria com o estado errado.
+        double masterOfScene = scene.Model.Grid.MasterOpacity;
+        bool blackoutOfScene = scene.Model.Grid.Blackout;
+
+        _switchingScene = true;
+        try
+        {
+            Grid.ReplaceModel(scene.Model.Grid.Clone());
+            Grid.ImportBlankCellLinks(scene.Model.BlankCellLinks); // vínculos vazios são da cena
+            MasterFader = masterOfScene;
+            Blackout = blackoutOfScene;
+        }
+        finally
+        {
+            _switchingScene = false;
+        }
+
+        RefreshMonitorRouteOptions();
         MarkDirty();
     }
+
+    /// <summary>Suprime o auto-save da cena enquanto a troca está em andamento (a grade
+    /// e o master/blackout mudam em passos, e cada passo dispararia um snapshot parcial).</summary>
+    private bool _switchingScene;
+
+    /// <summary>Atalhos PageDown/PageUp (KeymapService) — percorre as cenas na ordem em
+    /// que aparecem na barra, dando a volta nas pontas. Sem cena nenhuma criada ainda,
+    /// não faz nada (não existe "cena 0" implícita).</summary>
+    public void SelectNextScene() => SelectSceneByOffset(1);
+    public void SelectPreviousScene() => SelectSceneByOffset(-1);
+
+    private void SelectSceneByOffset(int offset)
+    {
+        if (Scenes.Count == 0) return;
+        int current = SelectedScene is null ? -1 : Scenes.IndexOf(SelectedScene);
+        int next = ((current + offset) % Scenes.Count + Scenes.Count) % Scenes.Count;
+        SelectScene(Scenes[next]);
+    }
+
+    /// <summary>Chamado a cada Grid.Changed (qualquer edição de célula/coluna/layer) —
+    /// clona a grade inteira de volta pra dentro da cena aberta agora, pra "editar com
+    /// uma cena selecionada já atualiza ela sozinha" funcionar sem passo manual.</summary>
+    private void SyncSelectedSceneFromGrid()
+    {
+        if (SelectedScene is null || _switchingScene) return;
+        var snapshot = Grid.Model.Clone();
+        snapshot.MasterOpacity = MasterFader;
+        snapshot.Blackout = Blackout;
+        SelectedScene.Model.Grid = snapshot;
+        SelectedScene.Model.BlankCellLinks = Grid.ExportBlankCellLinks();
+    }
+
+    /// <summary>Ponto único de criação da aba de cena — garante que renomear/atribuir
+    /// atalho também suje o projeto (ver SceneViewModel.Edited).</summary>
+    private SceneViewModel NewSceneViewModel(SceneSnapshot snapshot)
+        => new(snapshot, SelectScene, RemoveSceneInternal) { Edited = MarkDirty };
 
     private void RemoveSceneInternal(SceneViewModel scene)
     {
@@ -681,6 +983,8 @@ public sealed partial class MainViewModel : ObservableObject
         if (confirm != MessageBoxResult.Yes)
             return;
 
+        if (ReferenceEquals(SelectedScene, scene))
+            SelectedScene = null;
         Scenes.Remove(scene);
         _render.Post(new SyncScenes(Scenes.Select(s => s.Model).ToList()));
         MarkDirty();
@@ -689,10 +993,18 @@ public sealed partial class MainViewModel : ObservableObject
     // ── Fase 3/7: transporte e master fader/blackout ────────────────────────
 
     partial void OnMasterFaderChanged(double value)
-        => _render.Post(new SetMasterOpacity(value));
+    {
+        _render.Post(new SetMasterOpacity(value));
+        SyncSelectedSceneFromGrid();
+        MarkDirty(); // master fader vai pro arquivo (Composition.MasterOpacity)
+    }
 
     partial void OnBlackoutChanged(bool value)
-        => _render.Post(new SetBlackout(value));
+    {
+        _render.Post(new SetBlackout(value));
+        SyncSelectedSceneFromGrid();
+        MarkDirty(); // idem blackout (Composition.Blackout)
+    }
 
     private void OnStatsUpdated(EngineStats stats)
     {
@@ -744,8 +1056,9 @@ public sealed partial class MainViewModel : ObservableObject
         foreach (var layer in Grid.Layers)
             layer.AutopilotEnabled = value;
         StatusText = value
-            ? "▶ Autopilot LIGADO em todas as layers"
-            : "⏸ Autopilot DESLIGADO — cada clip segura onde está (Espaço religa)";
+            ? "Troca automática ligada em todas as camadas"
+            : "Troca automática desligada — os vídeos continuam; ao terminar, o clipe permanece na camada";
+        MarkDirty(); // vai pro arquivo (ProjectMeta.AutopilotAllEnabled)
     }
 
 
@@ -766,7 +1079,23 @@ public sealed partial class MonitorViewModel : ObservableObject
     private bool _suppressRoute;
 
     public MonitorInfo Info { get; }
-    public string Title => $"{Info.DeviceName} — {Info.Width}×{Info.Height} @ ({Info.X},{Info.Y})";
+
+    /// <summary>Nome dado pelo operador no Advanced Output (Screen.Name) — quando
+    /// definido, o rodapé SAÍDAS mostra ele em vez do nome técnico do Windows.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Title))]
+    private string? _customName;
+
+    public string Title
+    {
+        get
+        {
+            string name = string.IsNullOrWhiteSpace(CustomName) || CustomName == Info.DeviceName
+                ? Info.DeviceName
+                : $"{CustomName} ({Info.DeviceName})";
+            return $"{name} — {Info.Width}×{Info.Height} @ ({Info.X},{Info.Y})";
+        }
+    }
 
     [ObservableProperty] private bool _isActive;
     [ObservableProperty] private string _fpsText = "";
@@ -776,6 +1105,11 @@ public sealed partial class MonitorViewModel : ObservableObject
 
     /// <summary>0 = composição inteira; N = layer N-1 isolada neste monitor.</summary>
     [ObservableProperty] private int _selectedRouteIndex;
+
+    /// <summary>Avisa que o telão foi ligado/desligado — o projeto guarda quais
+    /// monitores estavam LIGADOS (ProjectMeta.EnabledOutputs) pra religar sozinho na
+    /// próxima abertura, então marcar/desmarcar tem que sujar o projeto.</summary>
+    public Action? Edited { get; set; }
 
     public MonitorViewModel(MonitorInfo info, RenderThread render,
         Action<MonitorViewModel, int?>? routeChanged = null)
@@ -803,7 +1137,10 @@ public sealed partial class MonitorViewModel : ObservableObject
     }
 
     partial void OnIsActiveChanged(bool value)
-        => _render.Post(value
+    {
+        _render.Post(value
             ? new EnableOutput(Info.DeviceName)
             : new DisableOutput(Info.DeviceName));
+        Edited?.Invoke();
+    }
 }

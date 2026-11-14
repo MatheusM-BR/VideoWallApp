@@ -27,9 +27,26 @@ public sealed class LayerRenderer : IDisposable
     private readonly List<Frame> _frames = [];
     private readonly Stopwatch _triggerLatency = new();
 
-    public LayerRenderer(Layer model)
+    /// <summary>
+    /// Onde o descarte de um player (que fecha FFmpeg/HAP e libera texturas D3D) é
+    /// executado. O RenderThread manda isso pra MESMA thread que CRIA as fontes, pra
+    /// que teardown nativo nunca rode em paralelo com setup nativo — é exatamente na
+    /// troca de clipe (fim de vídeo/tempo de imagem) que os dois se encontravam.
+    /// Null = descarta na hora (usado em testes/shutdown).
+    /// </summary>
+    private readonly Action<IDisposable>? _deferDispose;
+
+    public LayerRenderer(Layer model, Action<IDisposable>? deferDispose = null)
     {
         Model = model;
+        _deferDispose = deferDispose;
+    }
+
+    private void Release(ClipPlayer? player)
+    {
+        if (player is null) return;
+        if (_deferDispose is not null) _deferDispose(player);
+        else player.Dispose();
     }
 
     /// <summary>
@@ -38,15 +55,15 @@ public sealed class LayerRenderer : IDisposable
     /// </summary>
     public void SetPlayer(ClipPlayer? player, Clip? clip, bool cut = false)
     {
-        PendingPlayer?.Dispose();
+        Release(PendingPlayer);
         PendingPlayer = null;
         PendingClip = null;
         _cutPending = false;
 
         if (player is null || clip is null)
         {
-            ActivePlayer?.Dispose();
-            OutgoingPlayer?.Dispose();
+            Release(ActivePlayer);
+            Release(OutgoingPlayer);
             ActivePlayer = null;
             ActiveClip = null;
             OutgoingPlayer = null;
@@ -75,7 +92,7 @@ public sealed class LayerRenderer : IDisposable
             ActivePlayer?.SetAudioFade(TransitionProgress);
             if (_transitionElapsed >= Model.TransitionSeconds)
             {
-                OutgoingPlayer.Dispose();
+                Release(OutgoingPlayer);
                 OutgoingPlayer = null;
                 OutgoingClip = null;
                 _transitionElapsed = 0;
@@ -99,6 +116,23 @@ public sealed class LayerRenderer : IDisposable
 
         if (PendingPlayer is not null)
         {
+            // Fonte que falhou (arquivo faltando/corrompido) NUNCA entrega frame — sem
+            // isto ela ficava pendente pra sempre, o clipe atual nunca era substituído e
+            // a layer CONGELAVA ("não passa para o próximo vídeo"). Descarta e segue com
+            // o que já está no ar; o autopilot tenta de novo no próximo fim de ciclo.
+            if (PendingPlayer.Source.State == SourceState.Error)
+            {
+                Log.Warning("Fonte do clipe '{Name}' falhou ({Erro}) — pulando",
+                    PendingClip?.Name, PendingPlayer.Source.ErrorMessage);
+                Release(PendingPlayer);
+                PendingPlayer = null;
+                PendingClip = null;
+                _cutPending = false;
+            }
+        }
+
+        if (PendingPlayer is not null)
+        {
             var pendingFrame = PendingPlayer.Source.AcquireFrame(PendingPlayer.Playhead);
             if (pendingFrame is not null)
             {
@@ -112,14 +146,14 @@ public sealed class LayerRenderer : IDisposable
 
                 if (previous is not null && !_cutPending && Model.TransitionSeconds > 0)
                 {
-                    OutgoingPlayer?.Dispose();
+                    Release(OutgoingPlayer);
                     OutgoingPlayer = previous;
                     OutgoingClip = previousClip;
                     _transitionElapsed = 0;
                 }
                 else
                 {
-                    previous?.Dispose();
+                    Release(previous);
                 }
 
                 _cutPending = false;
@@ -173,9 +207,9 @@ public sealed class LayerRenderer : IDisposable
 
     public void Dispose()
     {
-        ActivePlayer?.Dispose();
-        PendingPlayer?.Dispose();
-        OutgoingPlayer?.Dispose();
+        Release(ActivePlayer);
+        Release(PendingPlayer);
+        Release(OutgoingPlayer);
         ActivePlayer = null;
         PendingPlayer = null;
         OutgoingPlayer = null;

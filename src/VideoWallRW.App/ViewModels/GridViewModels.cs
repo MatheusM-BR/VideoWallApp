@@ -10,7 +10,7 @@ using VideoWallRW.Engine;
 
 namespace VideoWallRW.App.ViewModels;
 
-public sealed partial class ClipViewModel : ObservableObject
+public sealed partial class ClipViewModel : ObservableObject, System.ComponentModel.IDataErrorInfo
 {
     private readonly int _layerIndex;
     private readonly int _colIndex;
@@ -23,7 +23,7 @@ public sealed partial class ClipViewModel : ObservableObject
     public int LayerIndex => _layerIndex;
     public int ColumnIndex => _colIndex;
 
-    [ObservableProperty] private string _name = "Empty";
+    [ObservableProperty] private string _name = "Vazio";
     [ObservableProperty] private bool _hasMedia;
 
     /// <summary>Esta célula é a "conectada" da layer (última disparada) — destaque
@@ -56,6 +56,17 @@ public sealed partial class ClipViewModel : ObservableObject
     /// <summary>Posição atual de reprodução (s) quando este clip está no ar; -1 = parado.
     /// Alimentado pelos stats do engine (~2x/s) — vira a agulha da TrimBar.</summary>
     [ObservableProperty] private double _playheadSeconds = -1;
+
+    public double TimelineSeekSeconds
+    {
+        get => PlayheadSeconds;
+        set
+        {
+            if (Model is null) return;
+            _render.Post(new SeekClip(_layerIndex, _colIndex, value));
+            PlayheadSeconds = value;
+        }
+    }
 
     /// <summary>Instante do scrub vindo da TrimBar (-1 = parado). Debounce de 120ms
     /// antes de extrair o frame — arrastar rápido não enfileira decodificações.</summary>
@@ -140,7 +151,7 @@ public sealed partial class ClipViewModel : ObservableObject
     {
         _updatingFromModel = true;
         HasMedia = Model?.Source != null;
-        Name = Model?.Name ?? "Empty";
+        Name = Model?.Name ?? "Vazio";
         PlayMode = Model?.PlayMode ?? PlayMode.Loop;
         Speed = Model?.Speed ?? 1.0;
         Autopilot = Model?.Autopilot ?? AutopilotAction.None;
@@ -154,7 +165,12 @@ public sealed partial class ClipViewModel : ObservableObject
         PositionY = Model?.PositionY ?? 0.0;
         ScaleX = Model?.ScaleX ?? 1.0;
         ScaleY = Model?.ScaleY ?? 1.0;
-        LinkGroupId = Model?.LinkGroupId;
+        // O vínculo é da CÉLULA (existe até vazia), não da mídia — então só ADOTA o
+        // grupo quando o Model traz um, nunca zera um vínculo de VM já existente por
+        // causa de um Model vazio/sem grupo (ex.: limpar célula vinculada mantém o
+        // vínculo pronto pra próxima mídia; célula vazia pode ser vinculada).
+        if (Model?.LinkGroupId is { } group)
+            LinkGroupId = group;
         _updatingFromModel = false;
 
         RequestThumbnail();
@@ -165,15 +181,36 @@ public sealed partial class ClipViewModel : ObservableObject
     /// <summary>Ponte pro TrimBar: In efetivo em segundos (campo vazio = 0).</summary>
     public double TrimIn
     {
-        get => TryParseOptional(InPointText, out double? v) && v is { } x ? x : 0;
+        get => !HasValidTrim ? Model?.InPoint ?? 0 : TryParseOptional(InPointText, out double? v) && v is { } x ? x : 0;
         set => InPointText = value.ToString("0.##", CultureInfo.CurrentCulture);
     }
 
     /// <summary>Ponte pro TrimBar: Out efetivo em segundos (campo vazio = duração total).</summary>
     public double TrimOut
     {
-        get => TryParseOptional(OutPointText, out double? v) && v is { } x ? x : Duration;
+        get => !HasValidTrim ? Model?.OutPoint ?? Duration : TryParseOptional(OutPointText, out double? v) && v is { } x ? x : Duration;
         set => OutPointText = value.ToString("0.##", CultureInfo.CurrentCulture);
+    }
+
+    /// <summary>
+    /// Portão das sondas: ao abrir um projeto, TODAS as células sondam duração/dimensão
+    /// ao mesmo tempo — dezenas de aberturas nativas simultâneas (FFmpeg/WIC) no pool de
+    /// threads. É a mesma classe de corrida que corrompia o heap na criação de fontes,
+    /// então aqui também roda uma sonda por vez. Não bloqueia a UI (tudo await).
+    /// </summary>
+    private static readonly SemaphoreSlim ProbeGate = new(1, 1);
+
+    private static async Task<T?> RunProbeAsync<T>(Func<T> probe)
+    {
+        // Espera limitada: um arquivo em pasta de REDE que saiu do ar faz o FFmpeg/WIC
+        // travar por dezenas de segundos segurando o portão. Sem teto, uma única sonda
+        // presa congelaria todas as outras da sessão (duração e dimensão de TODA a
+        // grade). Passado o limite, esta sonda desiste — o valor é opcional e será
+        // sondado de novo na próxima vez que a célula for tocada.
+        if (!await ProbeGate.WaitAsync(TimeSpan.FromSeconds(20)).ConfigureAwait(false))
+            return default;
+        try { return await Task.Run(probe).ConfigureAwait(false); }
+        finally { ProbeGate.Release(); }
     }
 
     /// <summary>
@@ -197,7 +234,7 @@ public sealed partial class ClipViewModel : ObservableObject
         }
 
         string path = video.Path;
-        double? probed = await Task.Run(() => VideoWallRW.Media.MediaProbe.TryGetDuration(path));
+        double? probed = await RunProbeAsync(() => VideoWallRW.Media.MediaProbe.TryGetDuration(path));
         if (probed is not { } duration || MediaPathOf(Model) != path || Model is null)
             return;
 
@@ -234,7 +271,7 @@ public sealed partial class ClipViewModel : ObservableObject
         }
 
         bool isVideo = Model?.Source is FileVideoSource;
-        var dims = await Task.Run(() => isVideo
+        var dims = await RunProbeAsync(() => isVideo
             ? VideoWallRW.Media.MediaProbe.TryGetVideoDimensions(path)
             : TryGetImageDimensions(path));
 
@@ -349,17 +386,28 @@ public sealed partial class ClipViewModel : ObservableObject
     partial void OnPlayModeChanged(PlayMode value) => ApplyEdits();
     partial void OnSpeedChanged(double value) => ApplyEdits();
     partial void OnAutopilotChanged(AutopilotAction value) => ApplyEdits();
-    partial void OnDurationChanged(double value) => OnPropertyChanged(nameof(TrimOut));
+    partial void OnDurationChanged(double value)
+    {
+        OnPropertyChanged(nameof(TrimOut));
+        OnPropertyChanged(nameof(TimingError));
+        OnPropertyChanged(nameof(HasTimingError));
+    }
+
+    private bool HasValidTrim => this[nameof(InPointText)].Length == 0 && this[nameof(OutPointText)].Length == 0;
 
     partial void OnInPointTextChanged(string value)
     {
         OnPropertyChanged(nameof(TrimIn));
+        OnPropertyChanged(nameof(OutPointText));
+        OnPropertyChanged(nameof(TrimOut));
         ApplyEdits();
     }
 
     partial void OnOutPointTextChanged(string value)
     {
         OnPropertyChanged(nameof(TrimOut));
+        OnPropertyChanged(nameof(InPointText));
+        OnPropertyChanged(nameof(TrimIn));
         ApplyEdits();
     }
     partial void OnImageDurationTextChanged(string value) => ApplyEdits();
@@ -383,18 +431,28 @@ public sealed partial class ClipViewModel : ObservableObject
         if (_updatingFromModel || Model is null)
             return;
 
-        if (!TryParseOptional(InPointText, out double? inPoint) ||
-            !TryParseOptional(OutPointText, out double? outPoint) ||
-            !TryParseOptional(ImageDurationText, out double? imageDuration))
-            return;
+        OnPropertyChanged(nameof(TimingError));
+        OnPropertyChanged(nameof(HasTimingError));
+        OnPropertyChanged("Item[]");
+        // Um tempo inválido conserva os últimos tempos válidos, sem bloquear volume,
+        // nome e transformação. Entrada/saída formam um intervalo indivisível.
+        if (this[nameof(InPointText)].Length == 0 && this[nameof(OutPointText)].Length == 0)
+        {
+            TryParseOptional(InPointText, out double? inPoint);
+            TryParseOptional(OutPointText, out double? outPoint);
+            Model.InPoint = inPoint;
+            Model.OutPoint = outPoint;
+        }
+        if (this[nameof(ImageDurationText)].Length == 0)
+        {
+            TryParseOptional(ImageDurationText, out double? imageDuration);
+            Model.ImageDuration = imageDuration;
+        }
 
         Model.Name = Name;
         Model.PlayMode = PlayMode;
         Model.Speed = Math.Clamp(Speed, 0.1, 4.0);
         Model.Autopilot = Autopilot;
-        Model.InPoint = inPoint;
-        Model.OutPoint = outPoint;
-        Model.ImageDuration = imageDuration;
         Model.Resize = Resize;
         Model.Volume = Math.Clamp(Volume, 0.0, 1.0);
         Model.Mute = Mute;
@@ -403,6 +461,35 @@ public sealed partial class ClipViewModel : ObservableObject
         Model.ScaleX = Math.Clamp(ScaleX, 0.05, 8.0);
         Model.ScaleY = Math.Clamp(ScaleY, 0.05, 8.0);
         _changed(this);
+    }
+
+    public string Error => TimingError;
+    public bool HasTimingError => TimingError.Length > 0;
+    public string TimingError => string.Join(" ", new[] { nameof(InPointText), nameof(OutPointText), nameof(ImageDurationText) }
+        .Select(name => this[name]).Where(message => message.Length > 0).Distinct());
+
+    public string this[string columnName]
+    {
+        get
+        {
+            string? text = columnName switch
+            {
+                nameof(InPointText) => InPointText,
+                nameof(OutPointText) => OutPointText,
+                nameof(ImageDurationText) => ImageDurationText,
+                _ => null,
+            };
+            if (text is null) return "";
+            string label = columnName == nameof(InPointText) ? "Entrada" : columnName == nameof(OutPointText) ? "Saída" : "Duração";
+            if (!TryParseOptional(text, out double? value)) return $"{label}: informe segundos com um número válido, sem valor negativo.";
+            if (columnName == nameof(ImageDurationText))
+                return value is <= 0 ? "Duração: use um valor maior que zero ou deixe vazio para usar o padrão." : "";
+            if (!TryParseOptional(InPointText, out var start) || !TryParseOptional(OutPointText, out var end)) return "";
+            if (end is { } stop && stop <= (start ?? 0)) return "A saída deve ser maior que a entrada.";
+            if (Duration > 0 && (value > Duration || columnName == nameof(InPointText) && value >= Duration))
+                return $"{label}: o tempo deve ficar dentro dos {Duration:0.##} segundos da mídia.";
+            return "";
+        }
     }
 
     private static string FormatOptional(double? value)
@@ -416,7 +503,7 @@ public sealed partial class ClipViewModel : ObservableObject
             return true;
         }
 
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out double parsed) && parsed >= 0)
+        if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out double parsed) && double.IsFinite(parsed) && parsed >= 0)
         {
             value = parsed;
             return true;
@@ -436,7 +523,7 @@ public sealed partial class LayerViewModel : ObservableObject
 
     public int LayerIndex => _layerIndex;
 
-    [ObservableProperty] private string _name = "Layer";
+    [ObservableProperty] private string _name = "Camada";
     [ObservableProperty] private BlendMode _blend;
     [ObservableProperty] private bool _bypass;
     [ObservableProperty] private bool _solo;
@@ -467,6 +554,7 @@ public sealed partial class LayerViewModel : ObservableObject
             {
                 Model.Opacity = value;
                 _render.Post(new SetLayerOpacity(_layerIndex, value));
+                Edited?.Invoke();
             }
         }
     }
@@ -477,6 +565,16 @@ public sealed partial class LayerViewModel : ObservableObject
     public LayerViewModel(Layer model, int layerIndex, RenderThread render,
         Action<ClipViewModel> selectClip, Action<ClipViewModel> clipChanged)
     {
+        // Compatibilidade com projetos antigos: o toggle podia estar ON enquanto
+        // todos os clips estavam em None, combinação que visualmente prometia avanço
+        // mas nunca gerava um evento de fim para o autopilot.
+        if (model.AutopilotEnabled && model.Clips.Any(c => c is not null) &&
+            model.Clips.Where(c => c is not null).All(c => c!.Autopilot == AutopilotAction.None))
+        {
+            foreach (var clip in model.Clips)
+                if (clip is not null)
+                    clip.Autopilot = AutopilotAction.PlayNextClip;
+        }
         Model = model;
         _layerIndex = layerIndex;
         _render = render;
@@ -489,8 +587,9 @@ public sealed partial class LayerViewModel : ObservableObject
         Solo = model.Solo;
         TransitionSeconds = model.TransitionSeconds;
         // Reflete o autopilot atual se todos os clips da layer concordam (sem disparar aplicação).
-        _layerAutopilot = model.Clips.FirstOrDefault(c => c is not null)?.Autopilot ?? AutopilotAction.None;
+        _layerAutopilot = model.Clips.FirstOrDefault(c => c is not null)?.Autopilot ?? AutopilotAction.PlayNextClip;
         _autopilotEnabled = model.AutopilotEnabled;
+        _ignoreColumnTrigger = model.IgnoreColumnTrigger;
 
         for (int i = 0; i < model.Clips.Length; i++)
         {
@@ -516,8 +615,21 @@ public sealed partial class LayerViewModel : ObservableObject
             clip.IsActive = clip.ColumnIndex == value;
     }
 
+    /// <summary>
+    /// Avisa que uma PROPRIEDADE da layer mudou (opacidade, blend, bypass, solo,
+    /// nome, autopilot, layer fixa). Diferente do evento estrutural Changed: não
+    /// mexe na forma da grade, mas precisa sujar o projeto e entrar na cena aberta —
+    /// sem isto, ajustar a layer e fechar o programa perdia o ajuste sem nem
+    /// perguntar. Atribuído pela CompositionViewModel.
+    /// </summary>
+    public Action? Edited { get; set; }
+
     // Renomear layer pela UI (o engine não usa o nome; basta persistir no modelo).
-    partial void OnNameChanged(string value) => Model.Name = value;
+    partial void OnNameChanged(string value)
+    {
+        Model.Name = value;
+        Edited?.Invoke();
+    }
 
     partial void OnLayerAutopilotChanged(AutopilotAction value)
     {
@@ -526,10 +638,30 @@ public sealed partial class LayerViewModel : ObservableObject
                 clip.Autopilot = value; // dispara ApplyEdits → UpdateClip no engine, clip a clip
     }
 
+    /// <summary>Layer FIXA: fica de fora do disparo/atalho de coluna inteira — pra
+    /// linha de entrada ao vivo (câmera NDI) não cair quando o operador troca a coluna.</summary>
+    [ObservableProperty] private bool _ignoreColumnTrigger;
+
+    /// <summary>Ressincroniza a composição inteira no engine — atribuído pela
+    /// CompositionViewModel. Necessário porque o engine decide pular a layer no
+    /// disparo de coluna lendo a própria cópia da composição.</summary>
+    public Action? SyncComposition { get; set; }
+
+    partial void OnIgnoreColumnTriggerChanged(bool value)
+    {
+        Model.IgnoreColumnTrigger = value;
+        SyncComposition?.Invoke();
+        Edited?.Invoke();
+    }
+
     partial void OnAutopilotEnabledChanged(bool value)
     {
+        if (value && Clips.Any(c => c.Model is not null) &&
+            Clips.Where(c => c.Model is not null).All(c => c.Autopilot == AutopilotAction.None))
+            LayerAutopilot = AutopilotAction.PlayNextClip;
         Model.AutopilotEnabled = value;
         _render.Post(new SetLayerAutopilot(_layerIndex, value));
+        Edited?.Invoke();
     }
 
     partial void OnBlendChanged(BlendMode value) => UpdateLayerState();
@@ -544,6 +676,7 @@ public sealed partial class LayerViewModel : ObservableObject
         Model.Solo = Solo;
         Model.TransitionSeconds = TransitionSeconds;
         _render.Post(new SetLayerState(_layerIndex, Blend, Bypass, Solo, TransitionSeconds));
+        Edited?.Invoke();
     }
 }
 
@@ -564,6 +697,17 @@ public sealed partial class CompositionViewModel : ObservableObject
     /// <summary>Mudanças estruturais (clip definido, layer/coluna adicionada) — usado para marcar o projeto como não salvo (T7.2).</summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Edição de PROPRIEDADE de clip ou layer (volume, duração da imagem, resize,
+    /// velocidade, in/out, posição, escala, opacidade, blend, layer fixa...). Não
+    /// muda a estrutura da grade, então não vale reconstruir combos de roteamento
+    /// nem atalhos de coluna — mas TEM que sujar o projeto: essas edições passavam
+    /// batido, o título não ganhava o "*", fechar não perguntava nada e o ajuste ia
+    /// embora em silêncio. Mantido separado de <see cref="Changed"/> justamente
+    /// porque dispara em rajada enquanto o operador arrasta um slider.
+    /// </summary>
+    public event Action? Edited;
+
     public CompositionViewModel(Composition model, RenderThread render)
     {
         Model = model;
@@ -578,8 +722,62 @@ public sealed partial class CompositionViewModel : ObservableObject
     }
 
     /// <summary>Reconstrói toda a árvore de ViewModels a partir de um novo Composition (abrir projeto — T7.2).</summary>
+    /// <summary>
+    /// Vínculo de células VAZIAS (grupo de troca), por "layer:coluna". Célula com mídia
+    /// guarda o grupo dentro do próprio Clip e sobrevive sozinha; a vazia não tem onde
+    /// guardar, e o ViewModel dela é DESTRUÍDO em toda reconstrução da grade
+    /// (ReplaceModel: troca de cena, carregar projeto, desfazer, add/remover coluna ou
+    /// layer). Por isso o vínculo das vazias vive aqui, fora dos ViewModels.
+    /// </summary>
+    private readonly Dictionary<(int Layer, int Column), Guid> _blankCellLinks = [];
+
+    /// <summary>Lê os vínculos das células vazias dos ViewModels atuais pro dicionário —
+    /// chamado antes de destruir os VMs.</summary>
+    private void CaptureBlankCellLinks()
+    {
+        _blankCellLinks.Clear();
+        foreach (var cell in AllClips())
+            if (cell.Model is null && cell.LinkGroupId is { } group)
+                _blankCellLinks[(cell.LayerIndex, cell.ColumnIndex)] = group;
+    }
+
+    /// <summary>Reaplica os vínculos nas células vazias dos ViewModels recém-criados.</summary>
+    private void RestoreBlankCellLinks()
+    {
+        foreach (var ((layerIndex, columnIndex), group) in _blankCellLinks)
+        {
+            if (layerIndex < 0 || layerIndex >= Layers.Count) continue;
+            var clips = Layers[layerIndex].Clips;
+            if (columnIndex < 0 || columnIndex >= clips.Count) continue;
+            if (clips[columnIndex].Model is null)
+                clips[columnIndex].LinkGroupId = group;
+        }
+    }
+
+    /// <summary>Desloca os vínculos de células vazias quando uma coluna é inserida ou
+    /// removida — sem isso eles ficariam apontando pra coluna errada depois da cirurgia
+    /// (os clipes com mídia já se movem sozinhos, porque o grupo vai dentro do Clip).</summary>
+    private void ShiftBlankCellLinks(int column, int delta)
+    {
+        var shifted = new Dictionary<(int, int), Guid>();
+        foreach (var ((layer, col), group) in _blankCellLinks)
+        {
+            if (delta < 0 && col == column) continue;      // coluna removida: vínculo some
+            int newCol = col >= column ? col + delta : col;
+            if (newCol >= 0) shifted[(layer, newCol)] = group;
+        }
+        _blankCellLinks.Clear();
+        foreach (var kv in shifted) _blankCellLinks[kv.Key] = kv.Value;
+    }
+
     public void ReplaceModel(Composition newModel)
     {
+        // Captura antes de destruir os VMs; restaura depois de recriá-los (ver campo).
+        // ATENÇÃO: quem já ajustou o dicionário (ShiftBlankCellLinks, ImportBlankCellLinks)
+        // sinaliza via _blankLinksPrepared pra não ser sobrescrito por uma captura tardia.
+        if (!_blankLinksPrepared) CaptureBlankCellLinks();
+        _blankLinksPrepared = false;
+
         Layers.Clear();
         Columns.Clear();
         if (SelectedClip is not null)
@@ -593,12 +791,21 @@ public sealed partial class CompositionViewModel : ObservableObject
         Model.Blackout = newModel.Blackout;
         Model.ColumnCount = newModel.ColumnCount;
         Model.Layers = newModel.Layers;
+        // Rede de segurança: projeto salvo por versão antiga (ou caminho que deixou o
+        // array fora de sincronia) fica com layers de tamanho diferente do ColumnCount —
+        // era a origem do IndexOutOfRange ao remover coluna. Normaliza na entrada.
+        Model.NormalizeLayers();
 
         for (int i = 0; i < Model.ColumnCount; i++) Columns.Add(i);
         for (int i = 0; i < Model.Layers.Count; i++) Layers.Add(CreateLayerViewModel(Model.Layers[i], i));
 
+        RestoreBlankCellLinks();
         SyncToEngine();
     }
+
+    /// <summary>Marca que o dicionário de vínculos vazios já foi preparado por quem
+    /// chamou (shift de coluna / import do projeto) — ver ReplaceModel.</summary>
+    private bool _blankLinksPrepared;
 
     /// <summary>Distribui as posições de reprodução vindas dos stats do engine para as
     /// células certas (agulha da TrimBar). Chamado na UI thread ~2x/s.</summary>
@@ -646,6 +853,21 @@ public sealed partial class CompositionViewModel : ObservableObject
         MarkColumnTriggered(columnIndex);
     }
 
+    public void TriggerClipFromShortcut(int layerIndex, int columnIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Model.Layers.Count ||
+            columnIndex < 0 || columnIndex >= Model.ColumnCount) return;
+        _render.Post(new TriggerClip(layerIndex, columnIndex));
+        Layers[layerIndex].LastTriggeredColumn =
+            Model.Layers[layerIndex].Clips[columnIndex]?.Source is null ? -1 : columnIndex;
+    }
+
+    public void MarkClipTriggeredFromEngine(int layerIndex, int columnIndex)
+    {
+        if (layerIndex < 0 || layerIndex >= Layers.Count) return;
+        Layers[layerIndex].LastTriggeredColumn = columnIndex;
+    }
+
     /// <summary>
     /// Consistência: o engine, ao disparar uma coluna, toca o slot com mídia e limpa
     /// os vazios — o rastreio da UI (LastTriggeredColumn, usado por cenas e pelo
@@ -655,8 +877,14 @@ public sealed partial class CompositionViewModel : ObservableObject
     private void MarkColumnTriggered(int colIndex)
     {
         foreach (var layer in Layers)
+        {
+            // Layer fixa não entra no disparo de coluna (ver Layer.IgnoreColumnTrigger),
+            // então o destaque dela também não pode mudar — senão a grade mostraria
+            // como "no ar" uma célula que o engine nem disparou.
+            if (layer.Model.IgnoreColumnTrigger) continue;
             layer.LastTriggeredColumn =
                 layer.Model.Clips[colIndex]?.Source is null ? -1 : colIndex;
+        }
     }
 
     public void ClearSelectedLayer()
@@ -674,14 +902,17 @@ public sealed partial class CompositionViewModel : ObservableObject
             throw new ArgumentOutOfRangeException();
 
         SnapshotForUndo(); // sobrescrever uma célula é desfazível
-        // Trocar a mídia de uma célula vinculada (T20) não tira ela do grupo —
-        // a nova mídia herda o LinkGroupId que já estava nessa posição.
-        clip.LinkGroupId = Layers[layerIndex].Clips[columnIndex].Model?.LinkGroupId;
+        // Importar mídia numa célula vinculada (T20/T33) não tira ela do grupo — herda
+        // o vínculo do ViewModel da célula (que existe até quando ela estava VAZIA),
+        // não do Model antigo (que era null numa célula em branco). É isso que faz
+        // "importar numa célula já vinculada" propagar e mostrar a miniatura nas demais.
+        var targetVm = Layers[layerIndex].Clips[columnIndex];
+        clip.LinkGroupId = targetVm.LinkGroupId;
         Model.Layers[layerIndex].Clips[columnIndex] = clip;
-        Layers[layerIndex].Clips[columnIndex].SetModel(clip);
-        SelectClip(Layers[layerIndex].Clips[columnIndex]);
+        targetVm.SetModel(clip);
+        SelectClip(targetVm);
         _render.Post(new UpdateClip(layerIndex, columnIndex, clip));
-        PropagateLinkGroup(Layers[layerIndex].Clips[columnIndex]);
+        PropagateLinkGroup(targetVm);
         Changed?.Invoke();
     }
 
@@ -691,18 +922,21 @@ public sealed partial class CompositionViewModel : ObservableObject
 
     /// <summary>Copia a célula alterada pras outras do mesmo grupo (mídia + todas as
     /// configurações) — chamado depois de qualquer edição/troca de mídia numa célula
-    /// vinculada.</summary>
+    /// vinculada. O grupo é lido do ViewModel (autoritativo, existe até em célula
+    /// vazia), então células vazias vinculadas TAMBÉM recebem a mídia (e a miniatura).</summary>
     private void PropagateLinkGroup(ClipViewModel source)
     {
-        if (source.Model?.LinkGroupId is not { } groupId)
+        if (source.LinkGroupId is not { } groupId || source.Model is null)
             return;
 
         foreach (var other in AllClips())
         {
-            if (ReferenceEquals(other, source) || other.Model?.LinkGroupId != groupId)
+            if (ReferenceEquals(other, source) || other.LinkGroupId != groupId)
                 continue;
 
-            var propagated = source.Model.Clone();
+            // Mantém a identidade da célula destino (CloneWithId): trocar o Id a cada
+            // propagação fazia o autopilot perder a coluna atual e voltar pra coluna 0.
+            var propagated = source.Model.CloneWithId(other.Model?.Id ?? Guid.NewGuid());
             propagated.LinkGroupId = groupId;
             Model.Layers[other.LayerIndex].Clips[other.ColumnIndex] = propagated;
             other.SetModel(propagated);
@@ -711,10 +945,12 @@ public sealed partial class CompositionViewModel : ObservableObject
     }
 
     /// <summary>Vincula todas as células marcadas (Ctrl+clique) num grupo de troca novo —
-    /// precisa de pelo menos 2 células com mídia. Botão direito > "Vincular células".</summary>
+    /// precisa de pelo menos 2 células, COM OU SEM mídia (célula vazia entra no grupo e
+    /// recebe a mídia quando qualquer uma do grupo for preenchida). Botão direito >
+    /// "Vincular células".</summary>
     public void LinkMultiSelectedCells()
     {
-        var selected = AllClips().Where(c => c.IsMultiSelected && c.HasMedia).ToList();
+        var selected = AllClips().Where(c => c.IsMultiSelected).ToList();
         if (selected.Count < 2)
             return;
 
@@ -722,25 +958,36 @@ public sealed partial class CompositionViewModel : ObservableObject
         var groupId = Guid.NewGuid();
         foreach (var clip in selected)
         {
-            if (clip.Model is null) continue;
-            clip.Model.LinkGroupId = groupId;
             clip.LinkGroupId = groupId;
             clip.IsMultiSelected = false;
-            _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
+            if (clip.Model is not null)
+            {
+                clip.Model.LinkGroupId = groupId;
+                _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
+            }
         }
+        // Se alguma já tinha mídia, propaga pra igualar o grupo na hora (inclusive
+        // pras vazias); se todas estavam vazias, o grupo só espera a primeira mídia.
+        var seed = selected.FirstOrDefault(c => c.Model is not null);
+        if (seed is not null)
+            PropagateLinkGroup(seed);
         Changed?.Invoke();
     }
 
-    /// <summary>Tira uma célula do grupo de troca (as outras continuam vinculadas entre si).</summary>
+    /// <summary>Tira uma célula do grupo de troca (as outras continuam vinculadas entre si).
+    /// Funciona em célula vazia também (o vínculo é do ViewModel).</summary>
     public void UnlinkCell(ClipViewModel clip)
     {
-        if (clip.Model?.LinkGroupId is null)
+        if (clip.LinkGroupId is null)
             return;
 
         SnapshotForUndo();
-        clip.Model.LinkGroupId = null;
         clip.LinkGroupId = null;
-        _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
+        if (clip.Model is not null)
+        {
+            clip.Model.LinkGroupId = null;
+            _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
+        }
         Changed?.Invoke();
     }
 
@@ -750,18 +997,62 @@ public sealed partial class CompositionViewModel : ObservableObject
             clip.IsMultiSelected = false;
     }
 
+    /// <summary>Vínculos de células VAZIAS pro arquivo do projeto — as com mídia já
+    /// guardam o grupo no próprio Clip (ver ProjectMeta.BlankCellLinks).</summary>
+    public Dictionary<string, Guid> ExportBlankCellLinks()
+    {
+        CaptureBlankCellLinks();
+        var map = new Dictionary<string, Guid>();
+        foreach (var ((layer, column), group) in _blankCellLinks)
+            map[$"{layer}:{column}"] = group;
+        return map;
+    }
+
+    /// <summary>Restaura os vínculos de células vazias ao abrir o projeto.</summary>
+    public void ImportBlankCellLinks(Dictionary<string, Guid> map)
+    {
+        // Zera o vínculo das células vazias ANTES de aplicar o novo mapa: sem isto,
+        // trocar de cena deixava as vazias com o grupo da cena anterior (Restore só
+        // ESCREVE o que está no mapa, nunca apaga o que não está).
+        foreach (var cell in AllClips())
+            if (cell.Model is null)
+                cell.LinkGroupId = null;
+
+        _blankCellLinks.Clear();
+        foreach (var (key, group) in map)
+        {
+            var parts = key.Split(':');
+            if (parts.Length != 2 ||
+                !int.TryParse(parts[0], out int layerIndex) ||
+                !int.TryParse(parts[1], out int columnIndex))
+                continue;
+            _blankCellLinks[(layerIndex, columnIndex)] = group;
+        }
+        // Aplica já nos ViewModels atuais (o projeto acabou de ser carregado) e mantém
+        // no dicionário pra sobreviver às próximas reconstruções da grade.
+        RestoreBlankCellLinks();
+    }
+
     private LayerViewModel CreateLayerViewModel(Layer layer, int layerIndex)
-        => new(layer, layerIndex, _render, SelectClip, OnClipChanged);
+    {
+        var vm = new LayerViewModel(layer, layerIndex, _render, SelectClip, OnClipChanged);
+        vm.SyncComposition = SyncToEngine;   // ver LayerViewModel.IgnoreColumnTrigger
+        vm.Edited = () => Edited?.Invoke();  // ajuste de layer também suja o projeto
+        return vm;
+    }
 
     // ── Desfazer (grade): snapshot da composição antes de cada operação destrutiva ──
     private readonly Stack<Composition> _gridUndoStack = new();
+    private readonly Stack<Composition> _gridRedoStack = new();
     private const int MaxGridUndo = 10;
 
     public bool CanUndoGrid => _gridUndoStack.Count > 0;
+    public bool CanRedoGrid => _gridRedoStack.Count > 0;
 
     private void SnapshotForUndo()
     {
         _gridUndoStack.Push(Model.Clone());
+        _gridRedoStack.Clear();
         while (_gridUndoStack.Count > MaxGridUndo)
         {
             var arr = _gridUndoStack.ToArray();
@@ -769,6 +1060,7 @@ public sealed partial class CompositionViewModel : ObservableObject
             for (int i = arr.Length - 2; i >= 0; i--) _gridUndoStack.Push(arr[i]);
         }
         OnPropertyChanged(nameof(CanUndoGrid));
+        OnPropertyChanged(nameof(CanRedoGrid));
     }
 
     /// <summary>Restaura a grade ao estado anterior à última ação (limpar/remover/
@@ -777,8 +1069,21 @@ public sealed partial class CompositionViewModel : ObservableObject
     private void UndoGrid()
     {
         if (_gridUndoStack.Count == 0) return;
+        _gridRedoStack.Push(Model.Clone());
         ReplaceModel(_gridUndoStack.Pop());
         OnPropertyChanged(nameof(CanUndoGrid));
+        OnPropertyChanged(nameof(CanRedoGrid));
+        Changed?.Invoke();
+    }
+
+    [RelayCommand]
+    private void RedoGrid()
+    {
+        if (_gridRedoStack.Count == 0) return;
+        _gridUndoStack.Push(Model.Clone());
+        ReplaceModel(_gridRedoStack.Pop());
+        OnPropertyChanged(nameof(CanUndoGrid));
+        OnPropertyChanged(nameof(CanRedoGrid));
         Changed?.Invoke();
     }
 
@@ -798,13 +1103,35 @@ public sealed partial class CompositionViewModel : ObservableObject
     {
         if (col < 0 || col >= Model.ColumnCount || Model.ColumnCount <= 1) return;
         SnapshotForUndo();
-        Model.ColumnCount--;
+        // Ordem importa: o setter de Model.ColumnCount redimensiona (Array.Resize) o
+        // array Clips de TODAS as layers pro novo tamanho — se isso rodasse antes do
+        // RemoveAt, o array já teria encolhido cortando o ÚLTIMO slot (não o "col"
+        // pedido) e, ao remover justo a última coluna, o RemoveAt(col) apontaria pra
+        // um índice que não existe mais (era o bug real por trás de "deletar a última
+        // coluna trava o app"). Por isso o RemoveAt manual roda primeiro, com o array
+        // ainda no tamanho antigo, e só then o ColumnCount-- (que vira um no-op de
+        // resize, já que os arrays já estão no tamanho certo).
         foreach (var layer in Model.Layers)
         {
             var clips = layer.Clips.ToList();
-            clips.RemoveAt(col);
+            // O array de uma layer pode estar DESSINCRONIZADO do ColumnCount (projeto
+            // antigo, layer criada por caminho que não normalizou) — o guard lá em cima
+            // valida contra ColumnCount, não contra este array. Sem este if, remover a
+            // última coluna com um array mais curto estourava IndexOutOfRange e, fora
+            // da UI thread do handler global, derrubava o processo inteiro (crash real
+            // capturado no Event Log em 16/07 10:05).
+            if (col < clips.Count)
+                clips.RemoveAt(col);
+            while (clips.Count > Model.ColumnCount - 1)
+                clips.RemoveAt(clips.Count - 1);
+            while (clips.Count < Model.ColumnCount - 1)
+                clips.Add(null);
             layer.Clips = [.. clips];
         }
+        CaptureBlankCellLinks();
+        ShiftBlankCellLinks(col, -1);   // vínculos das colunas seguintes andam pra trás
+        _blankLinksPrepared = true;
+        Model.ColumnCount--;
         ReplaceModel(Model);
         Changed?.Invoke();
     }
@@ -819,13 +1146,24 @@ public sealed partial class CompositionViewModel : ObservableObject
     {
         index = System.Math.Clamp(index, 0, Model.ColumnCount);
         SnapshotForUndo();
-        Model.ColumnCount++;
+        // Mesma questão de ordem do RemoveColumn: o Insert manual roda com o array
+        // ainda no tamanho antigo (senão o ColumnCount++ já apenderia um slot extra no
+        // fim antes do Insert, deixando o array 2 posições maior que ColumnCount).
         foreach (var layer in Model.Layers)
         {
             var clips = layer.Clips.ToList();
-            clips.Insert(index, cloneFrom is { } src ? layer.Clips[src]?.Clone() : null);
+            // Mesma defesa do RemoveColumn: o array desta layer pode estar mais curto
+            // que ColumnCount — normaliza antes pro Insert/índice nunca estourar.
+            while (clips.Count < Model.ColumnCount)
+                clips.Add(null);
+            var cloned = cloneFrom is { } src && src < clips.Count ? clips[src]?.Clone() : null;
+            clips.Insert(System.Math.Min(index, clips.Count), cloned);
             layer.Clips = [.. clips];
         }
+        CaptureBlankCellLinks();
+        ShiftBlankCellLinks(index, +1);  // abre espaço: vínculos daqui pra frente avançam
+        _blankLinksPrepared = true;
+        Model.ColumnCount++;
         ReplaceModel(Model);
         Changed?.Invoke();
     }
@@ -903,9 +1241,22 @@ public sealed partial class CompositionViewModel : ObservableObject
         if (clip.Model is null)
             return;
 
-        Model.Layers[clip.LayerIndex].Clips[clip.ColumnIndex] = clip.Model;
+        // Guarda contra ClipViewModel "órfão": uma sonda assíncrona (duração/dimensões,
+        // ProbeDurationIfNeeded/ProbeDimensionsIfNeeded) pode terminar DEPOIS que a
+        // coluna/layer dela já foi removida (RemoveColumn/RemoveLayer encolhem os
+        // arrays) — sem isso, o callback tentava escrever num índice que não existe
+        // mais e derrubava o app inteiro (IndexOutOfRangeException na UI thread, fora
+        // do try/catch da render thread).
+        if (clip.LayerIndex < 0 || clip.LayerIndex >= Model.Layers.Count)
+            return;
+        var clips = Model.Layers[clip.LayerIndex].Clips;
+        if (clip.ColumnIndex < 0 || clip.ColumnIndex >= clips.Length)
+            return;
+
+        clips[clip.ColumnIndex] = clip.Model;
         _render.Post(new UpdateClip(clip.LayerIndex, clip.ColumnIndex, clip.Model));
         PropagateLinkGroup(clip);
+        Edited?.Invoke();
     }
 
     private const int MaxRecentSources = 20;
@@ -931,8 +1282,9 @@ public sealed partial class CompositionViewModel : ObservableObject
                 Name = Path.GetFileName(file),
                 // Padrão da operação: imagem fica 7s no ar antes do autopilot avançar.
                 ImageDuration = isImage ? 7 : null,
-                // Todo clip novo começa em tamanho real (Original), não esticado (Fit).
-                Resize = ResizeMode.Original,
+                // Todo clip novo entra em Fit: ocupa o máximo da composição respeitando
+                // a proporção original, sem cortar nem esticar (pedido do operador).
+                Resize = ResizeMode.Fit,
             });
 
             // Aba Sources > Recentes: só imagens (geralmente recortadas no editor) —
@@ -970,7 +1322,7 @@ public sealed partial class CompositionViewModel : ObservableObject
     [RelayCommand]
     private void AddLayer()
     {
-        var layer = new Layer { Name = $"Layer {Model.Layers.Count + 1}" };
+        var layer = new Layer { Name = $"Camada {Model.Layers.Count + 1}" };
         Model.AddLayer(layer);
         Layers.Add(CreateLayerViewModel(layer, Layers.Count));
         SyncToEngine();
@@ -1001,7 +1353,9 @@ public sealed partial class CompositionViewModel : ObservableObject
     [RelayCommand]
     private void AddColumn()
     {
-        Model.ColumnCount++;
+        // SetColumnCount (não o setter puro): aqui NÃO há cirurgia manual no array —
+        // é o próprio modelo que precisa crescer os slots de todas as layers.
+        Model.SetColumnCount(Model.ColumnCount + 1);
         Columns.Add(Model.ColumnCount - 1);
         foreach (var layer in Layers)
             layer.AddClip(new ClipViewModel(null, layer.LayerIndex, Model.ColumnCount - 1, _render,

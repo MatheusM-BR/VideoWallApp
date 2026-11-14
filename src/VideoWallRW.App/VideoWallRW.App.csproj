@@ -9,11 +9,29 @@
          conseguem rodar — evita a falha silenciosa de resolução de host observada em
          ambientes com .NET 8 Desktop mas sem o ASP.NET Core 8 Runtime específico. -->
     <RollForward>LatestMajor</RollForward>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(ProtectedPackage)' == 'true'">
+    <DefineConstants>$(DefineConstants);PROTECTED_PACKAGE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(ProtectedPackage)' == 'true'">
+    <EmbeddedResource Include="$(PackagePublicKeyPath)" LogicalName="VideoWallRW.PackagePublicKey" />
+  </ItemGroup>
+  <Target Name="RequirePackageKey" BeforeTargets="PrepareForBuild" Condition="'$(ProtectedPackage)' == 'true'">
+    <Error Condition="!Exists('$(PackagePublicKeyPath)')" Text="A protected release requires a generated package public key. Use build-installer.ps1." />
+  </Target>
 
   <ItemGroup>
     <!-- T9.5: controle remoto web (Kestrel embutido) -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ícone do app (logo RW VideoWall) — embutido como recurso WPF pra ser usado
+         via pack URI no Icon="" de cada janela, além de virar o ícone do .exe (acima). -->
+    <Resource Include="Assets\AppIcon.ico" />
+    <Resource Include="Assets\AppIcon.png" />
   </ItemGroup>
 
   <ItemGroup>

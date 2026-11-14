@@ -8,8 +8,12 @@
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="Themes/Dark.xaml" />
+        <ResourceDictionary Source="Themes/Auxiliary.xaml" />
+        <ResourceDictionary Source="Assets/Brand.xaml" />
       </ResourceDictionary.MergedDictionaries>
       <local:IdentifyLabelConverter x:Key="IdentifyLabelConverter" />
+      <local:OperationLabelConverter x:Key="OperationLabelConverter" />
+      <DataTemplate x:Key="OperationLabelTemplate"><TextBlock Text="{Binding Converter={StaticResource OperationLabelConverter}}" TextTrimming="CharacterEllipsis" /></DataTemplate>
     <local:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
     <local:NotNullToVisibilityConverter x:Key="NotNullToVisibilityConverter" />
       <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter" />
@@ -18,6 +22,9 @@
       <local:InverseBoolConverter x:Key="InverseBoolConverter" />
       <local:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibilityConverter" />
       <local:FileNameConverter x:Key="FileNameConverter" />
+      <local:ResizeModeLabelConverter x:Key="ResizeModeLabelConverter" />
+      <local:ClipBaseDimensionConverter x:Key="ClipBaseDimensionConverter" />
+      <local:ZeroToVisibilityConverter x:Key="ZeroToVisibilityConverter" />
     </ResourceDictionary>
   </Application.Resources>
 </Application>

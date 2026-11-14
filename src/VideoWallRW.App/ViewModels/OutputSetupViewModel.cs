@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using BitmapSource = System.Windows.Media.Imaging.BitmapSource;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using VideoWallRW.App.Controls;
 using VideoWallRW.Core.Commands;
 using VideoWallRW.Core.Math;
 using VideoWallRW.Core.Model;
@@ -21,6 +23,8 @@ public sealed partial class OutputSetupViewModel : ObservableObject
     private readonly RenderThread _render;
     private readonly Func<int> _compWidth;
     private readonly Func<int> _compHeight;
+    private readonly Func<BitmapSource?>? _livePreview;
+    private BitmapSource? _testPattern;
     private bool _suppressPush;
 
     public ObservableCollection<ScreenViewModel> Screens { get; } = [];
@@ -34,6 +38,44 @@ public sealed partial class OutputSetupViewModel : ObservableObject
     /// <summary>Tamanho da composição — palco do editor visual de "Input" de cada slice.</summary>
     public double CompWidth => _compWidth();
     public double CompHeight => _compHeight();
+    public string CompResolutionText => $"Composição: {CompWidth:F0}×{CompHeight:F0} ({FormatAspect(CompWidth, CompHeight)})";
+
+    /// <summary>Imagem de referência pros editores de recorte/posição (T28): usa a
+    /// captura ao vivo da composição quando disponível (Composition Monitor ligado);
+    /// senão cai numa imagem de teste (barras + grade), gerada uma vez por tamanho e
+    /// reaproveitada — assim o operador sempre tem algo pra guiar o enquadramento,
+    /// mesmo sem pagar o custo de GPU do readback ao vivo.</summary>
+    public BitmapSource PreviewImage
+    {
+        get
+        {
+            if (_livePreview?.Invoke() is { } live)
+                return live;
+            if (_testPattern is null || _testPattern.PixelWidth != (int)CompWidth || _testPattern.PixelHeight != (int)CompHeight)
+                _testPattern = TestPatternGenerator.Create((int)CompWidth, (int)CompHeight);
+            return _testPattern;
+        }
+    }
+
+    /// <summary>PreviewImage não é [ObservableProperty] (depende de um Func externo,
+    /// não de um campo próprio) — sem alguém chamando isto, a captura ao vivo nunca
+    /// aparece se o Composition Monitor for ligado só DEPOIS que este diálogo já
+    /// estava aberto (o binding WPF só reavalia a getter quando notificado). A janela
+    /// chama isto periodicamente enquanto está aberta.</summary>
+    public void RefreshPreviewImage() => OnPropertyChanged(nameof(PreviewImage));
+
+    /// <summary>Simplifica W:H pro maior divisor comum (1920x1080 → 16:9), só pra
+    /// exibição — ajuda o operador a confirmar de relance se a tela é paisagem ou
+    /// retrato sem fazer conta de cabeça.</summary>
+    public static string FormatAspect(double width, double height)
+    {
+        int w = (int)System.Math.Round(width), h = (int)System.Math.Round(height);
+        if (w <= 0 || h <= 0) return "?";
+        int a = w, b = h;
+        while (b != 0) (a, b) = (b, a % b);
+        int gcd = System.Math.Max(a, 1);
+        return $"{w / gcd}:{h / gcd}";
+    }
 
     [ObservableProperty] private bool _identify;
     [ObservableProperty] private string _presetName = "default";
@@ -42,12 +84,13 @@ public sealed partial class OutputSetupViewModel : ObservableObject
     public ObservableCollection<string> PresetNames { get; } = [];
 
     public OutputSetupViewModel(RenderThread render, IReadOnlyList<MonitorInfo> monitors,
-        Func<int> compWidth, Func<int> compHeight)
+        Func<int> compWidth, Func<int> compHeight, Func<BitmapSource?>? livePreview = null)
     {
         _render = render;
         AvailableMonitors = monitors;
         _compWidth = compWidth;
         _compHeight = compHeight;
+        _livePreview = livePreview;
         RefreshPresetNames();
     }
 
@@ -86,6 +129,72 @@ public sealed partial class OutputSetupViewModel : ObservableObject
     {
         Identify = !Identify;
         _render.Post(new SetIdentify(Identify));
+    }
+
+    // ── Orientação física da tela (T31: "tela 9x16") ────────────────────────
+    // TV montada em pé recebendo sinal deitado: o Windows continua reportando
+    // 1920×1080 paisagem, então o conteúdo precisa sair GIRADO dentro do quadro
+    // pra aparecer certo na TV física. Esses presets configuram o primeiro slice
+    // da tela de uma vez: recorte 9:16 centralizado da composição + rotação +
+    // saída na tela inteira — sem o operador digitar número nenhum.
+    // Se o Windows JÁ reporta retrato (altura > largura na configuração de tela
+    // do sistema), a rotação não é necessária — só o recorte 9:16 — e o preset
+    // detecta isso sozinho pela resolução reportada.
+
+    [RelayCommand]
+    private void ApplyOrientationLandscape(ScreenViewModel? screen)
+        => ApplyOrientation(screen, Rotation.R0, portraitCrop: false);
+
+    /// <summary>TV em pé, girada com o topo pra DIREITA (sentido horário).</summary>
+    [RelayCommand]
+    private void ApplyOrientationPortraitRight(ScreenViewModel? screen)
+        => ApplyOrientation(screen, Rotation.R90, portraitCrop: true);
+
+    /// <summary>TV em pé, girada com o topo pra ESQUERDA (sentido anti-horário).</summary>
+    [RelayCommand]
+    private void ApplyOrientationPortraitLeft(ScreenViewModel? screen)
+        => ApplyOrientation(screen, Rotation.R270, portraitCrop: true);
+
+    private void ApplyOrientation(ScreenViewModel? screen, Rotation rotation, bool portraitCrop)
+    {
+        if (screen is null || screen.Slices.Count == 0) return;
+        var slice = screen.Slices[0];
+
+        double compW = CompWidth, compH = CompHeight;
+        bool windowsAlreadyPortrait = screen.MonitorHeight > screen.MonitorWidth;
+
+        if (portraitCrop)
+        {
+            // Proporção visível da TV em pé = (lado menor):(lado maior) do monitor.
+            double shortSide = System.Math.Min(screen.MonitorWidth, screen.MonitorHeight);
+            double longSide = System.Math.Max(screen.MonitorWidth, screen.MonitorHeight);
+            double cropW = System.Math.Min(compW, compH * shortSide / longSide);
+            slice.InputX = (compW - cropW) / 2;
+            slice.InputY = 0;
+            slice.InputWidth = cropW;
+            slice.InputHeight = compH;
+            // Windows já girado pra retrato → o sistema rotaciona por nós, sinal sai direto.
+            slice.Rotation = windowsAlreadyPortrait ? Rotation.R0 : rotation;
+        }
+        else
+        {
+            slice.InputX = 0;
+            slice.InputY = 0;
+            slice.InputWidth = compW;
+            slice.InputHeight = compH;
+            slice.Rotation = Rotation.R0;
+        }
+
+        slice.OutputX = 0;
+        slice.OutputY = 0;
+        slice.OutputWidth = screen.MonitorWidth;
+        slice.OutputHeight = screen.MonitorHeight;
+
+        StatusText = portraitCrop
+            ? windowsAlreadyPortrait
+                ? $"'{screen.Name}': recorte 9:16 aplicado (Windows já está em retrato, sem girar)."
+                : $"'{screen.Name}': recorte 9:16 + rotação {slice.Rotation} aplicados."
+            : $"'{screen.Name}': tela deitada (16:9), composição inteira.";
     }
 
     [RelayCommand]
@@ -181,6 +290,7 @@ public sealed partial class ScreenViewModel : ObservableObject
     public string MonitorDeviceName { get; }
     public int MonitorWidth { get; }
     public int MonitorHeight { get; }
+    public string MonitorResolutionText => $"Tela: {MonitorWidth}×{MonitorHeight} ({OutputSetupViewModel.FormatAspect(MonitorWidth, MonitorHeight)})";
 
     [ObservableProperty] private string _name = "Screen";
     [ObservableProperty] private bool _enabled = true;
@@ -215,7 +325,7 @@ public sealed partial class ScreenViewModel : ObservableObject
     {
         AddSlice(new Slice
         {
-            Name = $"Slice {Slices.Count + 1}",
+            Name = $"Recorte {Slices.Count + 1}",
             InputRect = new RectF(0, 0, MonitorWidth, MonitorHeight),
             OutputRect = new RectF(0, 0, MonitorWidth, MonitorHeight),
         });

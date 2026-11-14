@@ -12,6 +12,7 @@ public sealed record DisableOutput(string MonitorDeviceName) : EngineCommand;
 public sealed record SyncComposition(VideoWallRW.Core.Model.Composition Data) : EngineCommand;
 public sealed record TriggerClip(int LayerIndex, int ColumnIndex) : EngineCommand;
 public sealed record TriggerColumn(int ColumnIndex) : EngineCommand;
+public sealed record SeekClip(int LayerIndex, int ColumnIndex, double Seconds) : EngineCommand;
 public sealed record ClearLayer(int LayerIndex) : EngineCommand;
 public sealed record ClearAll : EngineCommand;
 public sealed record SetLayerOpacity(int LayerIndex, double Opacity) : EngineCommand;

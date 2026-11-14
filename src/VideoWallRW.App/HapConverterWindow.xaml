@@ -2,14 +2,15 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Converter para HAP" Height="480" Width="640"
-        WindowStartupLocation="CenterOwner"
+        MinWidth="640" MinHeight="420" WindowStartupLocation="CenterOwner"
         Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
-  <DockPanel Margin="10">
+  <DockPanel Background="{StaticResource Bg}" Margin="10">
+<Border DockPanel.Dock="Top" Style="{StaticResource SurfacePanel}" Margin="0,0,0,10"><StackPanel><TextBlock Text="Conversor HAP" Style="{StaticResource PageTitle}" /><TextBlock Text="Prepare arquivos de vídeo para reprodução." Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,4,0,0" /></StackPanel></Border>
     <TextBlock DockPanel.Dock="Top" Text="{Binding StatusText}" Foreground="{StaticResource FgDim}" Margin="0,0,0,8" TextWrapping="Wrap" />
 
     <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
       <Button DockPanel.Dock="Left" Content="+ Adicionar arquivos..." Command="{Binding AddFilesCommand}" Padding="8,4" Margin="0,0,6,0" />
-      <TextBlock DockPanel.Dock="Left" Text="Preset:" VerticalAlignment="Center" Margin="10,0,4,0" />
+      <TextBlock DockPanel.Dock="Left" Text="Perfil:" VerticalAlignment="Center" Margin="10,0,4,0" />
       <ComboBox DockPanel.Dock="Left" Width="120" ItemsSource="{Binding Presets}" SelectedItem="{Binding SelectedPreset}" />
     </DockPanel>
 
@@ -19,7 +20,7 @@
       <TextBox Text="{Binding DestinationFolder}" Margin="0,0,6,0" />
     </DockPanel>
 
-    <Button DockPanel.Dock="Bottom" Content="Converter tudo" Command="{Binding ConvertAllCommand}"
+    <Button DockPanel.Dock="Bottom" Style="{StaticResource PrimaryAction}" Content="Converter tudo" Command="{Binding ConvertAllCommand}"
             Padding="12,6" HorizontalAlignment="Left" Margin="0,8,0,0" />
 
     <ListBox ItemsSource="{Binding Files}">

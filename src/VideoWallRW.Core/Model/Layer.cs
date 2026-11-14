@@ -18,6 +18,14 @@ public sealed class Layer
     public bool AutopilotEnabled { get; set; } = true;
 
     /// <summary>
+    /// Layer FIXA: atalho/disparo de COLUNA inteira pula esta layer. Serve pra linha
+    /// de entrada ao vivo (câmera NDI, por exemplo) que deve continuar no ar enquanto
+    /// o operador troca as colunas de conteúdo — sem isto, apertar o atalho da coluna
+    /// derrubava o sinal ao vivo junto. Disparar a célula direto continua funcionando.
+    /// </summary>
+    public bool IgnoreColumnTrigger { get; set; }
+
+    /// <summary>
     /// Matriz de clipes. O tamanho do array deve ser mantido sempre igual ao ColumnCount
     /// definido na composição owner. Array null significa célula vazia.
     /// </summary>
@@ -36,6 +44,7 @@ public sealed class Layer
             TransitionSeconds = TransitionSeconds,
             DefaultResize = DefaultResize,
             AutopilotEnabled = AutopilotEnabled,
+            IgnoreColumnTrigger = IgnoreColumnTrigger,
             Clips = new Clip?[Clips.Length]
         };
         for (int i = 0; i < Clips.Length; i++)
@@ -57,6 +66,7 @@ public sealed class Layer
             TransitionSeconds = TransitionSeconds,
             DefaultResize = DefaultResize,
             AutopilotEnabled = AutopilotEnabled,
+            IgnoreColumnTrigger = IgnoreColumnTrigger,
             Clips = new Clip?[Clips.Length]
         };
         for (int i = 0; i < Clips.Length; i++)

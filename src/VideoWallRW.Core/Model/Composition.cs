@@ -20,6 +20,16 @@ public sealed class Composition
     public List<Layer> Layers { get; set; } = [];
 
     private int _columnCount = 8;
+
+    /// <summary>
+    /// Número de colunas da grade. O setter APENAS grava o valor — ele NÃO mexe mais
+    /// nos arrays das layers. Antes, atribuir aqui redimensionava (Array.Resize) o
+    /// Clips de todas as layers como efeito colateral, o que exigia que todo chamador
+    /// soubesse a ordem certa entre a cirurgia manual no array e a atribuição — e foi
+    /// exatamente isso que derrubava o app ao remover a última coluna. Para mudar o
+    /// tamanho da grade de verdade, use <see cref="SetColumnCount"/>, que redimensiona
+    /// as layers explicitamente.
+    /// </summary>
     public int ColumnCount
     {
         get => _columnCount;
@@ -27,12 +37,33 @@ public sealed class Composition
         {
             if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
             _columnCount = value;
-            foreach (var layer in Layers)
-            {
-                var arr = layer.Clips;
-                Array.Resize(ref arr, value);
-                layer.Clips = arr;
-            }
+        }
+    }
+
+    /// <summary>
+    /// Muda o número de colunas E ajusta o array de clips de todas as layers pro novo
+    /// tamanho (crescer preenche com vazio; encolher corta do fim). Operação explícita:
+    /// quem já fez a cirurgia no array (inserir/remover no meio) deve usar o setter de
+    /// <see cref="ColumnCount"/>, que não mexe em nada.
+    /// </summary>
+    public void SetColumnCount(int value)
+    {
+        if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+        _columnCount = value;
+        NormalizeLayers();
+    }
+
+    /// <summary>Garante que toda layer tenha exatamente <see cref="ColumnCount"/> slots —
+    /// rede de segurança contra projeto antigo/caminho que tenha deixado array fora de
+    /// sincronia (era a origem do IndexOutOfRange ao remover coluna).</summary>
+    public void NormalizeLayers()
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer.Clips.Length == _columnCount) continue;
+            var arr = layer.Clips;
+            Array.Resize(ref arr, _columnCount);
+            layer.Clips = arr;
         }
     }
 
