@@ -106,7 +106,7 @@ internal static class CompletionChecks
     }
     static Window Fixture(string name,object data)
     {
-        string x=File.ReadAllText($"src/VideoWallRW.App/{name}Window.xaml");
+        string x=NeutralDemo.Xaml(File.ReadAllText($"src/VideoWallRW.App/{name}Window.xaml"));
         x=Regex.Replace(x," x:Class=\"[^\"]*\"","");
         x=Regex.Replace(x,"\\s+\\w+=\"On[^\"]*\"","");
         x=x.Replace("clr-namespace:VideoWallRW.App.Controls","clr-namespace:VideoWallRW.App.Controls;assembly=VideoWallRW.App");
@@ -126,7 +126,7 @@ internal static class CompletionChecks
         var keyOption=new LayerTargetOption(null,"Todas as camadas");
         dynamic keys=Obj(("Entries",new[]{Obj(("Action","ToggleMasterPause"),("Gesture","Ctrl+Espaço"),("IsCapturing",false),("HasConflict",false),("IsColumnAction",false),("LayerOptions",new[]{keyOption}), ("SelectedLayer",keyOption))}),("StatusText","Demonstração"));
         var keymap=Fixture("KeymapEditor",(object)keys);Save((FrameworkElement)keymap.Content,"keymap");keymap.Close();
-        dynamic hap=Obj(("Files",new[]{Obj(("FileName","abertura.mp4"),("Progress",.65),("Status","Convertendo"))}),("Presets",new[]{"HAP"}),("SelectedPreset","HAP"),("DestinationFolder",@"C:\Video Wall\HAP"),("StatusText","Demonstração · nenhum arquivo convertido"));
+        dynamic hap=Obj(("Files",new[]{Obj(("FileName","evento-1.mp4"),("Progress",.65),("Status","Convertendo"))}),("Presets",new[]{"HAP"}),("SelectedPreset","HAP"),("DestinationFolder",@"C:\Video Wall\HAP"),("StatusText","Demonstração · nenhum arquivo convertido"));
         var converter=Fixture("HapConverter",(object)hap);Save((FrameworkElement)converter.Content,"hap");converter.Close();
         var manual=new ManualWindow();manual.Left=-20000;manual.Top=-20000;manual.ShowActivated=false;manual.ShowInTaskbar=false;manual.Show();Frame();Save((FrameworkElement)manual.Content,"manual");manual.Close();
         // Controle remoto no estado "ligado" com PIN/endereço de exemplo (nenhum servidor sobe).

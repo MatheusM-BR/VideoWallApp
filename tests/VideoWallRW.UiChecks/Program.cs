@@ -51,6 +51,7 @@ internal static class Program
         app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(theme));
         app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/VideoWallRW.App;component/Themes/Auxiliary.xaml", UriKind.Relative) });
         app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/VideoWallRW.App;component/Assets/Brand.xaml", UriKind.Relative) });
+        app.Resources["BrandMark"] = NeutralDemo.BrandMark(); // prints neutros: sem o logo da empresa
         var assembly = typeof(VideoWallRW.App.MainWindow).Assembly;
         foreach (var name in new[] { "IdentifyLabelConverter", "OperationLabelConverter", "NullToVisibilityConverter", "NotNullToVisibilityConverter", "EnumBoolConverter", "IncrementConverter", "InverseBoolConverter", "InverseBoolToVisibilityConverter", "FileNameConverter", "ResizeModeLabelConverter", "ClipBaseDimensionConverter", "ZeroToVisibilityConverter" })
             app.Resources[name] = Activator.CreateInstance(assembly.GetType($"VideoWallRW.App.{name}")!);
@@ -59,7 +60,7 @@ internal static class Program
         app.Resources["OperationLabelTemplate"] = XamlReader.Parse("<DataTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\"><TextBlock Text=\"{Binding Converter={StaticResource OperationLabelConverter}}\" /></DataTemplate>");
         if (args.Contains("--auxiliary")) { AuxiliaryChecks.Run(app); return; }
         // O mesmo XAML e controles do aplicativo, com dados fictícios. Nenhum engine, saída ou projeto é iniciado.
-        var xaml = File.ReadAllText("src/VideoWallRW.App/MainWindow.xaml");
+        var xaml = NeutralDemo.Xaml(File.ReadAllText("src/VideoWallRW.App/MainWindow.xaml"));
         xaml = Regex.Replace(xaml, " x:Class=\"[^\"]*\"", "");
         xaml = Regex.Replace(xaml, "\\s+(?:PreviewKeyDown|Click|Drop|PreviewMouseLeftButtonDown|MouseDoubleClick|PreviewMouseMove)=\"On[^\"]*\"", "");
         xaml = xaml.Replace("clr-namespace:VideoWallRW.App.Controls", "clr-namespace:VideoWallRW.App.Controls;assembly=VideoWallRW.App")
@@ -72,7 +73,7 @@ internal static class Program
             .Select(a => Regex.Match(a.Value, @"Binding ([\w.]+)").Groups[1].Value.Split('.').Last()).Distinct();
         dynamic fixture = Obj(); dynamic grid = Obj();
         foreach (var command in commandNames) { ((IDictionary<string, object?>)fixture)[command] = null; ((IDictionary<string, object?>)grid)[command] = null; }
-        var assets = new[] { "ABERTURA", "INTERVALO", "PROGRAMA", "ENCERRAMENTO", "LOGO RW", "FUNDO" };
+        var assets = new[] { "EVENTO 1", "EVENTO 2", "CENÁRIO A", "CENÁRIO B", "ESTÚDIO 1", "FUNDO" };
         var pictures = new string[assets.Length];
         for (var i = 0; i < assets.Length; i++)
         {
@@ -84,7 +85,7 @@ internal static class Program
                 dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(36, 255, 255, 255)), null, new Point(520, 80), 230, 230);
                 dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(24, 255, 255, 255)), null, new Rect(0, 250, 640, 2));
                 dc.DrawText(new FormattedText(assets[i], System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI Semibold"), 42, Brushes.White, 1), new Point(34, 145));
-                dc.DrawText(new FormattedText("RW  /  CONTEÚDO DE DEMONSTRAÇÃO", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 16, Brushes.White, 1), new Point(36, 270));
+                dc.DrawText(new FormattedText("CONTEÚDO DE DEMONSTRAÇÃO", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 16, Brushes.White, 1), new Point(36, 270));
             }
             var bmp = new RenderTargetBitmap(640, 360, 96, 96, PixelFormats.Pbgra32); bmp.Render(visual);
             var enc = new PngBitmapEncoder(); enc.Frames.Add(BitmapFrame.Create(bmp));
@@ -113,17 +114,17 @@ internal static class Program
             layers.Add(layer);
         }
         grid.Layers = layers; grid.Columns = Enumerable.Range(0, 8).ToList(); grid.SelectedClip = allClips[1]; grid.Model = Obj(("Width", 3840), ("Height", 1080));
-        grid.CanUndoGrid = false; grid.RecentSources = new[] { "Abertura.mp4", "Identidade.png" };
+        grid.CanUndoGrid = false; grid.RecentSources = new[] { "Evento 1.mp4", "Cenário A.png" };
         grid.PlayModes = Enum.GetValues<VideoWallRW.Core.Model.PlayMode>(); grid.AutopilotActions = Enum.GetValues<VideoWallRW.Core.Model.AutopilotAction>();
         grid.BlendModes = Enum.GetValues<VideoWallRW.Core.Model.BlendMode>(); grid.ResizeModes = Enum.GetValues<VideoWallRW.Core.Model.ResizeMode>();
         fixture.Grid = grid; fixture.WindowTitle = "VideoWallRW — Demonstração do layout"; fixture.Blackout = false; fixture.MasterFader = 1.0; fixture.AutopilotAll = true;
         fixture.SequencerRunning = false; fixture.RemoteRunning = false; fixture.OscEnabled = false; fixture.RemoteButtonText = "Controle remoto"; fixture.CompositionMonitorEnabled = false; fixture.CompositionMonitorBitmap = null; fixture.ActiveClipThumbnailPath = pictures[0]; fixture.ShowMonitorPlaceholderText = false;
         fixture.ShowSourcesTab = false; fixture.NdiAvailable = false; fixture.NdiUnavailableReason = "Nenhuma fonte conectada nesta demonstração."; fixture.NdiSources = Array.Empty<string>();
         fixture.StatusText = "DEMONSTRAÇÃO DO LAYOUT  ·  Dados fictícios; nenhuma saída conectada";
-        fixture.Scenes = new[] { Obj(("Name", "Abertura"), ("IsSelected", true), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)), Obj(("Name", "Programação"), ("IsSelected", false), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)), Obj(("Name", "Intervalo"), ("IsSelected", false), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)) };
+        fixture.Scenes = new[] { Obj(("Name", "Evento 1"), ("IsSelected", true), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)), Obj(("Name", "Cenário 2"), ("IsSelected", false), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)), Obj(("Name", "Estúdio"), ("IsSelected", false), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)) };
         fixture.Monitors = new[] { Obj(("Title", "Tela 1 · 1920 × 1080"), ("IsActive", false), ("RouteOptions", new[] { "Composição", "01 · Principal" }), ("SelectedRouteIndex", 0), ("FpsText", "Desligada")), Obj(("Title", "Tela 2 · 1920 × 1080"), ("IsActive", false), ("RouteOptions", new[] { "Composição", "01 · Principal" }), ("SelectedRouteIndex", 0), ("FpsText", "Desligada")) };
         var files = assets.Select((name, i) => (object)Obj(("Name", name + ".mp4"), ("Icon", "▸"), ("ThumbnailPath", pictures[i]), ("IsFolder", false))).ToList();
-        dynamic browser = Obj(("CurrentFolder", @"C:\Video Wall\Programação"), ("Items", files), ("SelectedItem", files[1]));
+        dynamic browser = Obj(("CurrentFolder", @"C:\Video Wall\Evento 1"), ("Items", files), ("SelectedItem", files[1]));
         foreach (var command in commandNames) ((IDictionary<string, object?>)browser)[command] = null;
         fixture.FileBrowser = browser;
         win.DataContext = fixture; win.ShowInTaskbar = false; win.ShowActivated = false; win.Left = -20000; win.Top = -20000;

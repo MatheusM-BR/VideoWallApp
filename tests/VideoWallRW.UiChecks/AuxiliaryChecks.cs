@@ -50,7 +50,7 @@ internal static class AuxiliaryChecks
     }
     static Window FixtureWindow(string file, object data)
     {
-        var xaml = File.ReadAllText($"src/VideoWallRW.App/{file}Window.xaml");
+        var xaml = NeutralDemo.Xaml(File.ReadAllText($"src/VideoWallRW.App/{file}Window.xaml"));
         xaml = Regex.Replace(xaml, " x:Class=\"[^\"]*\"", "");
         xaml = Regex.Replace(xaml, "\\s+\\w+=\"On[^\"]*\"", "");
         xaml = xaml.Replace("Source=\"Themes/Auxiliary.xaml\"", "Source=\"/VideoWallRW.App;component/Themes/Auxiliary.xaml\"");
@@ -102,11 +102,11 @@ internal static class AuxiliaryChecks
                 throw new Exception("Shape was not inserted as a selected layer on release");
             layersVm.Tool = EditorTool.Text;
             var text = layersVm.AddTextLayer(new SKRect(20, 20, 300, 120)) ?? throw new Exception("Text layer not created");
-            layersVm.TextInput = "Lote 12";
-            if (text.Text != "Lote 12" || layersVm.Layers.Count != 3)
+            layersVm.TextInput = "Evento 1";
+            if (text.Text != "Evento 1" || layersVm.Layers.Count != 3)
                 throw new Exception("Editing the text field did not update the selected text layer");
             layersVm.UndoCommand.Execute(null);
-            if (layersVm.Layers.OfType<EditorLayer>().Any(l => l.Kind == EditorLayerKind.Text && l.Text == "Lote 12"))
+            if (layersVm.Layers.OfType<EditorLayer>().Any(l => l.Kind == EditorLayerKind.Text && l.Text == "Evento 1"))
                 throw new Exception("Text edit was not undoable");
             if (ImageEditorViewModel.EditedFileName(1920, 1080) != "16x9 - Edited.png" ||
                 ImageEditorViewModel.EditedFileName(1080, 1920) != "9x16 - Edited.png" ||
@@ -124,7 +124,7 @@ internal static class AuxiliaryChecks
         var demoShape = editorVm.AddShapeLayer(new SKPoint(24, 24), new SKPoint(250, 84))!;
         editorVm.Tool = EditorTool.Text; editorVm.SetColorHex("#FFFFFF");
         var demoText = editorVm.AddTextLayer(new SKRect(36, 30, 240, 78))!;
-        editorVm.TextInput = "LOTE 12";
+        editorVm.TextInput = "EVENTO 1";
         foreach (var tool in Enum.GetValues<EditorTool>())
         {
             // Categorias pelo botão real, subferramentas pelos radios reais.
@@ -153,8 +153,8 @@ internal static class AuxiliaryChecks
         if (!((TextBlock)editor.FindName("ZoomLabel")).Text.StartsWith("100")) throw new Exception("Fit button failed");
         editor.Close();
 
-        var events = new List<object> { Obj(("Title", "Leilão de demonstração — coleção de primavera"), ("Subtitle", "14:00 · Evento de demonstração")), Obj(("Title", "Mostra de animais — edição especial"), ("Subtitle", "17:00 · Evento de demonstração")), Obj(("Title", "Encerramento da programação"), ("Subtitle", "20:00 · Evento de demonstração")) };
-        dynamic details = Obj(("Title", "Leilão de demonstração — coleção de primavera"), ("BannerUrl", path), ("BannerPreviewUrl", path), ("Downloads", new[] { Obj(("Label", "Catálogo do evento · PDF")), Obj(("Label", "Regulamento · PDF")) }));
+        var events = new List<object> { Obj(("Title", "Evento 1 — apresentação de abertura"), ("Subtitle", "14:00 · Estúdio 1")), Obj(("Title", "Evento 2 — cenário especial"), ("Subtitle", "17:00 · Estúdio 2")), Obj(("Title", "Evento 3 — encerramento"), ("Subtitle", "20:00 · Estúdio 1")) };
+        dynamic details = Obj(("Title", "Evento 1 — apresentação de abertura"), ("BannerUrl", path), ("BannerPreviewUrl", path), ("Downloads", new[] { Obj(("Label", "Catálogo do evento · PDF")), Obj(("Label", "Regulamento · PDF")) }));
         dynamic agendaData = Obj(("BannerPreviewPath", path), ("Date", new DateOnly(2026,9,8)), ("Events", events), ("SelectedEvent", events[0]), ("Details", details), ("Loading", false), ("LoadingDetails", false), ("Downloading", false), ("DownloadProgress", .4), ("StatusText", "DEMONSTRAÇÃO · Dados fictícios; nenhum download realizado."));
         foreach (var command in new[] { "PreviousDayCommand", "NextDayCommand", "TodayCommand", "SaveBannerCommand", "SaveBannerAndEditCommand", "DownloadCatalogCommand", "DownloadRegulationCommand" }) ((IDictionary<string, object?>)agendaData)[command] = null;
         Window agenda = FixtureWindow("Agenda", (object)agendaData); Show(agenda); Save(agenda, "agenda");
