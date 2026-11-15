@@ -6,9 +6,12 @@ navegador e vê a grade em tempo real (nomes de layer/coluna, sem thumbs).
 
 ## PIN
 
-Um PIN de 4 dígitos é sorteado a cada início do app e fica no log
+Um PIN de 6 dígitos é sorteado a cada início do app e fica no log
 (`%LocalAppData%\VideoWallRW\logs\app-*.log`, linha "Controle remoto web em...").
 Ainda não é configurável pela UI (backlog) — reiniciar o app troca o PIN.
+
+PIN errado 5 vezes seguidas bloqueia aquele IP por 2 minutos (e cada erro
+espera 1s antes da resposta), pra que o PIN não saia por força bruta.
 
 ## O que dá pra fazer
 

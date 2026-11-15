@@ -16,8 +16,10 @@ namespace VideoWallRW.App.Remote;
 /// Controle remoto web (Fase 9 T9.5): Kestrel embutido serve uma página única
 /// (HTML+JS vanilla) que troca estado/comandos por WebSocket. Reusa exatamente os
 /// mesmos <see cref="EngineCommand"/> que a UI local usa — o navegador é só mais um
-/// produtor da fila do engine. PIN de 4 dígitos gerado por sessão (log + status bar);
-/// sem PIN configurável na UI ainda (backlog).
+/// produtor da fila do engine. PIN de 6 dígitos gerado por sessão (vai pro log);
+/// sem PIN configurável na UI ainda (backlog). Tentativas erradas são limitadas por IP
+/// (<see cref="MaxFailedAttempts"/> erros → bloqueio de <see cref="LockoutDuration"/>):
+/// sem isso, as combinações do PIN saíam por força bruta em segundos pelo WebSocket.
 /// </summary>
 public sealed class RemoteWebService : IAsyncDisposable
 {
@@ -26,13 +28,18 @@ public sealed class RemoteWebService : IAsyncDisposable
     private readonly string _pin;
     private WebApplication? _app;
 
+    internal const int MaxFailedAttempts = 5;
+    internal static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan FailedAttemptDelay = TimeSpan.FromSeconds(1);
+    private readonly PinAttemptLimiter _limiter = new(MaxFailedAttempts, LockoutDuration);
+
     public string Pin => _pin;
 
     public RemoteWebService(RenderThread render, Func<object> stateSnapshot)
     {
         _render = render;
         _stateSnapshot = stateSnapshot;
-        _pin = Random.Shared.Next(0, 10000).ToString("D4");
+        _pin = System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
     }
 
     public async Task StartAsync(int port = 8080)
@@ -65,6 +72,7 @@ public sealed class RemoteWebService : IAsyncDisposable
             return;
         }
 
+        string clientKey = context.Connection.RemoteIpAddress?.ToString() ?? "?";
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         bool authenticated = false;
         var buffer = new byte[4096];
@@ -89,7 +97,16 @@ public sealed class RemoteWebService : IAsyncDisposable
                 if (result.MessageType == WebSocketMessageType.Close) break;
 
                 var text = Encoding.UTF8.GetString(buffer, 0, result.Count);
-                HandleMessage(text, ref authenticated);
+                if (!authenticated)
+                {
+                    bool ok = TryAuthenticate(text, clientKey, out bool locked);
+                    if (!ok) await Task.Delay(FailedAttemptDelay); // freia tentativa em série
+                    authenticated = ok;
+                    var reply = JsonSerializer.Serialize(new { type = "auth", ok, locked });
+                    await socket.SendAsync(Encoding.UTF8.GetBytes(reply), WebSocketMessageType.Text, true, CancellationToken.None);
+                    continue;
+                }
+                HandleMessage(text);
             }
         }
         catch (WebSocketException) { /* cliente caiu — encerra normalmente */ }
@@ -100,7 +117,38 @@ public sealed class RemoteWebService : IAsyncDisposable
         }
     }
 
-    private void HandleMessage(string json, ref bool authenticated)
+    private bool TryAuthenticate(string json, string clientKey, out bool locked)
+    {
+        locked = _limiter.IsLocked(clientKey);
+        if (locked) return false;
+
+        string? value = null;
+        try
+        {
+            var root = JsonDocument.Parse(json).RootElement;
+            if (root.TryGetProperty("type", out var t) && t.GetString() == "pin" &&
+                root.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.String)
+                value = v.GetString();
+        }
+        catch (JsonException) { }
+
+        bool ok = value is not null && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(value), Encoding.UTF8.GetBytes(_pin));
+        if (ok)
+        {
+            _limiter.Reset(clientKey);
+            Log.Information("Controle remoto: {Client} autenticado", clientKey);
+            return true;
+        }
+
+        locked = _limiter.RegisterFailure(clientKey);
+        if (locked)
+            Log.Warning("Controle remoto: {Client} bloqueado por {Min} min após {N} PINs errados",
+                clientKey, LockoutDuration.TotalMinutes, MaxFailedAttempts);
+        return false;
+    }
+
+    private void HandleMessage(string json)
     {
         JsonElement root;
         try { root = JsonDocument.Parse(json).RootElement; }
@@ -108,13 +156,20 @@ public sealed class RemoteWebService : IAsyncDisposable
 
         string? type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
 
-        if (!authenticated)
+        // Mensagem malformada de um cliente autenticado (campo faltando, tipo errado)
+        // é descartada — não pode derrubar a conexão nem o serviço.
+        try
         {
-            if (type == "pin" && root.TryGetProperty("value", out var pinValue) && pinValue.GetString() == _pin)
-                authenticated = true;
-            return;
+            Dispatch(type, root);
         }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or FormatException or ArgumentNullException)
+        {
+            Log.Debug(ex, "Controle remoto: mensagem '{Type}' inválida ignorada", type);
+        }
+    }
 
+    private void Dispatch(string? type, JsonElement root)
+    {
         switch (type)
         {
             case "trigger_clip":
@@ -165,7 +220,8 @@ public sealed class RemoteWebService : IAsyncDisposable
     <body>
       <div id="pinScreen">
         <h3>PIN</h3>
-        <input id="pinInput" maxlength="4" inputmode="numeric" />
+        <input id="pinInput" maxlength="6" inputmode="numeric" />
+        <div id="pinError" style="color:#f66;margin-top:8px"></div>
         <button onclick="sendPin()">Entrar</button>
       </div>
       <div id="main" style="display:none">
@@ -181,16 +237,23 @@ public sealed class RemoteWebService : IAsyncDisposable
         ws = new WebSocket(`ws://${location.host}/ws`);
         ws.onmessage = (ev) => {
           const msg = JSON.parse(ev.data);
+          if (msg.type === 'auth') onAuth(msg);
           if (msg.type === 'state') { state = msg.data; render(); }
         };
+        ws.onopen = () => { if (authed && lastPin) ws.send(JSON.stringify({type:'pin', value:lastPin})); };
         ws.onclose = () => setTimeout(connect, 2000);
       }
+      let lastPin = null;
       function sendPin() {
-        const v = document.getElementById('pinInput').value;
-        ws.send(JSON.stringify({type:'pin', value:v}));
-        authed = true;
-        document.getElementById('pinScreen').style.display = 'none';
-        document.getElementById('main').style.display = 'block';
+        lastPin = document.getElementById('pinInput').value;
+        ws.send(JSON.stringify({type:'pin', value:lastPin}));
+      }
+      function onAuth(msg) {
+        authed = msg.ok;
+        document.getElementById('pinError').textContent = msg.ok ? '' :
+          (msg.locked ? 'Muitas tentativas erradas. Aguarde 2 minutos.' : 'PIN incorreto.');
+        document.getElementById('pinScreen').style.display = msg.ok ? 'none' : 'block';
+        document.getElementById('main').style.display = msg.ok ? 'block' : 'none';
       }
       function trigger(layer, column) { ws.send(JSON.stringify({type:'trigger_clip', layer, column})); }
       function toggleBlackout() {
@@ -207,7 +270,9 @@ public sealed class RemoteWebService : IAsyncDisposable
         state.layers.forEach((layer, li) => {
           const l = document.createElement('div');
           l.className = 'layer';
-          l.innerHTML = `<b>${layer.name}</b>`;
+          const title = document.createElement('b');
+          title.textContent = layer.name;
+          l.appendChild(title);
           const row = document.createElement('div');
           row.className = 'row';
           layer.clips.forEach((clip, ci) => {

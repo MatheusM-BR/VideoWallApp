@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\src\VideoWallRW.App\Security\PackageIntegrity.cs" Link="Security\PackageIntegrity.cs" />
+    <Compile Include="..\..\src\VideoWallRW.App\Remote\PinAttemptLimiter.cs" Link="Remote\PinAttemptLimiter.cs" />
   </ItemGroup>
 
   <ItemGroup>

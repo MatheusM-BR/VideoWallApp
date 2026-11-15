@@ -218,7 +218,15 @@ public sealed partial class ClipViewModel : ObservableObject, System.ComponentMo
     /// mostra os tempos inicial/final nos campos In/Out — o operador vê 0 e a duração
     /// total imediatamente, como no Resolume, em vez de campos vazios.
     /// </summary>
+    // async void só como ponte de evento: toda exceção fica aqui dentro, logada —
+    // nunca sobe pro dispatcher no meio de um evento ao vivo.
     private async void ProbeDurationIfNeeded()
+    {
+        try { await ProbeDurationCoreAsync(); }
+        catch (Exception ex) { Serilog.Log.Warning(ex, "Falha na sonda de mídia (ProbeDuration)"); }
+    }
+
+    private async Task ProbeDurationCoreAsync()
     {
         if (Model?.Source is not FileVideoSource video)
         {
@@ -260,7 +268,15 @@ public sealed partial class ClipViewModel : ObservableObject, System.ComponentMo
     /// header do WIC/BitmapFrame — sem decodificar pixels) — mostradas na aba Clip
     /// abaixo do combo Resize.
     /// </summary>
+    // async void só como ponte de evento: toda exceção fica aqui dentro, logada —
+    // nunca sobe pro dispatcher no meio de um evento ao vivo.
     private async void ProbeDimensionsIfNeeded()
+    {
+        try { await ProbeDimensionsCoreAsync(); }
+        catch (Exception ex) { Serilog.Log.Warning(ex, "Falha na sonda de mídia (ProbeDimensions)"); }
+    }
+
+    private async Task ProbeDimensionsCoreAsync()
     {
         string? path = MediaPathOf(Model);
         if (path is null)
