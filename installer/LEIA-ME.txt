@@ -1,4 +1,4 @@
-RW VideoWall — versão para Windows 64 bits
+VideoWallApp — versão para Windows 64 bits
 
 Instalação: C:\VideoWall (todos os usuários).
 O instalador inclui o .NET e as bibliotecas nativas necessárias ao aplicativo.
