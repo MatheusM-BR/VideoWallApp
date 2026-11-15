@@ -80,6 +80,19 @@ public sealed partial class FileBrowserViewModel : ObservableObject
             _sendToCell(item.FullPath);
     }
 
+    /// <summary>
+    /// Abre a pasta do arquivo e já deixa ele selecionado (com prévia) — usado depois de
+    /// salvar no editor/Agenda, pro operador achar na hora o que acabou de gerar.
+    /// </summary>
+    public void ShowFile(string path)
+    {
+        string? folder = Path.GetDirectoryName(path);
+        if (folder is null || !Directory.Exists(folder)) return;
+        Navigate(folder);
+        SelectedItem = Items.FirstOrDefault(i => !i.IsFolder &&
+            string.Equals(i.FullPath, path, StringComparison.OrdinalIgnoreCase));
+    }
+
     private void Navigate(string folder)
     {
         if (!Directory.Exists(folder))

@@ -19,6 +19,12 @@ public partial class MainWindow : Window
 
         _vm.KeymapChanged += () => _keymap.Reload();
         Closing += OnClosing;
+        // Seleção vinda do código (ex.: "salvou no editor → mostra na Biblioteca") não
+        // rola a lista sozinha; sem isto o arquivo ficava selecionado fora da vista.
+        FileList.SelectionChanged += (_, _) =>
+        {
+            if (FileList.SelectedItem is { } item) FileList.ScrollIntoView(item);
+        };
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)

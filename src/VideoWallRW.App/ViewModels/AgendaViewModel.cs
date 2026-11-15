@@ -24,6 +24,7 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
     private readonly AgendaClient _client = new();
     private readonly Action<string, string> _openImageEditor; // (path, suggestedClipName)
     private readonly Action<string> _openPdfImporter;
+    private readonly Action<string>? _revealInLibrary;
     private int _eventsRequest;
     private int _detailsRequest;
     private bool _disposed;
@@ -46,10 +47,12 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
 
     public ObservableCollection<AgendaEventViewModel> Events { get; } = [];
 
-    public AgendaViewModel(Action<string, string> openImageEditor, Action<string> openPdfImporter)
+    public AgendaViewModel(Action<string, string> openImageEditor, Action<string> openPdfImporter,
+        Action<string>? revealInLibrary = null)
     {
         _openImageEditor = openImageEditor;
         _openPdfImporter = openPdfImporter;
+        _revealInLibrary = revealInLibrary;
         _ = LoadAsync();
     }
 
@@ -208,10 +211,10 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
             // que vir do MESMO evento, mesmo que a seleção mude no meio do await.
             var ev = SelectedEvent ?? throw new InvalidOperationException();
             string folder = AppPaths.AgendaEventFolder(ev.Model.Date, ev.Model.Slug);
-            // Nome do arquivo com o slug do evento (não "banner.jpg" fixo) — senão todo
-            // banner de todo leilão tem o mesmo nome de arquivo, e fica impossível
-            // diferenciar um do outro na lista de Recentes/Files (que só mostra o nome).
-            string dest = Path.Combine(folder, $"{ev.Model.Slug}.jpg");
+            // Nome do arquivo = nome do leilão, igual ao da pasta (data + slug). Nunca um
+            // "banner.jpg" fixo: na lista de Recentes/Files (que só mostra o nome) todo
+            // banner ficaria igual, e assim o arquivo se identifica sozinho fora da pasta.
+            string dest = Path.Combine(folder, $"{Path.GetFileName(folder)}.jpg");
             string? titleAtStart = Details?.Title;
             await _client.DownloadFileAsync(bannerUrl, dest, new Progress<double>(p => DownloadProgress = p), CancellationToken.None);
             WriteMeta(folder, bannerUrl, titleAtStart, ev.Model.Date);
@@ -223,6 +226,8 @@ public sealed partial class AgendaViewModel : ObservableObject, IDisposable
             // ter mudado durante o download, e o editor abriria com o nome de outro leilão.
             if (openEditor)
                 _openImageEditor(dest, titleAtStart ?? ev.Model.Title);
+            else
+                _revealInLibrary?.Invoke(dest);
         }
         catch (Exception ex)
         {

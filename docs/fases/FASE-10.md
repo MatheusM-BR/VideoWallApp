@@ -129,8 +129,9 @@ Ferramentas (toolbar vertical à esquerda, estilo Paint):
   e simples; descartar os mais antigos).
 - Zoom (Ctrl+scroll, 10%–800%) e pan (espaço+arrastar); fundo quadriculado para
   alpha; barra de status com posição/zoom/tamanho.
-- Salvar: **nunca sobrescreve o original** — grava `{nome}-edit.png` ao lado
-  (edições subsequentes sobrescrevem o `-edit.png`); botões
+- Salvar: **nunca sobrescreve o original** — grava na pasta da imagem de origem
+  `16x9 - Edited.png` (paisagem) ou `9x16 - Edited.png` (retrato); salvar de novo na
+  mesma orientação substitui. A Biblioteca abre na pasta com o arquivo selecionado. Botões
   **[Salvar] [Salvar e enviar para célula]**.
 - O editor abre qualquer imagem, não só banners (ver T10.6).
 
@@ -173,7 +174,7 @@ Ferramentas (toolbar vertical à esquerda, estilo Paint):
 4. Selecionar uma página do PDF → PNG em alta na pasta do evento.
 5. Editor: cortar com preset "proporção da composição", tarjar um telefone com
    retângulo preenchido, esticar 10%, escrever um texto, undo/redo de tudo,
-   salvar `-edit.png` (original intacto).
+   salvar `16x9 - Edited.png` (original intacto).
 6. "Salvar e enviar para célula": imagem aparece na grade nomeada com o título
    do evento e vai ao ar com resize correto.
 7. "Editar imagem..." numa célula **no ar** → salvar → telão atualiza sem frame
