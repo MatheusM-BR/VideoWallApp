@@ -35,6 +35,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Prints do manual: ficam como arquivos ao lado do exe (Manual\*.png) — regerar os
+         prints (tests/VideoWallRW.UiChecks/make-manual-prints.ps1) não exige mexer em código. -->
+    <Content Include="Assets\Manual\*.png" CopyToOutputDirectory="PreserveNewest" Link="Manual\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\VideoWallRW.Core\VideoWallRW.Core.csproj" />
     <ProjectReference Include="..\VideoWallRW.Engine\VideoWallRW.Engine.csproj" />
     <ProjectReference Include="..\VideoWallRW.Media\VideoWallRW.Media.csproj" />

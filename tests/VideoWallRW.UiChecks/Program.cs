@@ -117,7 +117,7 @@ internal static class Program
         grid.PlayModes = Enum.GetValues<VideoWallRW.Core.Model.PlayMode>(); grid.AutopilotActions = Enum.GetValues<VideoWallRW.Core.Model.AutopilotAction>();
         grid.BlendModes = Enum.GetValues<VideoWallRW.Core.Model.BlendMode>(); grid.ResizeModes = Enum.GetValues<VideoWallRW.Core.Model.ResizeMode>();
         fixture.Grid = grid; fixture.WindowTitle = "VideoWallRW — Demonstração do layout"; fixture.Blackout = false; fixture.MasterFader = 1.0; fixture.AutopilotAll = true;
-        fixture.SequencerRunning = false; fixture.CompositionMonitorEnabled = false; fixture.CompositionMonitorBitmap = null; fixture.ActiveClipThumbnailPath = pictures[0]; fixture.ShowMonitorPlaceholderText = false;
+        fixture.SequencerRunning = false; fixture.RemoteRunning = false; fixture.RemoteButtonText = "Controle remoto"; fixture.CompositionMonitorEnabled = false; fixture.CompositionMonitorBitmap = null; fixture.ActiveClipThumbnailPath = pictures[0]; fixture.ShowMonitorPlaceholderText = false;
         fixture.ShowSourcesTab = false; fixture.NdiAvailable = false; fixture.NdiUnavailableReason = "Nenhuma fonte conectada nesta demonstração."; fixture.NdiSources = Array.Empty<string>();
         fixture.StatusText = "DEMONSTRAÇÃO DO LAYOUT  ·  Dados fictícios; nenhuma saída conectada";
         fixture.Scenes = new[] { Obj(("Name", "Abertura"), ("IsSelected", true), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)), Obj(("Name", "Programação"), ("IsSelected", false), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)), Obj(("Name", "Intervalo"), ("IsSelected", false), ("TriggerCommand", null), ("RenameCommand", null), ("RemoveCommand", null)) };
@@ -152,6 +152,11 @@ internal static class Program
             if (work.ColumnDefinitions.Sum(c => c.ActualWidth) > work.ActualWidth + 1) throw new Exception("Workspace width overflow");
             if (work.RowDefinitions.Sum(r => r.ActualHeight) > work.ActualHeight + 1) throw new Exception("Workspace height overflow");
         }
+        // Print do manual: aba Fontes / NDI com fontes de exemplo, em 1440×900.
+        win.Width = 1440; win.Height = 900;
+        fixture.NdiAvailable = true; fixture.NdiSources = new[] { "ESTUDIO-1 (Câmera PTZ)", "ESTUDIO-2 (Câmera Plano Geral)", "VMIX-PC (Output 1)" };
+        fixture.ShowSourcesTab = true; Frame(); Snapshot(root, "sources");
+        fixture.ShowSourcesTab = false; fixture.NdiAvailable = false; fixture.NdiSources = Array.Empty<string>(); Frame();
         CheckDimensions();
         CompletionChecks.CheckInteractions(win);
         CompletionChecks.CheckDpi(root);

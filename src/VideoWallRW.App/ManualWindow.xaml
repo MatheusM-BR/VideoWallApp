@@ -1,0 +1,49 @@
+<Window x:Class="VideoWallRW.App.ManualWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Manual — RW VideoWall" Height="860" Width="1180" MinHeight="560" MinWidth="820"
+        WindowStartupLocation="CenterOwner" FontFamily="Segoe UI" FontSize="13"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Themes/Auxiliary.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+  <DockPanel Margin="12">
+    <Border DockPanel.Dock="Top" Style="{StaticResource SurfacePanel}" Padding="14,10" Margin="0,0,0,10">
+      <DockPanel>
+        <Image DockPanel.Dock="Left" Source="{StaticResource BrandMark}" Width="40" Height="40" Margin="0,0,12,0" />
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="Manual do RW VideoWall" Style="{StaticResource PageTitle}" />
+          <TextBlock Text="Tudo o que o programa faz, com imagens. Clique numa imagem pra ampliar." Foreground="{StaticResource FgDim}" Margin="0,3,0,0" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+    <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="260" /><ColumnDefinition Width="10" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+      <Border Style="{StaticResource SurfacePanel}" Padding="6">
+        <DockPanel>
+          <TextBlock DockPanel.Dock="Top" Text="ÍNDICE" Style="{StaticResource SectionTitle}" Margin="6,4,0,8" />
+          <ListBox x:Name="Index" BorderThickness="0" Background="Transparent" SelectionChanged="OnIndexSelected"
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled" AutomationProperties.Name="Índice do manual">
+            <ListBox.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Margin="2,3">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" />
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+      <Border Grid.Column="2" Style="{StaticResource SurfacePanel}" Padding="0">
+        <ScrollViewer x:Name="Scroller" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="22,16">
+          <StackPanel x:Name="Body" MaxWidth="900" HorizontalAlignment="Left" />
+        </ScrollViewer>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

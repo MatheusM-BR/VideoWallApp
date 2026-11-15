@@ -60,11 +60,26 @@
               <MenuItem Header="Atalhos de teclado..." Command="{Binding OpenKeymapEditorCommand}" />
               <MenuItem Header="Instalação..." Command="{Binding OpenInstallationCommand}" />
               <Separator />
-              <MenuItem Header="Ajuda" Command="{Binding OpenHelpCommand}" />
+              <MenuItem Header="Manual" Command="{Binding OpenHelpCommand}" />
+              <MenuItem Header="Controle remoto..." Command="{Binding OpenRemoteControlCommand}" />
             </MenuItem>
           </Menu>
           <Button Content="Agenda" Command="{Binding OpenAgendaCommand}" Margin="0,0,4,0" />
-          <ToggleButton AutomationProperties.Name="Sequenciador de colunas configurado em Instalação" Content="Sequência" IsChecked="{Binding SequencerRunning}" ToolTip="Sequenciador de colunas configurado em Instalação" />
+          <ToggleButton AutomationProperties.Name="Sequenciador de colunas configurado em Instalação" Content="Sequência" IsChecked="{Binding SequencerRunning}" ToolTip="Sequenciador de colunas configurado em Instalação" Margin="0,0,14,0" />
+          <Button Content="📖 Manual" Command="{Binding OpenHelpCommand}" Margin="0,0,4,0" Padding="10,5"
+                  ToolTip="Manual completo do RW VideoWall, com imagens" AutomationProperties.Name="Abrir o manual" />
+          <Button Command="{Binding OpenRemoteControlCommand}" Padding="10,5"
+                  ToolTip="Operar o telão pelo celular/tablet na mesma rede — mostra o endereço e o PIN" AutomationProperties.Name="Controle remoto">
+            <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers>
+              <DataTrigger Binding="{Binding RemoteRunning}" Value="True">
+                <Setter Property="Background" Value="{StaticResource AccentDim}" /><Setter Property="BorderBrush" Value="{StaticResource Accent}" />
+              </DataTrigger>
+            </Style.Triggers></Style></Button.Style>
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="📡" Margin="0,0,6,0" />
+              <TextBlock Text="{Binding RemoteButtonText}" />
+            </StackPanel>
+          </Button>
         </WrapPanel>
       </DockPanel>
     </Border>

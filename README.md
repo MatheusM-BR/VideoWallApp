@@ -56,6 +56,18 @@ dotnet test tests/VideoWallRW.Agenda.Tests   # parser da agenda
 | `--resume` | Usado no reinício automático depois de uma falha do engine de vídeo |
 | `--verify-package` | Só verifica a integridade do pacote instalado e sai |
 
+## Manual do operador
+
+O botão **📖 Manual** no topo do programa abre o manual completo, com prints. O texto
+fica em `src/VideoWallRW.App/Manual/ManualContent.cs`; os prints em
+`src/VideoWallRW.App/Assets/Manual/` são gerados das telas reais (com dados fictícios):
+
+```powershell
+.\tests\VideoWallRW.UiChecks\make-manual-prints.ps1
+```
+
+Rode de novo sempre que uma tela mudar.
+
 ## Documentação
 
 - [ARQUITETURA.md](ARQUITETURA.md): princípios, threads, modelo de domínio

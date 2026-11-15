@@ -128,7 +128,10 @@ internal static class CompletionChecks
         var keymap=Fixture("KeymapEditor",(object)keys);Save((FrameworkElement)keymap.Content,"keymap");keymap.Close();
         dynamic hap=Obj(("Files",new[]{Obj(("FileName","abertura.mp4"),("Progress",.65),("Status","Convertendo"))}),("Presets",new[]{"HAP"}),("SelectedPreset","HAP"),("DestinationFolder",@"C:\Video Wall\HAP"),("StatusText","Demonstração · nenhum arquivo convertido"));
         var converter=Fixture("HapConverter",(object)hap);Save((FrameworkElement)converter.Content,"hap");converter.Close();
-        var help=new HelpWindow();help.Left=-20000;help.Top=-20000;help.ShowActivated=false;help.ShowInTaskbar=false;help.Show();Frame();Save((FrameworkElement)help.Content,"help");help.Close();
+        var manual=new ManualWindow();manual.Left=-20000;manual.Top=-20000;manual.ShowActivated=false;manual.ShowInTaskbar=false;manual.Show();Frame();Save((FrameworkElement)manual.Content,"manual");manual.Close();
+        // Controle remoto no estado "ligado" com PIN/endereço de exemplo (nenhum servidor sobe).
+        var remote=new RemoteControlWindow(null);remote.Left=-20000;remote.Top=-20000;remote.ShowActivated=false;remote.ShowInTaskbar=false;remote.Show();
+        remote.ShowPreview("482915",1,"192.168.0.20");Frame();Save((FrameworkElement)remote.Content,"remote");remote.Close();
         var prompt=new TextPromptWindow("Largura na composição (px)","960") { Validator=_=>"Informe um número válido.",Left=-20000,Top=-20000,ShowActivated=false,ShowInTaskbar=false };
         prompt.Show();Frame();
         typeof(TextPromptWindow).GetMethod("OnOk",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance)!.Invoke(prompt,new object[]{prompt,new RoutedEventArgs()});

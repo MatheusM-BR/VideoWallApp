@@ -308,7 +308,7 @@
               <Button Grid.Column="1" Content="Centro ↔" Command="{Binding CenterLayerCommand}" CommandParameter="h" Margin="2,0" Padding="0,4" ToolTip="Centralizar só na horizontal" />
               <Button Grid.Column="2" Content="Centro ↕" Command="{Binding CenterLayerCommand}" CommandParameter="v" Margin="2,0,0,0" Padding="0,4" ToolTip="Centralizar só na vertical" />
             </Grid>
-            <Button Content="Ajustar à tela" Command="{Binding FitLayerToCanvasCommand}" Padding="0,4" Margin="0,0,0,8" ToolTip="Camada ocupa a tela inteira (imagem e texto mantêm a proporção)" />
+            <Button Content="Ocupar a tela" Command="{Binding FitLayerToCanvasCommand}" Padding="0,4" Margin="0,0,0,8" ToolTip="Camada ocupa a tela inteira (imagem e texto mantêm a proporção)" />
             <TextBlock Text="Opacidade" FontSize="11" />
             <Slider Minimum="0" Maximum="1" Value="{Binding ActiveLayer.Opacity, Mode=TwoWay, FallbackValue=1}"
                     IsEnabled="{Binding HasLayers}" Margin="0,0,0,8" />

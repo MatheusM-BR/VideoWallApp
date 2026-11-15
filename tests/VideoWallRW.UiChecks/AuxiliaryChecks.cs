@@ -109,7 +109,8 @@ internal static class AuxiliaryChecks
             if (layersVm.Layers.OfType<EditorLayer>().Any(l => l.Kind == EditorLayerKind.Text && l.Text == "Lote 12"))
                 throw new Exception("Text edit was not undoable");
             if (ImageEditorViewModel.EditedFileName(1920, 1080) != "16x9 - Edited.png" ||
-                ImageEditorViewModel.EditedFileName(1080, 1920) != "9x16 - Edited.png")
+                ImageEditorViewModel.EditedFileName(1080, 1920) != "9x16 - Edited.png" ||
+                ImageEditorViewModel.EditedFileName(1920, 1080, 3) != "16x9 - Edited v3.png")
                 throw new Exception("Edited file name does not follow the 16x9/9x16 pattern");
         }
         Console.WriteLine("Original-as-layer, shape/text layers and edited file name checks passed.");
@@ -118,6 +119,12 @@ internal static class AuxiliaryChecks
         var editor = new ImageEditorWindow(editorVm);
         Show(editor); Save(editor, "editor-paint3d");
         editor.Width = 1000; editor.Height = 680;
+        // Camadas de exemplo pros prints do manual: uma faixa (forma) e um texto por cima da arte.
+        editorVm.Tool = EditorTool.Shape; editorVm.SetColorHex("#ED1C24");
+        var demoShape = editorVm.AddShapeLayer(new SKPoint(24, 24), new SKPoint(250, 84))!;
+        editorVm.Tool = EditorTool.Text; editorVm.SetColorHex("#FFFFFF");
+        var demoText = editorVm.AddTextLayer(new SKRect(36, 30, 240, 78))!;
+        editorVm.TextInput = "LOTE 12";
         foreach (var tool in Enum.GetValues<EditorTool>())
         {
             // Categorias pelo botão real, subferramentas pelos radios reais.
@@ -130,6 +137,12 @@ internal static class AuxiliaryChecks
                 var radio = Children(editor).OfType<RadioButton>().First(b => System.Windows.Data.BindingOperations.GetBinding(b, ToggleButton.IsCheckedProperty)?.ConverterParameter is EditorTool t && t == tool);
                 radio.IsChecked = true;
             }
+            editorVm.ActiveLayer = tool switch
+            {
+                EditorTool.Shape => demoShape,
+                EditorTool.Text => demoText,
+                _ => editorVm.Layers[0], // imagem original
+            };
             Frame();
             if (editorVm.Tool != tool) throw new Exception("Tool selection failed: " + tool);
             Save(editor, "editor-" + tool.ToString().ToLowerInvariant());

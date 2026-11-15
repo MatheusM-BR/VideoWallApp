@@ -388,11 +388,49 @@ public sealed partial class MainViewModel : ObservableObject
         MarkDirty();
     }
 
+    // ── Manual e controle remoto (botões do topo) ─────────────────────────────
+
+    private ManualWindow? _manualWindow;
+
     [RelayCommand]
     private void OpenHelp()
     {
-        var window = new HelpWindow { Owner = Application.Current.MainWindow };
-        window.Show();
+        if (_manualWindow is { IsLoaded: true })
+        {
+            _manualWindow.Activate();
+            return;
+        }
+        _manualWindow = new ManualWindow { Owner = Application.Current.MainWindow };
+        _manualWindow.Closed += (_, _) => _manualWindow = null;
+        _manualWindow.Show();
+    }
+
+    private Remote.RemoteWebService? _remote;
+
+    /// <summary>Estado do controle remoto pro botão do topo ("Remoto · LIG.").</summary>
+    [ObservableProperty] private bool _remoteRunning;
+    [ObservableProperty] private string _remoteButtonText = "Controle remoto";
+
+    public void AttachRemote(Remote.RemoteWebService remote)
+    {
+        _remote = remote;
+        remote.StateChanged += () => Application.Current?.Dispatcher.BeginInvoke(UpdateRemoteState);
+        UpdateRemoteState();
+    }
+
+    private void UpdateRemoteState()
+    {
+        RemoteRunning = _remote?.IsRunning == true;
+        int clients = _remote?.ConnectedClients ?? 0;
+        RemoteButtonText = !RemoteRunning ? "Controle remoto"
+            : clients > 0 ? $"Remoto · LIG. ({clients})" : "Remoto · LIG.";
+    }
+
+    [RelayCommand]
+    private void OpenRemoteControl()
+    {
+        var window = new RemoteControlWindow(_remote) { Owner = Application.Current.MainWindow };
+        window.ShowDialog();
     }
 
     [RelayCommand]
