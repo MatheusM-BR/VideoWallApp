@@ -43,11 +43,21 @@ acima (senão os dois tentam iniciar o app).
 
 ## 5. Watchdog (opcional, recomendado)
 
-`VideoWallRW.Watchdog.exe` inicia `VideoWallRW.App.exe --kiosk`, escuta um heartbeat
-por named pipe (`vwrw-heartbeat`) que o app envia a cada 3s pela UI thread. Sem
-heartbeat por 10s (app travado) ou o processo caindo sozinho, o watchdog mata e
-reinicia. Anti-flapping: mais de 3 reinícios em 5 minutos → espera 60s antes de
-tentar de novo. Log em `%LocalAppData%\VideoWallRW\logs\watchdog.log`.
+`VideoWallRW.Watchdog.exe` inicia `VideoWallRW.App.exe --kiosk` e escuta um heartbeat
+por named pipe (`vwrw-heartbeat`) que o app envia a cada 3s. O batimento mede a saúde
+do **engine de vídeo**, não só da interface: ele só é enviado enquanto o loop de render
+está avançando (e a UI respondeu no último minuto). Sem heartbeat por 10s, ou com o
+processo caindo sozinho, o watchdog mata e reinicia — e o `--kiosk` retoma o projeto e
+o que estava no ar (preferindo o autosave quando ele é mais novo que o arquivo).
+Anti-flapping: mais de 3 reinícios em 5 minutos → espera 60s antes de tentar de novo.
+Log em `%LocalAppData%\VideoWallRW\logs\watchdog.log`.
+
+### Falha do engine sem watchdog
+
+Se o engine de vídeo morrer (driver da GPU resetado, `Present` falhando) com o app
+aberto normalmente, ele salva o estado, se relança sozinho com `--resume` e religa os
+telões que estavam ligados. Depois de 3 falhas em 10 minutos ele para de tentar e
+mostra o erro na barra de status — aí o problema é de placa/driver, não de software.
 
 ## 6. Testar recuperação de crash
 

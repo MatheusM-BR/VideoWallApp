@@ -398,7 +398,7 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenAgenda()
     {
-        var vm = new ViewModels.AgendaViewModel(OpenImageEditorForFile, OpenPdfImporter);
+        var vm = new ViewModels.AgendaViewModel(OpenImageEditorForFile, OpenPdfImporter, RevealInLibrary);
         _agendaWindow = new AgendaWindow(vm) { Owner = Application.Current.MainWindow };
         _agendaWindow.Closed += (_, _) => _agendaWindow = null;
         _agendaWindow.Show();
@@ -413,8 +413,16 @@ public sealed partial class MainViewModel : ObservableObject
         CloseSourceWindows();
         double? compAspect = Grid.Model.Height > 0 ? (double)Grid.Model.Width / Grid.Model.Height : null;
         var vm = new ImageEditorViewModel(path, onSaved: null, compAspect);
+        vm.FileSaved += RevealInLibrary;
         var window = new ImageEditorWindow(vm) { Owner = Application.Current.MainWindow };
         window.Show();
+    }
+
+    /// <summary>Biblioteca → Arquivos, aberta na pasta do arquivo e com ele selecionado.</summary>
+    public void RevealInLibrary(string path)
+    {
+        ShowSourcesTab = false;
+        FileBrowser.ShowFile(path);
     }
 
     private void OpenPdfImporter(string pdfPath)
@@ -485,6 +493,7 @@ public sealed partial class MainViewModel : ObservableObject
             });
             _render.Post(new ReloadClip(layerIndex, columnIndex));
         }, compAspect);
+        vm.FileSaved += RevealInLibrary;
         var window = new ImageEditorWindow(vm) { Owner = Application.Current.MainWindow };
         window.Show();
     }
@@ -1030,13 +1039,59 @@ public sealed partial class MainViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    /// Chamado (na UI) depois que o engine morreu e o estado já foi salvo. O App decide
+    /// como reiniciar: pelo watchdog, se ele estiver presente, ou relançando o processo.
+    /// </summary>
+    public Action<string>? EngineRecoveryRequested { get; set; }
+
     private void OnEngineFailed(string message)
     {
         Application.Current?.Dispatcher.BeginInvoke(() =>
         {
-            StatusText = $"ERRO no engine: {message}";
+            // Salva ANTES de desligar os monitores: o autosave grava quais telões
+            // estavam ligados (EnabledOutputs), e é isso que o processo reiniciado religa.
+            Autosave();
+            SaveRuntimeState();
+            StatusText = $"ERRO no engine: {message} — reiniciando…";
             foreach (var monitor in Monitors) monitor.IsActive = false;
+            EngineRecoveryRequested?.Invoke(message);
         });
+    }
+
+    /// <summary>
+    /// Retoma a última sessão depois de um reinício sem operador (modo kiosk/watchdog ou
+    /// recuperação de falha do engine): prefere o autosave quando ele é mais novo que o
+    /// arquivo do projeto (edições ainda não salvas), e religa exatamente o que estava no ar.
+    /// </summary>
+    public bool ResumeLastSession()
+    {
+        var runtime = RuntimeStateService.TryLoad();
+        if (runtime is null) return false;
+
+        string? projectPath = runtime.ProjectPath is { } p && File.Exists(p) ? p : null;
+        string autosavePath = AutosaveService.GetAutosavePath(projectPath);
+        bool autosaveIsNewer = File.Exists(autosavePath) &&
+            (projectPath is null || File.GetLastWriteTimeUtc(autosavePath) > File.GetLastWriteTimeUtc(projectPath));
+
+        if (autosaveIsNewer)
+        {
+            ApplyProject(ProjectSerializer.Load(autosavePath));
+            _currentProjectPath = projectPath;
+            _isDirty = true; // conteúdo veio do autosave: ainda não está no arquivo do usuário
+            UpdateWindowTitle();
+        }
+        else if (projectPath is not null)
+        {
+            LoadProjectSilently(projectPath);
+        }
+        else
+        {
+            return false;
+        }
+
+        ApplyRuntimeState(runtime);
+        return true;
     }
 
     /// <summary>Mantém o nome antigo por compatibilidade com o keymap ("ToggleMasterPause"

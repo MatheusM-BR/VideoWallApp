@@ -59,6 +59,10 @@ public partial class App : Application
         // Instância única: duas cópias do programa brigam pelas saídas e tocam áudio
         // em dobro (som "picotado" e mute que parece não funcionar — cada instância
         // tem sua própria sessão WASAPI).
+        // Relançamento após falha do engine: o processo anterior ainda pode estar
+        // segurando o mutex de instância única por alguns instantes enquanto fecha.
+        WaitForPreviousInstance(e.Args);
+
         bool createdNew;
         try
         {
@@ -167,12 +171,14 @@ public partial class App : Application
         });
 
         _render.Start();
-        _heartbeat = new HeartbeatClient();
+        _heartbeat = new HeartbeatClient(_render);
 
         bool kiosk = e.Args.Any(a => a.Equals("--kiosk", StringComparison.OrdinalIgnoreCase));
+        bool resume = e.Args.Any(a => a.Equals("--resume", StringComparison.OrdinalIgnoreCase));
         var vm = new MainViewModel(_gfx, _render, kiosk, _ndiFinder);
-        if (kiosk)
-            ApplyKiosk(vm);
+        vm.EngineRecoveryRequested = message => RestartAfterEngineFailure(e.Args, message);
+        if (kiosk || resume)
+            ResumeSession(vm);
 
         _osc = new Input.OscService(_render, vm.ResolveSceneByName);
         _osc.Start();
@@ -190,29 +196,96 @@ public partial class App : Application
         // no startup trava a interface bem na hora de montar o evento (e aparece também
         // depois de um encerramento forçado ou queda de energia, que não são bugs).
         // O caminho do relatório fica visível e o log guarda o registro completo.
-        if (uncleanReport is not null)
+        if (resume)
+            vm.StatusText = "⚠ O engine de vídeo falhou e o programa foi reiniciado sozinho — o que estava no ar foi retomado. Veja o log se repetir.";
+        else if (uncleanReport is not null)
             vm.StatusText = $"⚠ A última sessão fechou de forma inesperada — relatório: {uncleanReport}";
     }
 
-    /// <summary>
-    /// T8.1: modo instalação — abre sem diálogo de recuperação (recupera sozinho) e
-    /// retoma o último projeto + estado de runtime salvo, para reiniciar sem operador
-    /// presente (watchdog reinicia o processo, kiosk retoma o que estava no ar).
-    /// </summary>
-    private static void ApplyKiosk(MainViewModel vm)
+    // ── Recuperação de falha do engine ────────────────────────────────────────────
+    // Um device D3D perdido (TDR do driver, GPU resetada, Present falhando) não tem
+    // conserto confiável dentro do processo: texturas, swapchains e players inteiros
+    // ficam inválidos. O caminho robusto é reiniciar o processo e retomar a sessão salva.
+    private const int MaxQuickRestarts = 3;
+    private static readonly TimeSpan QuickRestartWindow = TimeSpan.FromMinutes(10);
+
+    private void RestartAfterEngineFailure(string[] args, string message)
     {
+        if (_heartbeat?.WatchdogConnected == true)
+        {
+            // O watchdog vê o processo sair e reinicia na hora com --kiosk (que retoma a sessão).
+            Log.Warning("Engine falhou ({Message}); encerrando para o watchdog reiniciar", message);
+            Shutdown(20);
+            return;
+        }
+
+        // Anti-loop: GPU realmente morta faria o programa reiniciar pra sempre.
+        int count = ReadIntArg(args, "--restart-count") ?? 0;
+        long since = ReadLongArg(args, "--restart-since") ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (DateTimeOffset.UtcNow - DateTimeOffset.FromUnixTimeSeconds(since) > QuickRestartWindow)
+        {
+            count = 0;
+            since = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        }
+        if (count >= MaxQuickRestarts)
+        {
+            Log.Error("Engine falhou {Count} vezes em sequência; reinício automático suspenso", count);
+            if (MainWindow?.DataContext is MainViewModel vm)
+                vm.StatusText = $"ERRO no engine: {message} — falhou {count}x seguidas. Verifique a placa de vídeo/driver e reinicie o programa.";
+            return;
+        }
+
+        string? exe = Environment.ProcessPath;
+        if (exe is null) return;
         try
         {
-            var runtime = RuntimeStateService.TryLoad();
-            if (runtime?.ProjectPath is { } path && File.Exists(path))
-            {
-                vm.LoadProjectSilently(path);
-                vm.ApplyRuntimeState(runtime);
-            }
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exe,
+                $"--resume --startup --wait-pid {Environment.ProcessId} --restart-count {count + 1} --restart-since {since}")
+            { UseShellExecute = false });
+            Log.Warning("Engine falhou ({Message}); processo relançado (tentativa {N})", message, count + 1);
+            Shutdown(21);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Falha ao retomar estado em modo kiosk");
+            Log.Error(ex, "Falha ao relançar o programa após erro no engine");
+        }
+    }
+
+    private static void WaitForPreviousInstance(string[] args)
+    {
+        if (ReadIntArg(args, "--wait-pid") is not { } pid) return;
+        try
+        {
+            using var previous = System.Diagnostics.Process.GetProcessById(pid);
+            previous.WaitForExit(15_000);
+        }
+        catch (ArgumentException) { /* já saiu */ }
+        catch (InvalidOperationException) { /* já saiu */ }
+    }
+
+    private static int? ReadIntArg(string[] args, string name) =>
+        ReadLongArg(args, name) is { } v && v is >= int.MinValue and <= int.MaxValue ? (int)v : null;
+
+    private static long? ReadLongArg(string[] args, string name)
+    {
+        int i = Array.FindIndex(args, a => a.Equals(name, StringComparison.OrdinalIgnoreCase));
+        return i >= 0 && i + 1 < args.Length && long.TryParse(args[i + 1], out var v) ? v : null;
+    }
+
+    /// <summary>
+    /// T8.1: modo instalação (--kiosk) e recuperação de falha do engine (--resume) —
+    /// abrem sem diálogo e retomam o último projeto + estado de runtime salvo, para
+    /// reiniciar sem operador presente.
+    /// </summary>
+    private static void ResumeSession(MainViewModel vm)
+    {
+        try
+        {
+            vm.ResumeLastSession();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Falha ao retomar a sessão anterior");
         }
     }
 

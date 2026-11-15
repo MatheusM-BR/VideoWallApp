@@ -66,6 +66,18 @@ public sealed class RenderThread : IDisposable
     /// <summary>Erro fatal (device lost etc.); as saídas foram derrubadas.</summary>
     public event Action<string>? EngineFailed;
 
+    // Liveness do engine pro watchdog: o heartbeat do processo só bate enquanto este
+    // contador avança. A UI viva NÃO prova que as telas estão no ar — o engine morto
+    // com a UI de pé era exatamente o caso que o watchdog não pegava.
+    private long _loopCount;
+    private volatile bool _failed;
+
+    /// <summary>Iterações do loop de render desde o start (lido de qualquer thread).</summary>
+    public long LoopCount => Interlocked.Read(ref _loopCount);
+
+    /// <summary>True depois de um erro fatal: o loop terminou e as saídas caíram.</summary>
+    public bool HasFailed => _failed;
+
     // ── Composition Monitor ao vivo (T17): desligado por padrão, custa um Map(Read)
     // por captura — só liga quando o operador pede, e mesmo assim com throttle. ────
     private bool _compositionMonitorEnabled;
@@ -151,6 +163,7 @@ public sealed class RenderThread : IDisposable
         {
             while (_running)
             {
+                Interlocked.Increment(ref _loopCount);
                 while (_commands.Reader.TryRead(out var command))
                     Handle(command, testScene);
 
@@ -245,6 +258,7 @@ public sealed class RenderThread : IDisposable
         catch (Exception ex)
         {
             Log.Error(ex, "Erro fatal na render thread");
+            _failed = true;
             EngineFailed?.Invoke(ex.Message);
         }
         finally
