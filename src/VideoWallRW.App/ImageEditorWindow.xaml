@@ -76,7 +76,7 @@
           <Path Data="{StaticResource IconBucket}" Fill="{StaticResource Fg}" Width="20" Height="20" Stretch="Uniform" />
         </Button>
         <ToggleButton x:Name="ColorSwatchToggle" Width="44" Height="44" Padding="5" AutomationProperties.Name="Cor selecionada" ToolTip="Cor selecionada — clique pra trocar">
-          <Border Background="{Binding BrushColorHex}" BorderBrush="{StaticResource Fg}" BorderThickness="1" />
+          <Border Width="28" Height="28" Background="{Binding BrushColorHex}" BorderBrush="{StaticResource Fg}" BorderThickness="1" />
         </ToggleButton>
         <Popup IsOpen="{Binding IsChecked, ElementName=ColorSwatchToggle}" PlacementTarget="{Binding ElementName=ColorSwatchToggle}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
                Closed="OnColorPopupClosed">

@@ -208,7 +208,9 @@ public static class ManualContent
                 "Ele **começa sempre desligado** e o PIN **muda a cada vez que liga**.",
                 "Com ele ligado, o botão do topo fica verde e mostra quantos aparelhos estão conectados.",
                 "5 PINs errados bloqueiam o aparelho por 2 minutos. Desligar derruba quem estiver conectado."),
-            new Warning("Se o celular não abrir a página: confira se está na mesma rede e permita o RW VideoWall no Firewall do Windows (redes privadas) — o Windows pergunta na primeira vez.")),
+            new Warning("Se o celular não abrir a página: confira se está na mesma rede e permita o RW VideoWall no Firewall do Windows (redes privadas) — o Windows pergunta na primeira vez."),
+            new Subtitle("Entrada OSC (Companion, TouchOSC)"),
+            new Paragraph("Para controlar por um Stream Deck/Companion ou TouchOSC, ligue **Ferramentas → Entrada OSC (porta 7000)**. Ela **começa desligada** a cada abertura e **não tem senha** — ligue só quando for usar. Os endereços (disparar clipe, coluna, cena, opacidade, master, blackout) estão em `docs/OSC.md`.")),
 
         new("Instalação fixa", "Sequência, horários e pastas monitoradas",
             new Picture("installation.png", "Ferramentas → Instalação"),

@@ -180,8 +180,9 @@ public partial class App : Application
         if (kiosk || resume)
             ResumeSession(vm);
 
+        // OSC também começa DESLIGADO (sem senha): liga em Ferramentas → Entrada OSC.
         _osc = new Input.OscService(_render, vm.ResolveSceneByName);
-        _osc.Start();
+        vm.AttachOsc(_osc);
 
         // Controle remoto começa DESLIGADO: o operador liga pelo botão do topo, que
         // mostra o endereço da máquina e o PIN (antes subia sempre, com o PIN só no log).

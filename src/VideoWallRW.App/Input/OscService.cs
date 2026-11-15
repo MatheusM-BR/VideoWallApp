@@ -11,6 +11,10 @@ namespace VideoWallRW.App.Input;
 /// Entrada OSC (Fase 9 T9.4): escuta UDP e traduz endereços em <see cref="EngineCommand"/>
 /// já existentes — o listener é só mais um produtor da fila do engine (mesma arquitetura
 /// do KeymapService/UI). Endereços documentados em docs/OSC.md.
+///
+/// DESLIGADA por padrão: OSC não tem senha, então qualquer um na rede mandaria blackout.
+/// O operador liga em Ferramentas → "Entrada OSC (porta 7000)" quando for usar
+/// (Companion, TouchOSC…); fechar o programa desliga.
 /// </summary>
 public sealed partial class OscService : IDisposable
 {
@@ -30,19 +34,45 @@ public sealed partial class OscService : IDisposable
         _resolveScene = resolveScene;
     }
 
-    public void Start(int port = 7000)
+    public const int DefaultPort = 7000;
+
+    public bool IsRunning => _client is not null;
+
+    /// <summary>Motivo da última falha ao ligar (porta ocupada etc.), ou null.</summary>
+    public string? LastError { get; private set; }
+
+    public bool Start(int port = DefaultPort)
     {
+        if (_client is not null) return true;
         try
         {
+            LastError = null;
             _client = new UdpClient(port);
             _cts = new CancellationTokenSource();
             _ = Task.Run(() => ListenLoop(_cts.Token));
-            Log.Information("OSC escutando na porta UDP {Port}", port);
+            Log.Information("OSC LIGADO na porta UDP {Port}", port);
+            return true;
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Falha ao iniciar OSC na porta {Port} — entrada OSC desabilitada.", port);
+            _client = null;
+            LastError = ex is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse }
+                ? $"A porta {port} já está em uso por outro programa."
+                : ex.Message;
+            Log.Warning(ex, "Falha ao ligar OSC na porta {Port}", port);
+            return false;
         }
+    }
+
+    public void Stop()
+    {
+        if (_client is null) return;
+        _cts?.Cancel();
+        _client.Dispose();
+        _client = null;
+        _cts?.Dispose();
+        _cts = null;
+        Log.Information("OSC DESLIGADO");
     }
 
     private async Task ListenLoop(CancellationToken ct)
@@ -112,9 +142,5 @@ public sealed partial class OscService : IDisposable
         }
     }
 
-    public void Dispose()
-    {
-        _cts?.Cancel();
-        _client?.Dispose();
-    }
+    public void Dispose() => Stop();
 }

@@ -1,7 +1,8 @@
 # Entrada OSC (Fase 9 T9.4)
 
 O VideoWallRW escuta OSC 1.0 (mensagens simples, sem bundles) em UDP na porta
-**7000** (fixa por enquanto — sem UI de configuração ainda). Útil para TouchOSC,
+**7000** (fixa por enquanto). **Começa DESLIGADO** a cada abertura do programa: ligue
+em **Ferramentas → Entrada OSC (porta 7000)** quando for usar (não há senha). Útil para TouchOSC,
 Bitfocus Companion, ou `oscsend` (liblo).
 
 ## Endereços suportados
@@ -33,6 +34,6 @@ oscsend localhost 7000 /vwrw/blackout i 1
 
 - Sem autenticação — não exponha a porta 7000 fora da LAN confiável.
 - Porta fixa (7000), sem UI para trocar — mudar exige recompilar
-  (`OscService.Start(port: ...)` em `App.xaml.cs`).
+  (`OscService.DefaultPort`).
 - Sem suporte a OSC bundles (`#bundle`), só mensagens simples — suficiente para
   TouchOSC/Companion, que enviam mensagem a mensagem.

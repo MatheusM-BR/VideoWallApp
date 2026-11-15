@@ -426,6 +426,33 @@ public sealed partial class MainViewModel : ObservableObject
             : clients > 0 ? $"Remoto · LIG. ({clients})" : "Remoto · LIG.";
     }
 
+    private Input.OscService? _osc;
+
+    /// <summary>Menu Ferramentas → "Entrada OSC (porta 7000)" (marcável). Desligada ao abrir.</summary>
+    [ObservableProperty] private bool _oscEnabled;
+
+    public void AttachOsc(Input.OscService osc) => _osc = osc;
+
+    partial void OnOscEnabledChanged(bool value)
+    {
+        if (_osc is null) return;
+        if (!value)
+        {
+            _osc.Stop();
+            StatusText = "Entrada OSC desligada.";
+            return;
+        }
+        if (_osc.Start())
+        {
+            StatusText = $"Entrada OSC ligada na porta UDP {Input.OscService.DefaultPort} — sem senha: desligue quando não estiver usando.";
+        }
+        else
+        {
+            StatusText = $"Não foi possível ligar a entrada OSC: {_osc.LastError}";
+            Application.Current?.Dispatcher.BeginInvoke(() => OscEnabled = false);
+        }
+    }
+
     [RelayCommand]
     private void OpenRemoteControl()
     {
