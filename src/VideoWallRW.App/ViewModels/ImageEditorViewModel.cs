@@ -723,14 +723,36 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     /// <summary>
     /// Arquivo salvo: na MESMA pasta da imagem de origem (a pasta do leilão, no caso da
     /// Agenda/PDF), com o nome pela orientação — "16x9 - Edited.png" (paisagem/quadrado)
-    /// ou "9x16 - Edited.png" (retrato). São só esses dois nomes por pasta: salvar de
-    /// novo na mesma orientação substitui a edição anterior daquela pasta.
+    /// ou "9x16 - Edited.png" (retrato). Se já existir, a edição nova entra como
+    /// "16x9 - Edited v2.png", "v3"… — nunca apaga uma edição anterior nem a origem.
+    /// Dentro da MESMA sessão do editor, salvar de novo atualiza o arquivo que esta
+    /// sessão criou (senão cada clique em Salvar / arraste do chip geraria uma versão).
     /// Origem em cache/temporário (não é pasta de operação) → pasta padrão C:\Video Wall.
     /// </summary>
-    public string SaveTargetPath => Path.Combine(SaveFolder(), EditedFileName(Bitmap.Width, Bitmap.Height));
+    public string SaveTargetPath
+    {
+        get
+        {
+            string orientation = Orientation(Bitmap.Width, Bitmap.Height);
+            if (_sessionFiles.TryGetValue(orientation, out var mine)) return mine;
+            string folder = SaveFolder();
+            for (int version = 1; ; version++)
+            {
+                string candidate = Path.Combine(folder, EditedFileName(Bitmap.Width, Bitmap.Height, version));
+                if (!File.Exists(candidate) &&
+                    !string.Equals(Path.GetFullPath(candidate), Path.GetFullPath(_sourcePath), StringComparison.OrdinalIgnoreCase))
+                    return candidate;
+            }
+        }
+    }
 
-    public static string EditedFileName(int width, int height)
-        => (height > width ? "9x16" : "16x9") + " - Edited.png";
+    /// <summary>Arquivos que ESTA sessão do editor já gravou, por orientação.</summary>
+    private readonly Dictionary<string, string> _sessionFiles = [];
+
+    private static string Orientation(int width, int height) => height > width ? "9x16" : "16x9";
+
+    public static string EditedFileName(int width, int height, int version = 1)
+        => Orientation(width, height) + " - Edited" + (version > 1 ? $" v{version}" : "") + ".png";
 
     private string SaveFolder()
     {
@@ -760,6 +782,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
             data.SaveTo(stream);
         if (!ReferenceEquals(composed, Bitmap)) composed.Dispose();
         _lastSavedPath = target;
+        _sessionFiles[Orientation(Bitmap.Width, Bitmap.Height)] = target;
         StatusText = $"Salvo: {target} — arraste o chip \"🖼\" até uma célula da grade";
         // Editando a imagem de uma célula: salvar já atualiza o clip no ar.
         _onSaved?.Invoke(target, Path.GetFileNameWithoutExtension(_sourcePath));

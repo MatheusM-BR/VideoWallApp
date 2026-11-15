@@ -130,8 +130,8 @@ Ferramentas (toolbar vertical à esquerda, estilo Paint):
 - Zoom (Ctrl+scroll, 10%–800%) e pan (espaço+arrastar); fundo quadriculado para
   alpha; barra de status com posição/zoom/tamanho.
 - Salvar: **nunca sobrescreve o original** — grava na pasta da imagem de origem
-  `16x9 - Edited.png` (paisagem) ou `9x16 - Edited.png` (retrato); salvar de novo na
-  mesma orientação substitui. A Biblioteca abre na pasta com o arquivo selecionado. Botões
+  `16x9 - Edited.png` (paisagem) ou `9x16 - Edited.png` (retrato); se já existir,
+  entra como `v2`, `v3`… (na mesma sessão do editor, salvar de novo atualiza o mesmo arquivo). A Biblioteca abre na pasta com o arquivo selecionado. Botões
   **[Salvar] [Salvar e enviar para célula]**.
 - O editor abre qualquer imagem, não só banners (ver T10.6).
 
