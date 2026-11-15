@@ -76,7 +76,10 @@ public sealed class NdiFinder : IDisposable
             for (int i = 0; i < count; i++)
             {
                 string? name = Marshal.PtrToStringUTF8(sources[i].p_ndi_name);
-                if (name is not null) names.Add(name);
+                if (name is null) continue;
+                names.Add(name);
+                // Guarda o endereço: o receptor conecta direto nele, sem refazer a descoberta.
+                NdiReceiverPool.RememberUrl(name, Marshal.PtrToStringUTF8(sources[i].p_url_address));
             }
 
             lock (_lock) { CurrentSources = names; }
@@ -94,6 +97,9 @@ public sealed class NdiFinder : IDisposable
             _find = IntPtr.Zero;
         }
         if (IsAvailable)
+        {
+            NdiReceiverPool.Shutdown(); // receptores precisam fechar antes do NDIlib_destroy
             NdiInterop.NDIlib_destroy();
+        }
     }
 }
