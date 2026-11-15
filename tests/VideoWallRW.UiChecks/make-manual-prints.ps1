@@ -1,4 +1,4 @@
-# Gera os prints do Manual (botão "📖 Manual" do programa) a partir das telas reais,
+﻿# Gera os prints do Manual (botão "📖 Manual" do programa) a partir das telas reais,
 # com dados fictícios — nenhuma saída, projeto ou rede é tocado.
 # Uso (na raiz do repositório, no Windows):  .\tests\VideoWallRW.UiChecks\make-manual-prints.ps1
 # Depois: compile/publique o app de novo — os PNGs vão para a pasta Manual ao lado do exe.
