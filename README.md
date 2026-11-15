@@ -1,9 +1,14 @@
-# RW VideoWall (VideoWallRW)
+# RWVideoWall
 
-Media server para Windows no estilo Resolume Arena, feito para as telas de fundo dos
-estúdios da Remate Web: grade de camadas × colunas, fontes de arquivo (vídeo, imagem,
-HAP), NDI, saída multi-tela com recortes (Advanced Output), autopilot, editor de imagem,
-módulo Agenda (banners de leilão), OSC e controle remoto web.
+Media server para Windows no estilo Resolume Arena, para telas de fundo de estúdio:
+grade de camadas × colunas, fontes de arquivo (vídeo, imagem, HAP), NDI, saída
+multi-tela com recortes (Advanced Output), autopilot, editor de imagem, módulo Agenda
+(banners de eventos), OSC e controle remoto web.
+
+Instalação padrão em `C:\RWVideoWall`. Os nomes internos do código (projetos
+`VideoWallRW.*`, executável `VideoWallRW.App.exe`, pastas de configuração
+`%AppData%\VideoWallRW` e `%LocalAppData%\VideoWallRW`) continuam os mesmos para não
+perder configurações, projetos e atalhos de quem já usa.
 
 Stack: C# / .NET 8, WPF, Direct3D 11 (Vortice), FFmpeg (FFmpeg.AutoGen), NDI, NAudio.
 
@@ -45,7 +50,7 @@ Stack: C# / .NET 8, WPF, Direct3D 11 (Vortice), FFmpeg (FFmpeg.AutoGen), NDI, NA
 dotnet test tests/VideoWallRW.Core.Tests     # testes de núcleo
 dotnet test tests/VideoWallRW.Agenda.Tests   # parser da agenda
 .\publish.ps1                                # build portátil em artifacts\publish\
-.\build-installer.ps1 -Version 1.2.0         # instalador (PowerShell 7 + Inno Setup)
+.\build-installer.ps1 -Version 1.1.0         # instalador RWVideoWall-<versão>-Setup-x64.exe (PowerShell 7 + Inno Setup)
 ```
 
 ## Parâmetros de linha de comando

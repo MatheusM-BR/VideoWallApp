@@ -1,16 +1,16 @@
 # Executed by the elevated installer, before and after copying program files.
 param([switch]$Prepare)
 $ErrorActionPreference = 'Stop'
-$installRoot = [IO.Path]::GetFullPath('C:\VideoWall')
-if ($installRoot -cne 'C:\VideoWall') { throw 'Unexpected installation directory.' }
+$installRoot = [IO.Path]::GetFullPath('C:\RWVideoWall')
+if ($installRoot -cne 'C:\RWVideoWall') { throw 'Unexpected installation directory.' }
 if (Test-Path -LiteralPath $installRoot) {
     $item = Get-Item -LiteralPath $installRoot -Force
     if (!$item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
-        throw 'C:\VideoWall must be a real directory, not a link.'
+        throw 'C:\RWVideoWall must be a real directory, not a link.'
     }
     if ($Prepare -and (Get-ChildItem -LiteralPath $installRoot -Force | Select-Object -First 1) -and
         !(Test-Path -LiteralPath "$installRoot\VideoWallRW.App.exe")) {
-        throw 'C:\VideoWall contains unrelated files. Installation cancelled.'
+        throw 'C:\RWVideoWall contains unrelated files. Installation cancelled.'
     }
 } else {
     New-Item -ItemType Directory -Path $installRoot | Out-Null

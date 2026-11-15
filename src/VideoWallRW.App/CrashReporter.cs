@@ -99,7 +99,7 @@ public static class CrashReporter
 
     private static void AppendHeader(StringBuilder sb, string source)
     {
-        sb.AppendLine("═══ VideoWallRW — Relatório de Crash ═══");
+        sb.AppendLine("═══ RWVideoWall — Relatório de Crash ═══");
         sb.AppendLine($"Quando:    {DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz}");
         sb.AppendLine($"Origem:    {source}");
         sb.AppendLine($"Versão:    {typeof(CrashReporter).Assembly.GetName().Version} " +

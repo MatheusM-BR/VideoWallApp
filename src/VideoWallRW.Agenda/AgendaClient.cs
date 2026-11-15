@@ -24,7 +24,7 @@ public sealed partial class AgendaClient : IDisposable
             BaseAddress = new Uri(baseUrl),
             Timeout = TimeSpan.FromSeconds(30),
         };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("VideoWallRW/1.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("RWVideoWall/1.1");
     }
 
     public async Task<IReadOnlyList<AgendaEvent>> GetEventsAsync(DateOnly date, CancellationToken ct)

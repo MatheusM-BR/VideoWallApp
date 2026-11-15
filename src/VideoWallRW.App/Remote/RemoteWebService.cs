@@ -265,7 +265,7 @@ public sealed class RemoteWebService : IAsyncDisposable
     <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>VideoWallRW — Controle remoto</title>
+    <title>RWVideoWall — Controle remoto</title>
     <style>
       body { font-family: sans-serif; background:#111; color:#eee; margin:0; padding:12px; }
       #pinScreen input { font-size:24px; width:120px; text-align:center; }

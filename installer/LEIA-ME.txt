@@ -1,6 +1,6 @@
-VideoWallApp — versão para Windows 64 bits
+RWVideoWall — versão para Windows 64 bits
 
-Instalação: C:\VideoWall (todos os usuários).
+Instalação: C:\RWVideoWall (todos os usuários).
 O instalador inclui o .NET e as bibliotecas nativas necessárias ao aplicativo.
 Os atalhos e a abertura ao entrar no Windows podem ser escolhidos no instalador.
 A abertura automática inicia o painel; não ativa o modo de retomada automática de saídas.
@@ -11,7 +11,7 @@ Preferências já existentes são preservadas. Salve projetos e mídias em Docum
 uma pasta de trabalho compartilhada, não na pasta do programa.
 Apenas uma sessão pode controlar as saídas e o áudio do computador por vez.
 
-Proteção: usuários comuns têm somente leitura/execução em C:\VideoWall.
+Proteção: usuários comuns têm somente leitura/execução em C:\RWVideoWall.
 Os arquivos distribuídos são verificados por SHA-256 e um inventário assinado com RSA.
 Se a verificação falhar, reinstale usando o pacote original.
 Isso não é criptografia do código nem impede um administrador de substituir o programa.

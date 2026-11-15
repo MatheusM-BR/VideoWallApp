@@ -103,7 +103,7 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private string _statusText = "Pronto — marque um monitor para ativar a saída.";
     [ObservableProperty] private double _masterFader = 1.0;
     [ObservableProperty] private bool _blackout;
-    [ObservableProperty] private string _windowTitle = "RW VideoWall — Novo projeto";
+    [ObservableProperty] private string _windowTitle = "RWVideoWall — Novo projeto";
     [ObservableProperty] private bool _sequencerRunning;
 
     /// <summary>Autopilot global: liga/desliga o autopilot de TODAS as layers de uma
@@ -663,7 +663,7 @@ public sealed partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             MessageBox.Show($"Falha ao abrir '{dlg.FileName}':\n{ex.Message}",
-                "VideoWallRW", MessageBoxButton.OK, MessageBoxImage.Error);
+                "RWVideoWall", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -824,7 +824,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Falha ao salvar:\n{ex.Message}", "VideoWallRW", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Falha ao salvar:\n{ex.Message}", "RWVideoWall", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -902,7 +902,7 @@ public sealed partial class MainViewModel : ObservableObject
     private bool ConfirmDiscardChanges()
     {
         if (!_isDirty) return true;
-        var result = MessageBox.Show("Há mudanças não salvas. Descartar?", "VideoWallRW",
+        var result = MessageBox.Show("Há mudanças não salvas. Descartar?", "RWVideoWall",
             MessageBoxButton.YesNo, MessageBoxImage.Warning);
         return result == MessageBoxResult.Yes;
     }
@@ -916,7 +916,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void UpdateWindowTitle()
     {
         string name = _currentProjectPath is null ? "Novo projeto" : Path.GetFileName(_currentProjectPath);
-        WindowTitle = $"RW VideoWall — {name}{(_isDirty ? " *" : "")}";
+        WindowTitle = $"RWVideoWall — {name}{(_isDirty ? " *" : "")}";
     }
 
     public bool CanCloseWithoutPrompt() => !_isDirty || ConfirmDiscardChanges();
@@ -1052,7 +1052,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     private void RemoveSceneInternal(SceneViewModel scene)
     {
-        var confirm = MessageBox.Show($"Excluir a cena \"{scene.Name}\"?", "VideoWallRW",
+        var confirm = MessageBox.Show($"Excluir a cena \"{scene.Name}\"?", "RWVideoWall",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes)
             return;

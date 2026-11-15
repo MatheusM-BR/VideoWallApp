@@ -22,7 +22,7 @@ public sealed class OutputWindow : IDisposable
     {
         Monitor = monitor;
         RegisterWindowClassOnce();
-        Hwnd = CreateWindowExW(0, WindowClassName, $"VideoWallRW — {monitor.DeviceName}",
+        Hwnd = CreateWindowExW(0, WindowClassName, $"RWVideoWall — {monitor.DeviceName}",
             WS_POPUP, monitor.X, monitor.Y, monitor.Width, monitor.Height,
             0, 0, GetModuleHandleW(null), 0);
         if (Hwnd == 0)

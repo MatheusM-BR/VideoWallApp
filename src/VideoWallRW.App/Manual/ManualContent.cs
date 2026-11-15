@@ -23,7 +23,7 @@ public static class ManualContent
     public static IReadOnlyList<ManualSection> Sections { get; } =
     [
         new("Visão geral", "O que é cada parte da tela principal",
-            new Paragraph("O RW VideoWall coloca vídeos, imagens e câmeras NDI nos telões do estúdio. A tela principal é dividida em blocos que ficam sempre no mesmo lugar:"),
+            new Paragraph("O RWVideoWall coloca vídeos, imagens e câmeras NDI nos telões do estúdio. A tela principal é dividida em blocos que ficam sempre no mesmo lugar:"),
             new Picture("home.png", "Tela principal (dados de demonstração)"),
             new Bullets(
                 "**Topo** — menus Arquivo e Ferramentas, Agenda, Sequência, **📖 Manual**, **📡 Controle remoto**; à direita, o controle **SAÍDA** (intensidade geral), **AUTO** (troca automática) e **BLACKOUT**.",
@@ -105,7 +105,7 @@ public static class ManualContent
                 "**Fontes / NDI** lista as câmeras e computadores que transmitem NDI na rede. Arraste para a grade ou dê duplo-clique.",
                 "**Recentes** guarda as últimas mídias usadas."),
             new Tip("A conexão NDI fica aberta por 90 segundos depois que a câmera sai do ar: voltar para ela (inclusive pelo AUTO) é instantâneo. Enquanto está no telão, o tally da câmera acende."),
-            new Warning("Se uma fonte NDI não aparece: confira se o computador está na mesma rede da câmera e se o Firewall do Windows permite o RW VideoWall.")),
+            new Warning("Se uma fonte NDI não aparece: confira se o computador está na mesma rede da câmera e se o Firewall do Windows permite o RWVideoWall.")),
 
         new("Telões e saídas", "Ligar telas e mapear recortes",
             new Paragraph("Na régua **Saídas** (rodapé), marque a tela para ligar e escolha a origem (composição inteira ou uma camada). **↻** atualiza a lista de monitores."),
@@ -208,7 +208,7 @@ public static class ManualContent
                 "Ele **começa sempre desligado** e o PIN **muda a cada vez que liga**.",
                 "Com ele ligado, o botão do topo fica verde e mostra quantos aparelhos estão conectados.",
                 "5 PINs errados bloqueiam o aparelho por 2 minutos. Desligar derruba quem estiver conectado."),
-            new Warning("Se o celular não abrir a página: confira se está na mesma rede e permita o RW VideoWall no Firewall do Windows (redes privadas) — o Windows pergunta na primeira vez."),
+            new Warning("Se o celular não abrir a página: confira se está na mesma rede e permita o RWVideoWall no Firewall do Windows (redes privadas) — o Windows pergunta na primeira vez."),
             new Subtitle("Entrada OSC (Companion, TouchOSC)"),
             new Paragraph("Para controlar por um Stream Deck/Companion ou TouchOSC, ligue **Ferramentas → Entrada OSC (porta 7000)**. Ela **começa desligada** a cada abertura e **não tem senha** — ligue só quando for usar. Os endereços (disparar clipe, coluna, cena, opacidade, master, blackout) estão em `docs/OSC.md`.")),
 

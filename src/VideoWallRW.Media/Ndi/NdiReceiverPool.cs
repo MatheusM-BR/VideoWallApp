@@ -126,7 +126,7 @@ internal sealed unsafe class NdiReceiver
         // ficava esperando pra sempre, sem erro nenhum.
         IntPtr namePtr = Marshal.StringToCoTaskMemUTF8(sourceName);
         IntPtr urlPtr = url is null ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(url);
-        IntPtr recvNamePtr = Marshal.StringToCoTaskMemUTF8("VideoWallRW");
+        IntPtr recvNamePtr = Marshal.StringToCoTaskMemUTF8("RWVideoWall");
         try
         {
             var settings = new NdiInterop.recv_create_v3_t

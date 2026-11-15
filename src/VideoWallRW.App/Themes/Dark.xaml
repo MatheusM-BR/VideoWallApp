@@ -28,7 +28,7 @@
     <Setter Property="Background" Value="{StaticResource Bg}" />
     <Setter Property="Foreground" Value="{StaticResource Fg}" />
     <Setter Property="UseLayoutRounding" Value="True" />
-    <!-- Ícone (logo RW VideoWall) em toda janela do app de uma vez, sem editar as
+    <!-- Ícone (logo do RWVideoWall) em toda janela do app de uma vez, sem editar as
          11 janelas uma a uma — estilo implícito por TargetType. -->
     <Setter Property="Icon" Value="pack://application:,,,/Assets/AppIcon.ico" />
   </Style>

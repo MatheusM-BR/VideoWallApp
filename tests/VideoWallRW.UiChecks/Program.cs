@@ -51,7 +51,6 @@ internal static class Program
         app.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Parse(theme));
         app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/VideoWallRW.App;component/Themes/Auxiliary.xaml", UriKind.Relative) });
         app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/VideoWallRW.App;component/Assets/Brand.xaml", UriKind.Relative) });
-        app.Resources["BrandMark"] = NeutralDemo.BrandMark(); // prints neutros: sem o logo da empresa
         var assembly = typeof(VideoWallRW.App.MainWindow).Assembly;
         foreach (var name in new[] { "IdentifyLabelConverter", "OperationLabelConverter", "NullToVisibilityConverter", "NotNullToVisibilityConverter", "EnumBoolConverter", "IncrementConverter", "InverseBoolConverter", "InverseBoolToVisibilityConverter", "FileNameConverter", "ResizeModeLabelConverter", "ClipBaseDimensionConverter", "ZeroToVisibilityConverter" })
             app.Resources[name] = Activator.CreateInstance(assembly.GetType($"VideoWallRW.App.{name}")!);
@@ -117,7 +116,7 @@ internal static class Program
         grid.CanUndoGrid = false; grid.RecentSources = new[] { "Evento 1.mp4", "Cenário A.png" };
         grid.PlayModes = Enum.GetValues<VideoWallRW.Core.Model.PlayMode>(); grid.AutopilotActions = Enum.GetValues<VideoWallRW.Core.Model.AutopilotAction>();
         grid.BlendModes = Enum.GetValues<VideoWallRW.Core.Model.BlendMode>(); grid.ResizeModes = Enum.GetValues<VideoWallRW.Core.Model.ResizeMode>();
-        fixture.Grid = grid; fixture.WindowTitle = "VideoWallRW — Demonstração do layout"; fixture.Blackout = false; fixture.MasterFader = 1.0; fixture.AutopilotAll = true;
+        fixture.Grid = grid; fixture.WindowTitle = "RWVideoWall — Demonstração do layout"; fixture.Blackout = false; fixture.MasterFader = 1.0; fixture.AutopilotAll = true;
         fixture.SequencerRunning = false; fixture.RemoteRunning = false; fixture.OscEnabled = false; fixture.RemoteButtonText = "Controle remoto"; fixture.CompositionMonitorEnabled = false; fixture.CompositionMonitorBitmap = null; fixture.ActiveClipThumbnailPath = pictures[0]; fixture.ShowMonitorPlaceholderText = false;
         fixture.ShowSourcesTab = false; fixture.NdiAvailable = false; fixture.NdiUnavailableReason = "Nenhuma fonte conectada nesta demonstração."; fixture.NdiSources = Array.Empty<string>();
         fixture.StatusText = "DEMONSTRAÇÃO DO LAYOUT  ·  Dados fictícios; nenhuma saída conectada";

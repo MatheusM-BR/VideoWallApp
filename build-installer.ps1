@@ -55,7 +55,7 @@ try {
     & $Compiler /Qp "/DPayloadDir=$payload" "/DInstallerOutput=$setupDir" "/DReleaseVersion=$Version" `
         "$PSScriptRoot/installer/VideoWallRW.iss"
     if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
-    $installer = Join-Path $setupDir "VideoWallApp-$Version-Setup-x64.exe"
+    $installer = Join-Path $setupDir "RWVideoWall-$Version-Setup-x64.exe"
     $checksum = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
     [IO.File]::WriteAllText("$installer.sha256", "$checksum  $([IO.Path]::GetFileName($installer))`n")
     [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'artifacts/releases/latest.json'),

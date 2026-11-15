@@ -32,6 +32,8 @@
          via pack URI no Icon="" de cada janela, além de virar o ícone do .exe (acima). -->
     <Resource Include="Assets\AppIcon.ico" />
     <Resource Include="Assets\AppIcon.png" />
+    <Resource Include="Assets\BrandMark.png" />
+    <Resource Include="Assets\BrandLogo.png" />
   </ItemGroup>
 
   <ItemGroup>

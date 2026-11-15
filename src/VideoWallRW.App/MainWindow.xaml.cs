@@ -189,7 +189,7 @@ public partial class MainWindow : Window
     {
         if (ColumnFromMenu(sender) is not { } col) return;
         var confirm = MessageBox.Show($"Remover a coluna {col + 1} inteira (todas as layers)?",
-            "VideoWallRW", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            "RWVideoWall", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm == MessageBoxResult.Yes)
             _vm.Grid.RemoveColumn(col);
     }

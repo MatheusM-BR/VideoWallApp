@@ -34,7 +34,7 @@ public partial class App : Application
         if (integrityError is not null || verifyOnly)
         {
             if (integrityError is not null && !verifyOnly)
-                MessageBox.Show(integrityError, "RW VideoWall — integridade", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show(integrityError, "RWVideoWall — integridade", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(integrityError is null ? 0 : 10);
             return;
         }
@@ -77,9 +77,9 @@ public partial class App : Application
         {
             if (!e.Args.Contains("--startup", StringComparer.OrdinalIgnoreCase))
                 MessageBox.Show(
-                    "O RW VideoWall já está aberto neste computador, possivelmente em outra sessão do Windows.\n" +
+                    "O RWVideoWall já está aberto neste computador, possivelmente em outra sessão do Windows.\n" +
                     "Use a instância existente para evitar conflito nas saídas e no áudio.",
-                    "RW VideoWall", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    "RWVideoWall", MessageBoxButton.OK, MessageBoxImage.Warning);
             Shutdown(0);
             return;
         }
@@ -109,7 +109,7 @@ public partial class App : Application
                 rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
             .WriteTo.Debug()
             .CreateLogger();
-        Log.Information("VideoWallRW iniciando");
+        Log.Information("RWVideoWall iniciando");
 
         // Inicializar FFmpeg — DLLs ficam na mesma pasta do exe (copiadas pelo csproj).
         try
@@ -122,7 +122,7 @@ public partial class App : Application
             MessageBox.Show(
                 $"Não foi possível inicializar o FFmpeg.\n" +
                 $"Verifique se as DLLs estão em:\n{AppContext.BaseDirectory}\n\nErro: {ex.Message}",
-                "VideoWallRW", MessageBoxButton.OK, MessageBoxImage.Error);
+                "RWVideoWall", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
             return;
         }
@@ -135,7 +135,7 @@ public partial class App : Application
         {
             Log.Fatal(ex, "Falha ao criar o device D3D11");
             MessageBox.Show($"Falha ao inicializar o Direct3D 11:\n{ex.Message}",
-                "VideoWallRW", MessageBoxButton.OK, MessageBoxImage.Error);
+                "RWVideoWall", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown(1);
             return;
         }
@@ -327,7 +327,7 @@ public partial class App : Application
             MessageBox.Show(
                 $"Ocorreu um erro inesperado, mas o programa continua rodando:\n{e.Exception.Message}\n\n" +
                 "Se algo parecer errado na grade, salve o projeto e reabra pra garantir.",
-                "VideoWallRW — erro recuperado", MessageBoxButton.OK, MessageBoxImage.Warning);
+                "RWVideoWall — erro recuperado", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         catch { /* nem o aviso pode derrubar o handler */ }
         e.Handled = true;
@@ -346,7 +346,7 @@ public partial class App : Application
         _ndiFinder?.Dispose();
         if (_sessionStarted)
             AutosaveService.MarkSessionClean();
-        Log.Information("VideoWallRW encerrado");
+        Log.Information("RWVideoWall encerrado");
         Log.CloseAndFlush();
     }
 }

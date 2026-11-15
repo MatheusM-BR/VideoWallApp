@@ -25,8 +25,8 @@
     <Border Grid.Row="0" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="10,8" Margin="0,0,0,6">
       <DockPanel>
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Margin="0,0,14,0" VerticalAlignment="Center">
-          <Image Source="{StaticResource BrandMark}" Width="32" Height="32" Margin="0,0,8,0" AutomationProperties.Name="Remate Web" />
-          <StackPanel><TextBlock Text="RW VideoWall" FontSize="15" FontWeight="SemiBold" /><TextBlock Text="REMATE WEB" FontSize="11" Foreground="{StaticResource FgDim}" /></StackPanel>
+          <Image Source="{StaticResource BrandLogo}" Height="34" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"
+                 AutomationProperties.Name="RWVideoWall" ToolTip="RWVideoWall" />
 
         </StackPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
@@ -69,7 +69,7 @@
           <Button Content="Agenda" Command="{Binding OpenAgendaCommand}" Margin="0,0,4,0" />
           <ToggleButton AutomationProperties.Name="Sequenciador de colunas configurado em Instalação" Content="Sequência" IsChecked="{Binding SequencerRunning}" ToolTip="Sequenciador de colunas configurado em Instalação" Margin="0,0,14,0" />
           <Button Content="📖 Manual" Command="{Binding OpenHelpCommand}" Margin="0,0,4,0" Padding="10,5"
-                  ToolTip="Manual completo do RW VideoWall, com imagens" AutomationProperties.Name="Abrir o manual" />
+                  ToolTip="Manual completo do RWVideoWall, com imagens" AutomationProperties.Name="Abrir o manual" />
           <Button Command="{Binding OpenRemoteControlCommand}" Padding="10,5"
                   ToolTip="Operar o telão pelo celular/tablet na mesma rede — mostra o endereço e o PIN" AutomationProperties.Name="Controle remoto">
             <Button.Style><Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}"><Style.Triggers>
