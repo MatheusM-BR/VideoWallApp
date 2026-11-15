@@ -1,0 +1,81 @@
+<Window x:Class="VideoWallRW.App.RemoteControlWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Controle remoto — RW VideoWall" Width="620" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" FontFamily="Segoe UI" FontSize="12"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Fg}">
+  <Window.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Themes/Auxiliary.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Window.Resources>
+  <StackPanel Margin="14">
+    <Border Style="{StaticResource SurfacePanel}" Padding="14,12" Margin="0,0,0,10">
+      <DockPanel>
+        <Border x:Name="StatusPill" DockPanel.Dock="Right" CornerRadius="10" Padding="10,3" VerticalAlignment="Center" Background="{StaticResource CellBg}">
+          <TextBlock x:Name="StatusText" Text="DESLIGADO" FontWeight="SemiBold" FontSize="11" />
+        </Border>
+        <StackPanel>
+          <TextBlock Text="Controle remoto" Style="{StaticResource PageTitle}" />
+          <TextBlock Text="Opere o telão pelo navegador do celular, tablet ou outro computador" Foreground="{StaticResource FgDim}" Margin="0,4,0,0" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Border Style="{StaticResource SurfacePanel}" Padding="14,12" Margin="0,0,0,10">
+      <StackPanel>
+        <TextBlock Text="O QUE É" Style="{StaticResource SectionTitle}" Margin="0,0,0,6" />
+        <TextBlock TextWrapping="Wrap" LineHeight="18">
+          Com o controle remoto ligado, qualquer aparelho <Bold>na mesma rede desta máquina</Bold> abre uma página
+          com a grade de camadas e consegue <Bold>disparar clipes, colunas e cenas</Bold>, ajustar a
+          <Bold>opacidade das camadas</Bold> e o <Bold>master</Bold>, e dar <Bold>BLACKOUT</Bold> — sem estar no
+          computador do estúdio. Útil pra operar de longe do switcher ou do palco.
+        </TextBlock>
+        <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" FontSize="11" Margin="0,8,0,0">
+          Ele começa sempre DESLIGADO. Ligue só quando for usar: com ele ligado, quem estiver na rede e souber o PIN mexe no telão.
+        </TextBlock>
+      </StackPanel>
+    </Border>
+
+    <Border Style="{StaticResource SurfacePanel}" Padding="14,12" Margin="0,0,0,10">
+      <StackPanel>
+        <TextBlock Text="COMO CONECTAR" Style="{StaticResource SectionTitle}" Margin="0,0,0,8" />
+        <TextBlock Text="1. Conecte o celular/tablet na MESMA rede (Wi-Fi ou cabo) deste computador." TextWrapping="Wrap" Margin="0,0,0,8" />
+        <TextBlock Text="2. Abra o navegador e digite o endereço:" Margin="0,0,0,4" />
+        <ItemsControl x:Name="AddressList" Margin="0,0,0,4">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <DockPanel Margin="0,0,0,4">
+                <Button DockPanel.Dock="Right" Content="Copiar" Click="OnCopyAddress" Tag="{Binding Url}" Padding="10,4" Margin="6,0,0,0"
+                        AutomationProperties.Name="Copiar endereço" />
+                <TextBlock DockPanel.Dock="Right" Text="{Binding InterfaceName}" Foreground="{StaticResource FgDim}" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0" />
+                <TextBox Text="{Binding Url, Mode=OneWay}" IsReadOnly="True" FontSize="20" FontWeight="SemiBold" FontFamily="Consolas" Padding="6,4" />
+              </DockPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="NoAddressText" Text="Nenhuma rede ativa encontrada nesta máquina." Foreground="{StaticResource DangerText}" Visibility="Collapsed" Margin="0,0,0,4" />
+        <TextBlock Text="3. Digite o PIN na página:" Margin="0,6,0,4" />
+        <Border Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="12,8" HorizontalAlignment="Left">
+          <TextBlock x:Name="PinText" Text="— — — — — —" FontSize="34" FontWeight="Bold" FontFamily="Consolas" />
+        </Border>
+        <TextBlock x:Name="PinHint" Text="O PIN aparece quando o controle é ligado — e muda a cada vez que liga." Foreground="{StaticResource FgDim}" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0" />
+      </StackPanel>
+    </Border>
+
+    <TextBlock x:Name="ErrorText" Foreground="{StaticResource DangerText}" TextWrapping="Wrap" Margin="2,0,2,10" Visibility="Collapsed" />
+
+    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" FontSize="11" Margin="2,0,2,12">
+      Segurança: 5 PINs errados bloqueiam o aparelho por 2 minutos. Desligar derruba quem estiver conectado.
+      Se o celular não abrir a página, o Firewall do Windows pode estar bloqueando: na primeira vez que ligar,
+      o Windows pergunta — permita em <Bold>redes privadas</Bold>.
+    </TextBlock>
+
+    <DockPanel>
+      <Button DockPanel.Dock="Right" Content="Fechar" IsCancel="True" Padding="16,8" Margin="8,0,0,0" />
+      <Button x:Name="ToggleButton" Content="Ligar controle remoto" Click="OnToggle" Style="{StaticResource PrimaryAction}" Padding="16,10" FontSize="13" />
+    </DockPanel>
+  </StackPanel>
+</Window>

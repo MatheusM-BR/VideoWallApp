@@ -183,8 +183,10 @@ public partial class App : Application
         _osc = new Input.OscService(_render, vm.ResolveSceneByName);
         _osc.Start();
 
+        // Controle remoto começa DESLIGADO: o operador liga pelo botão do topo, que
+        // mostra o endereço da máquina e o PIN (antes subia sempre, com o PIN só no log).
         _remoteWeb = new Remote.RemoteWebService(_render, vm.BuildRemoteSnapshot);
-        _ = _remoteWeb.StartAsync();
+        vm.AttachRemote(_remoteWeb);
 
         var window = new MainWindow(vm);
         MainWindow = window;

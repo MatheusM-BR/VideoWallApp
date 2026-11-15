@@ -16,8 +16,11 @@ namespace VideoWallRW.App.Remote;
 /// Controle remoto web (Fase 9 T9.5): Kestrel embutido serve uma página única
 /// (HTML+JS vanilla) que troca estado/comandos por WebSocket. Reusa exatamente os
 /// mesmos <see cref="EngineCommand"/> que a UI local usa — o navegador é só mais um
-/// produtor da fila do engine. PIN de 6 dígitos gerado por sessão (vai pro log);
-/// sem PIN configurável na UI ainda (backlog). Tentativas erradas são limitadas por IP
+/// produtor da fila do engine.
+///
+/// DESLIGADO por padrão: só sobe quando o operador liga na janela "Controle remoto"
+/// (botão no topo da tela principal), que mostra o endereço da máquina e o PIN. Cada
+/// vez que liga, sorteia um PIN novo de 6 dígitos; desligar derruba quem estiver conectado. Tentativas erradas são limitadas por IP
 /// (<see cref="MaxFailedAttempts"/> erros → bloqueio de <see cref="LockoutDuration"/>):
 /// sem isso, as combinações do PIN saíam por força bruta em segundos pelo WebSocket.
 /// </summary>
@@ -25,42 +28,95 @@ public sealed class RemoteWebService : IAsyncDisposable
 {
     private readonly RenderThread _render;
     private readonly Func<object> _stateSnapshot;
-    private readonly string _pin;
     private WebApplication? _app;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private int _clients;
 
     internal const int MaxFailedAttempts = 5;
     internal static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan FailedAttemptDelay = TimeSpan.FromSeconds(1);
     private readonly PinAttemptLimiter _limiter = new(MaxFailedAttempts, LockoutDuration);
 
-    public string Pin => _pin;
+    public const int DefaultPort = 8080;
+
+    /// <summary>PIN da sessão atual (troca a cada vez que o controle é ligado).</summary>
+    public string Pin { get; private set; } = "";
+    public int Port { get; private set; } = DefaultPort;
+    public bool IsRunning => _app is not null;
+    /// <summary>Motivo da última falha ao ligar (porta ocupada etc.), ou null.</summary>
+    public string? LastError { get; private set; }
+    /// <summary>Navegadores conectados e autenticados agora.</summary>
+    public int ConnectedClients => Volatile.Read(ref _clients);
+
+    /// <summary>Ligou, desligou, conectou ou desconectou alguém. Pode vir de qualquer thread.</summary>
+    public event Action? StateChanged;
 
     public RemoteWebService(RenderThread render, Func<object> stateSnapshot)
     {
         _render = render;
         _stateSnapshot = stateSnapshot;
-        _pin = System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
     }
 
-    public async Task StartAsync(int port = 8080)
+    public async Task<bool> StartAsync(int port = DefaultPort)
     {
+        await _gate.WaitAsync();
         try
         {
+            if (_app is not null) return true;
+            LastError = null;
+            Pin = System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+            Port = port;
             var builder = WebApplication.CreateBuilder();
             builder.Logging.ClearProviders();
             builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
-            _app = builder.Build();
-            _app.UseWebSockets();
+            var app = builder.Build();
+            app.UseWebSockets();
 
-            _app.MapGet("/", () => Results.Content(Page, "text/html; charset=utf-8"));
-            _app.Map("/ws", HandleWebSocket);
+            app.MapGet("/", () => Results.Content(Page, "text/html; charset=utf-8"));
+            app.Map("/ws", HandleWebSocket);
 
-            await _app.StartAsync();
-            Log.Information("Controle remoto web em http://<ip-da-maquina>:{Port}  PIN: {Pin}", port, _pin);
+            await app.StartAsync();
+            _app = app;
+            Log.Information("Controle remoto web LIGADO em http://<ip-da-maquina>:{Port}", port);
+            return true;
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Falha ao iniciar o controle remoto web na porta {Port} — desabilitado.", port);
+            LastError = ex is System.IO.IOException || ex.InnerException is System.Net.Sockets.SocketException
+                ? $"A porta {port} já está em uso por outro programa."
+                : ex.Message;
+            Log.Warning(ex, "Falha ao ligar o controle remoto web na porta {Port}", port);
+            return false;
+        }
+        finally
+        {
+            _gate.Release();
+            StateChanged?.Invoke();
+        }
+    }
+
+    public async Task StopAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            if (_app is null) return;
+            var app = _app;
+            _app = null;
+            using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                await app.StopAsync(timeout.Token);
+            await app.DisposeAsync();
+            Interlocked.Exchange(ref _clients, 0);
+            Log.Information("Controle remoto web DESLIGADO");
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Erro ao desligar o controle remoto web");
+        }
+        finally
+        {
+            _gate.Release();
+            StateChanged?.Invoke();
         }
     }
 
@@ -102,6 +158,11 @@ public sealed class RemoteWebService : IAsyncDisposable
                     bool ok = TryAuthenticate(text, clientKey, out bool locked);
                     if (!ok) await Task.Delay(FailedAttemptDelay); // freia tentativa em série
                     authenticated = ok;
+                    if (ok)
+                    {
+                        Interlocked.Increment(ref _clients);
+                        StateChanged?.Invoke();
+                    }
                     var reply = JsonSerializer.Serialize(new { type = "auth", ok, locked });
                     await socket.SendAsync(Encoding.UTF8.GetBytes(reply), WebSocketMessageType.Text, true, CancellationToken.None);
                     continue;
@@ -114,6 +175,9 @@ public sealed class RemoteWebService : IAsyncDisposable
         {
             pushTimer.Dispose();
             await pushTask;
+            if (authenticated && Interlocked.Decrement(ref _clients) < 0)
+                Interlocked.Exchange(ref _clients, 0);
+            if (authenticated) StateChanged?.Invoke();
         }
     }
 
@@ -133,7 +197,7 @@ public sealed class RemoteWebService : IAsyncDisposable
         catch (JsonException) { }
 
         bool ok = value is not null && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-            Encoding.UTF8.GetBytes(value), Encoding.UTF8.GetBytes(_pin));
+            Encoding.UTF8.GetBytes(value), Encoding.UTF8.GetBytes(Pin));
         if (ok)
         {
             _limiter.Reset(clientKey);
@@ -193,11 +257,7 @@ public sealed class RemoteWebService : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        if (_app is not null)
-            await _app.StopAsync();
-    }
+    public async ValueTask DisposeAsync() => await StopAsync();
 
     private const string Page = """
     <!doctype html>

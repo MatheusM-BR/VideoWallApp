@@ -1,14 +1,19 @@
 # Controle remoto web (Fase 9 T9.5)
 
-O app sobe um servidor Kestrel embutido em `http://<ip-da-máquina>:8080` — sem
-instalação, sem app separado. Um celular/tablet na mesma rede acessa essa URL pelo
-navegador e vê a grade em tempo real (nomes de layer/coluna, sem thumbs).
+Um servidor Kestrel embutido em `http://<ip-da-máquina>:8080` — sem instalação, sem
+app separado. Um celular/tablet na mesma rede acessa essa URL pelo navegador e vê a
+grade em tempo real (nomes de layer/coluna, sem thumbs).
+
+**Começa sempre DESLIGADO.** O operador liga no botão **📡 Controle remoto** do topo
+da tela principal (ou Ferramentas → Controle remoto). A janela explica o recurso,
+mostra o endereço desta máquina em cada rede ativa (com botão Copiar) e o PIN, e tem
+o botão Ligar/Desligar. Ligado, o botão do topo fica verde e mostra quantos aparelhos
+estão conectados. Desligar derruba as conexões.
 
 ## PIN
 
-Um PIN de 6 dígitos é sorteado a cada início do app e fica no log
-(`%LocalAppData%\VideoWallRW\logs\app-*.log`, linha "Controle remoto web em...").
-Ainda não é configurável pela UI (backlog) — reiniciar o app troca o PIN.
+Um PIN de 6 dígitos é sorteado **cada vez que o controle é ligado** e aparece na
+janela do Controle remoto. Ainda não é configurável.
 
 PIN errado 5 vezes seguidas bloqueia aquele IP por 2 minutos (e cada erro
 espera 1s antes da resposta), pra que o PIN não saia por força bruta.
