@@ -29,12 +29,16 @@ public partial class ImageEditorWindow : Window
     private CropDragMode _cropMode;
     private SKPoint _cropAnchor; // Resize: canto oposto fixo · Move: offset do clique ao canto sup-esq.
 
-    // Mesma interação do quadro de corte, aplicada à forma: depois de desenhada ela
-    // fica pendente (editável) até "Concluir forma" — arrastar um canto redimensiona,
-    // arrastar por dentro move, fora dela começa uma forma nova.
-    private enum ShapeDragMode { None, Create, Move, Resize }
-    private ShapeDragMode _shapeMode;
-    private SKPoint _shapeAnchor;
+    // Forma/texto: arrastar fora da camada selecionada desenha a forma (ou a caixa do
+    // texto) e, ao SOLTAR o clique, ela já vira camada — sem passo de "concluir".
+    // Por cima de uma camada, o mesmo arraste move/redimensiona como na ferramenta Camadas.
+    private bool _creatingShape;
+    private SKRect? _liveTextBox;
+    private SKPoint _textBoxStart;
+
+    // Ímãs: guias ativas no momento (coordenadas da imagem), desenhadas durante o arraste.
+    private readonly List<float> _snapGuidesX = [];
+    private readonly List<float> _snapGuidesY = [];
 
     // Guias de redimensionar a TELA (estilo Paint): direita, inferior e canto.
     private enum CanvasHandle { None, N, S, E, W, NE, NW, SE, SW }
@@ -63,6 +67,8 @@ public partial class ImageEditorWindow : Window
         {
             if (e.PropertyName == nameof(ImageEditorViewModel.Tool))
                 Dispatcher.Invoke(InitializeToolOverlay);
+            else if (e.PropertyName == nameof(ImageEditorViewModel.SnapEnabled))
+                Dispatcher.Invoke(Canvas.InvalidateVisual);
             else if (e.PropertyName == nameof(ImageEditorViewModel.SelectedPreset))
                 Dispatcher.Invoke(RefreshCropForSettings);
         };
@@ -72,6 +78,17 @@ public partial class ImageEditorWindow : Window
     {
         if (sender is Button { DataContext: string hex })
             _vm.SetColorHex(hex);
+        ColorSwatchToggle.IsChecked = false; // escolheu no popup da barra superior: fecha
+    }
+
+    private void OnColorPopupClosed(object? sender, EventArgs e) => ColorSwatchToggle.IsChecked = false;
+
+    /// <summary>Conta-gotas / balde direto da barra superior.</summary>
+    private void OnQuickToolClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: EditorTool tool })
+            _vm.Tool = tool;
+        Canvas.InvalidateVisual();
     }
 
     private void OnEditorCategoryClick(object sender, RoutedEventArgs e)
@@ -104,6 +121,10 @@ public partial class ImageEditorWindow : Window
                 UpdateTelaFields();
             }
         }
+        _creatingShape = false;
+        _liveShape = null;
+        _liveTextBox = null;
+        UpdateApplyCanvasState();
         Canvas.InvalidateVisual();
     }
 
@@ -223,7 +244,7 @@ public partial class ImageEditorWindow : Window
                 BeginCanvasDrag(pt);
                 break;
             case EditorTool.Layers:
-                BeginLayerDrag(pt);
+                BeginLayerDrag(pt, null);
                 break;
             case EditorTool.Brush:
             case EditorTool.Eraser:
@@ -237,10 +258,18 @@ public partial class ImageEditorWindow : Window
                 _vm.FloodFillAt(pt);
                 break;
             case EditorTool.Shape:
-                BeginShapeDrag(pt);
+                if (!BeginLayerDrag(pt, EditorLayerKind.Shape, createOutside: true))
+                {
+                    _creatingShape = true;
+                    _liveShape = (pt, pt);
+                }
                 break;
             case EditorTool.Text:
-                _vm.ApplyText(pt);
+                if (!BeginLayerDrag(pt, EditorLayerKind.Text, createOutside: true))
+                {
+                    _textBoxStart = pt;
+                    _liveTextBox = new SKRect(pt.X, pt.Y, pt.X, pt.Y);
+                }
                 break;
         }
         Canvas.CaptureMouse();
@@ -267,7 +296,7 @@ public partial class ImageEditorWindow : Window
             ContinueCanvasDrag(pt);
             Canvas.InvalidateVisual();
         }
-        else if (_vm.Tool == EditorTool.Layers && _layerDrag != LayerDragMode.None)
+        else if (_layerDrag != LayerDragMode.None)
         {
             ContinueLayerDrag(pt);
             Canvas.InvalidateVisual();
@@ -278,9 +307,15 @@ public partial class ImageEditorWindow : Window
             _lastPaintPoint = pt;
             Canvas.InvalidateVisual();
         }
-        else if (_vm.Tool == EditorTool.Shape && _shapeMode != ShapeDragMode.None)
+        else if (_vm.Tool == EditorTool.Shape && _creatingShape && _liveShape is { } s)
         {
-            ContinueShapeDrag(pt);
+            _liveShape = (s.A, pt);
+            Canvas.InvalidateVisual();
+        }
+        else if (_vm.Tool == EditorTool.Text && _liveTextBox is not null)
+        {
+            _liveTextBox = new SKRect(Math.Min(_textBoxStart.X, pt.X), Math.Min(_textBoxStart.Y, pt.Y),
+                Math.Max(_textBoxStart.X, pt.X), Math.Max(_textBoxStart.Y, pt.Y));
             Canvas.InvalidateVisual();
         }
     }
@@ -311,7 +346,8 @@ public partial class ImageEditorWindow : Window
             return;
         }
 
-        if (_vm.Tool == EditorTool.Layers && _vm.ActiveLayer is { } layer)
+        if (_vm.Tool is EditorTool.Layers or EditorTool.Shape or EditorTool.Text && _vm.ActiveLayer is { } layer &&
+            (_vm.Tool == EditorTool.Layers || layer.Kind == ToolLayerKind()))
         {
             var b2 = layer.Bounds;
             bool nwse = SKPoint.Distance(pt, new SKPoint(b2.Left, b2.Top)) <= tol
@@ -321,7 +357,7 @@ public partial class ImageEditorWindow : Window
             Cursor = nwse ? Cursors.SizeNWSE
                    : nesw ? Cursors.SizeNESW
                    : b2.Contains(pt.X, pt.Y) ? Cursors.SizeAll
-                   : Cursors.Arrow;
+                   : _vm.Tool == EditorTool.Layers ? Cursors.Arrow : Cursors.Cross;
             return;
         }
 
@@ -340,21 +376,37 @@ public partial class ImageEditorWindow : Window
             return;
         }
 
-        Cursor = Cursors.Arrow;
+        Cursor = _vm.Tool is EditorTool.Shape or EditorTool.Text ? Cursors.Cross : Cursors.Arrow;
     }
+
+    private EditorLayerKind? ToolLayerKind() => _vm.Tool switch
+    {
+        EditorTool.Shape => EditorLayerKind.Shape,
+        EditorTool.Text => EditorLayerKind.Text,
+        _ => null,
+    };
 
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
         Canvas.ReleaseMouseCapture();
 
-        // A forma fica pendente (editável — mover/redimensionar) até "Concluir forma",
-        // igual ao quadro de corte; descarta só se ficou minúscula (clique acidental).
-        if (_vm.Tool == EditorTool.Shape && _shapeMode == ShapeDragMode.Create && _liveShape is { } newShape &&
-            Math.Abs(newShape.B.X - newShape.A.X) <= 2 && Math.Abs(newShape.B.Y - newShape.A.Y) <= 2)
+        // Forma: soltou o clique, já vira camada (minúscula = clique acidental, descarta).
+        if (_vm.Tool == EditorTool.Shape && _creatingShape && _liveShape is { } newShape)
+            _vm.AddShapeLayer(newShape.A, newShape.B);
+        _creatingShape = false;
+        _liveShape = null;
+
+        // Texto: caixa arrastada define o tamanho; clique simples usa o campo Tamanho.
+        if (_vm.Tool == EditorTool.Text && _liveTextBox is { } box)
         {
-            _liveShape = null;
+            if (box.Height >= 6 / Math.Max(CanvasScale(), 0.01))
+                _vm.AddTextLayer(box);
+            else
+                _vm.AddTextLayer(new SKPoint(box.Left, box.Top));
         }
-        _shapeMode = ShapeDragMode.None;
+        _liveTextBox = null;
+        _snapGuidesX.Clear();
+        _snapGuidesY.Clear();
 
         // A expansão fica em prévia até o botão Aplicar. Isso evita uma mudança
         // destrutiva quando o operador apenas solta uma alça para conferir o tamanho.
@@ -512,8 +564,7 @@ public partial class ImageEditorWindow : Window
     private enum LayerDragMode { None, Move, Scale }
     private LayerDragMode _layerDrag;
     private SKPoint _layerDragStart;
-    private SKPoint _layerOriginPos;
-    private float _layerOriginScale;
+    private SKRect _layerOrigin;
     private LayerCorner _layerGrip;
 
     private void OnAddLayer(object sender, RoutedEventArgs e)
@@ -531,48 +582,60 @@ public partial class ImageEditorWindow : Window
         }
     }
 
-    /// <summary>Pega a camada ativa: canto = redimensiona (proporção mantida),
-    /// dentro = move. Clicar fora seleciona outra camada que esteja sob o cursor.</summary>
-    private void BeginLayerDrag(SKPoint pt)
+    /// <summary>
+    /// Pega uma camada: canto = redimensiona, dentro = move. Na ferramenta Camadas,
+    /// clicar fora seleciona outra camada sob o cursor. Em Forma/Texto
+    /// (<paramref name="kind"/>), só camadas daquele tipo são pegas; fora delas devolve
+    /// false e a ferramenta cria uma nova.
+    /// </summary>
+    private bool BeginLayerDrag(SKPoint pt, EditorLayerKind? kind, bool createOutside = false)
     {
         _layerDrag = LayerDragMode.None;
-        if (_vm.ActiveLayer is null && _vm.Layers.Count > 0)
-            _vm.ActiveLayer = _vm.Layers.LastOrDefault(l => l.Visible && l.Bounds.Contains(pt.X, pt.Y));
-        if (_vm.ActiveLayer is not { } layer) return;
+        bool Eligible(EditorLayer l) => l.Visible && (kind is null || l.Kind == kind);
+        EditorLayer? TopmostAt(SKPoint p) => _vm.Layers.LastOrDefault(l => Eligible(l) && l.Bounds.Contains(p.X, p.Y));
 
         float tol = (float)(12 / Math.Max(CanvasScale(), 0.01));
-        var b = layer.Bounds;
+        var layer = _vm.ActiveLayer is { } active && Eligible(active) ? active : null;
 
         // Qual das quatro alças foi pega (a mais próxima dentro da tolerância) — cada
         // canto ancora no oposto, então precisa saber QUAL, não só "perto de um canto".
         LayerCorner? grip = null;
-        float best = tol;
-        foreach (var (corner, at) in new (LayerCorner, SKPoint)[]
+        if (layer is not null)
         {
-            (LayerCorner.TopLeft, new SKPoint(b.Left, b.Top)),
-            (LayerCorner.TopRight, new SKPoint(b.Right, b.Top)),
-            (LayerCorner.BottomLeft, new SKPoint(b.Left, b.Bottom)),
-            (LayerCorner.BottomRight, new SKPoint(b.Right, b.Bottom)),
-        })
-        {
-            float d = SKPoint.Distance(pt, at);
-            if (d <= best) { best = d; grip = corner; }
+            var b = layer.Bounds;
+            float best = tol;
+            foreach (var (corner, at) in new (LayerCorner, SKPoint)[]
+            {
+                (LayerCorner.TopLeft, new SKPoint(b.Left, b.Top)),
+                (LayerCorner.TopRight, new SKPoint(b.Right, b.Top)),
+                (LayerCorner.BottomLeft, new SKPoint(b.Left, b.Bottom)),
+                (LayerCorner.BottomRight, new SKPoint(b.Right, b.Bottom)),
+            })
+            {
+                float d = SKPoint.Distance(pt, at);
+                if (d <= best) { best = d; grip = corner; }
+            }
         }
 
-        if (grip is { } g) { _layerDrag = LayerDragMode.Scale; _layerGrip = g; }
-        else if (b.Contains(pt.X, pt.Y)) _layerDrag = LayerDragMode.Move;
+        if (layer is not null && grip is { } g) { _layerDrag = LayerDragMode.Scale; _layerGrip = g; }
+        else if (layer is not null && layer.Bounds.Contains(pt.X, pt.Y)) _layerDrag = LayerDragMode.Move;
+        else if (TopmostAt(pt) is { } hit)
+        {
+            // Clique em outra camada: seleciona a mais alta sob o cursor e já move.
+            _vm.ActiveLayer = hit;
+            layer = hit;
+            _layerDrag = LayerDragMode.Move;
+        }
         else
         {
-            // Clique fora: seleciona a camada visível mais alta sob o cursor.
-            var hit = _vm.Layers.LastOrDefault(l => l.Visible && l.Bounds.Contains(pt.X, pt.Y));
-            if (hit is not null) { _vm.ActiveLayer = hit; _layerDrag = LayerDragMode.Move; layer = hit; }
-            else { _vm.ActiveLayer = null; Canvas.InvalidateVisual(); return; }
+            if (!createOutside) { _vm.ActiveLayer = null; Canvas.InvalidateVisual(); }
+            return false;
         }
 
         _layerDragStart = pt;
-        _layerOriginPos = new SKPoint(layer.X, layer.Y);
-        _layerOriginScale = layer.Scale;
+        _layerOrigin = layer.Bounds;
         _vm.BeginLayerTransform();
+        return true;
     }
 
     private void ContinueLayerDrag(SKPoint pt)
@@ -581,20 +644,69 @@ public partial class ImageEditorWindow : Window
 
         if (_layerDrag == LayerDragMode.Move)
         {
-            float x = _layerOriginPos.X + (pt.X - _layerDragStart.X);
-            float y = _layerOriginPos.Y + (pt.Y - _layerDragStart.Y);
+            float x = _layerOrigin.Left + (pt.X - _layerDragStart.X);
+            float y = _layerOrigin.Top + (pt.Y - _layerDragStart.Y);
+            (x, y) = ApplySnap(layer, x, y);
             // Mantém ao menos uma faixa da camada acessível para ela nunca se perder fora da tela.
-            float visibleX = Math.Min(24 / (float)Math.Max(CanvasScale(), .01), layer.Bounds.Width);
-            float visibleY = Math.Min(24 / (float)Math.Max(CanvasScale(), .01), layer.Bounds.Height);
-            layer.X = Math.Clamp(x, -layer.Bounds.Width + visibleX, _vm.Bitmap.Width - visibleX);
-            layer.Y = Math.Clamp(y, -layer.Bounds.Height + visibleY, _vm.Bitmap.Height - visibleY);
+            float visibleX = Math.Min(24 / (float)Math.Max(CanvasScale(), .01), layer.Width);
+            float visibleY = Math.Min(24 / (float)Math.Max(CanvasScale(), .01), layer.Height);
+            layer.X = Math.Clamp(x, -layer.Width + visibleX, _vm.Bitmap.Width - visibleX);
+            layer.Y = Math.Clamp(y, -layer.Height + visibleY, _vm.Bitmap.Height - visibleY);
         }
         else
         {
-            // Escala UNIFORME com o canto OPOSTO parado (ver EditorLayer.ResizeFromCorner).
-            layer.ResizeFromCorner(_layerGrip, _layerOriginPos, _layerOriginScale, pt);
+            // Canto OPOSTO parado. Imagem/texto não deformam; forma é livre — Shift inverte.
+            bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+            bool free = layer.KeepsAspect ? shift : !shift;
+            layer.ResizeFromCorner(_layerGrip, _layerOrigin, pt, free);
         }
     }
+
+    /// <summary>
+    /// Ímãs: a camada em movimento gruda quando a borda ou o CENTRO dela chega perto
+    /// do centro/bordas da tela ou de outra camada (~8px de tela). Alt segura desliga.
+    /// </summary>
+    private (float X, float Y) ApplySnap(EditorLayer layer, float x, float y)
+    {
+        _snapGuidesX.Clear();
+        _snapGuidesY.Clear();
+        if (!_vm.SnapEnabled || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) return (x, y);
+
+        float tol = (float)(8 / Math.Max(CanvasScale(), 0.01));
+        float w = _vm.Bitmap.Width, h = _vm.Bitmap.Height;
+        var targetsX = new List<float> { 0, w / 2, w };
+        var targetsY = new List<float> { 0, h / 2, h };
+        foreach (var other in _vm.Layers)
+        {
+            if (ReferenceEquals(other, layer) || !other.Visible) continue;
+            var b = other.Bounds;
+            targetsX.AddRange([b.Left, b.MidX, b.Right]);
+            targetsY.AddRange([b.Top, b.MidY, b.Bottom]);
+        }
+
+        static float? BestDelta(float start, float size, List<float> targets, float tol, out float guide)
+        {
+            guide = 0;
+            float? best = null;
+            foreach (float t in targets)
+                foreach (float edge in new[] { start, start + size / 2, start + size })
+                {
+                    float d = t - edge;
+                    if (Math.Abs(d) <= tol && (best is null || Math.Abs(d) < Math.Abs(best.Value)))
+                    {
+                        best = d;
+                        guide = t;
+                    }
+                }
+            return best;
+        }
+
+        if (BestDelta(x, layer.Width, targetsX, tol, out float gx) is { } dx) { x += dx; _snapGuidesX.Add(gx); }
+        if (BestDelta(y, layer.Height, targetsY, tol, out float gy) is { } dy) { y += dy; _snapGuidesY.Add(gy); }
+        return (x, y);
+    }
+
+    private void OnSnapToggled(object sender, RoutedEventArgs e) => Canvas.InvalidateVisual();
 
     private void OnEditorKeyDown(object sender, KeyEventArgs e)
     {
@@ -617,7 +729,13 @@ public partial class ImageEditorWindow : Window
             else return;
             e.Handled = true;
         }
-        else if (_vm.Tool == EditorTool.Layers && _vm.ActiveLayer is { } layer &&
+        else if (_vm.Tool is EditorTool.Layers or EditorTool.Shape or EditorTool.Text && _vm.ActiveLayer is { } selected &&
+                 e.Key == Key.Delete)
+        {
+            _vm.RemoveLayerCommand.Execute(selected);
+            e.Handled = true;
+        }
+        else if (_vm.Tool is EditorTool.Layers or EditorTool.Shape or EditorTool.Text && _vm.ActiveLayer is { } layer &&
                  e.Key is Key.Left or Key.Right or Key.Up or Key.Down)
         {
             float step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
@@ -630,7 +748,7 @@ public partial class ImageEditorWindow : Window
 
     private void OnSelectBaseLayer(object sender, RoutedEventArgs e)
     {
-        _vm.ActiveLayer = null;
+        _vm.SelectBackground();
         Canvas.InvalidateVisual();
     }
 
@@ -655,84 +773,6 @@ public partial class ImageEditorWindow : Window
         }
     }
 
-    // ── Forma: criar, mover e redimensionar antes de concluir ──────────────────
-
-    private static SKRect NormalizedShape((SKPoint A, SKPoint B) s) => new(
-        Math.Min(s.A.X, s.B.X), Math.Min(s.A.Y, s.B.Y),
-        Math.Max(s.A.X, s.B.X), Math.Max(s.A.Y, s.B.Y));
-
-    private void BeginShapeDrag(SKPoint pt)
-    {
-        float tolerance = (float)(14 / Math.Max(CanvasScale(), 0.01));
-
-        if (_liveShape is { } shape)
-        {
-            var rect = NormalizedShape(shape);
-            SKPoint[] corners =
-            [
-                new(rect.Left, rect.Top), new(rect.Right, rect.Top),
-                new(rect.Left, rect.Bottom), new(rect.Right, rect.Bottom),
-            ];
-            for (int i = 0; i < corners.Length; i++)
-            {
-                if (SKPoint.Distance(pt, corners[i]) <= tolerance)
-                {
-                    _shapeMode = ShapeDragMode.Resize;
-                    _shapeAnchor = corners[3 - i]; // canto oposto
-                    return;
-                }
-            }
-
-            if (rect.Contains(pt.X, pt.Y))
-            {
-                _shapeMode = ShapeDragMode.Move;
-                _shapeAnchor = new SKPoint(pt.X - rect.Left, pt.Y - rect.Top);
-                return;
-            }
-        }
-
-        _shapeMode = ShapeDragMode.Create;
-        _liveShape = (pt, pt);
-    }
-
-    private void ContinueShapeDrag(SKPoint pt)
-    {
-        switch (_shapeMode)
-        {
-            case ShapeDragMode.Create when _liveShape is { } s:
-                _liveShape = (s.A, pt);
-                break;
-
-            case ShapeDragMode.Resize:
-                _liveShape = (_shapeAnchor, pt);
-                break;
-
-            case ShapeDragMode.Move when _liveShape is { } s:
-                var rect = NormalizedShape(s);
-                var bmp = _vm.Bitmap;
-                float left = Math.Clamp(pt.X - _shapeAnchor.X, 0, Math.Max(bmp.Width - rect.Width, 0));
-                float top = Math.Clamp(pt.Y - _shapeAnchor.Y, 0, Math.Max(bmp.Height - rect.Height, 0));
-                _liveShape = (new SKPoint(left, top), new SKPoint(left + rect.Width, top + rect.Height));
-                break;
-        }
-    }
-
-    private void OnCancelShape(object sender, RoutedEventArgs e)
-    {
-        _liveShape = null;
-        Canvas.InvalidateVisual();
-    }
-
-    private void OnApplyShape(object sender, RoutedEventArgs e)
-    {
-        if (_liveShape is { } shape)
-        {
-            _vm.ApplyShape(shape.A, shape.B);
-            _liveShape = null;
-            Canvas.InvalidateVisual();
-        }
-    }
-
     // ── Tela: campos + guias de arrastar (direita, inferior, canto) ─────────────
 
     private bool _updatingTela;
@@ -741,6 +781,34 @@ public partial class ImageEditorWindow : Window
     /// tinha quando o modo foi ligado / no último Aplicar).</summary>
     private int _pctBaseW = 1, _pctBaseH = 1;
     private bool PercentMode => TelaUnit is not null && TelaUnit.SelectedIndex == 1;
+
+    /// <summary>
+    /// "Aplicar tamanho" acende (azul) quando há um tamanho pendente — arrastou uma
+    /// guia ou digitou nos campos — e volta ao cinza depois de aplicar/redefinir. Antes
+    /// ele ficava sempre igual e o operador não sabia se a mudança já tinha valido.
+    /// </summary>
+    private void UpdateApplyCanvasState()
+    {
+        if (ApplyCanvasButton is null) return;
+        bool pending = false;
+        if (_liveCanvasSize is { } live &&
+            ((int)Math.Round(live.X) != _vm.Bitmap.Width || (int)Math.Round(live.Y) != _vm.Bitmap.Height))
+            pending = true;
+        else if (TryReadTelaFields(out int w, out int h) && (w != _vm.Bitmap.Width || h != _vm.Bitmap.Height))
+            pending = true;
+        ApplyCanvasButton.Tag = pending ? "pending" : null;
+    }
+
+    private bool TryReadTelaFields(out int w, out int h)
+    {
+        w = h = 0;
+        if (TelaW is null || TelaH is null) return false;
+        if (!double.TryParse(TelaW.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double a) || a <= 0) return false;
+        if (!double.TryParse(TelaH.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double b) || b <= 0) return false;
+        w = Math.Max(PercentMode ? (int)Math.Round(_pctBaseW * a / 100.0) : (int)Math.Round(a), 1);
+        h = Math.Max(PercentMode ? (int)Math.Round(_pctBaseH * b / 100.0) : (int)Math.Round(b), 1);
+        return true;
+    }
 
     private void UpdateTelaFields()
     {
@@ -758,6 +826,7 @@ public partial class ImageEditorWindow : Window
             TelaH.Text = _vm.Bitmap.Height.ToString(CultureInfo.InvariantCulture);
         }
         _updatingTela = false;
+        UpdateApplyCanvasState();
     }
 
     private void OnTelaUnitChanged(object sender, SelectionChangedEventArgs e)
@@ -774,7 +843,14 @@ public partial class ImageEditorWindow : Window
     /// </summary>
     private void OnTelaFieldChanged(object sender, TextChangedEventArgs e)
     {
-        if (_updatingTela || !_vm.LockAspect) return;
+        if (_updatingTela) return;
+        try { MirrorTelaField(sender); }
+        finally { UpdateApplyCanvasState(); }
+    }
+
+    private void MirrorTelaField(object sender)
+    {
+        if (!_vm.LockAspect) return;
 
         double aspect = _vm.Bitmap.Height > 0 ? (double)_vm.Bitmap.Width / _vm.Bitmap.Height : 1;
         _updatingTela = true;
@@ -810,18 +886,18 @@ public partial class ImageEditorWindow : Window
     /// <summary>Lê os campos (em px ou %) e aplica de uma vez só.</summary>
     private void ApplyTelaFromFields()
     {
-        if (!double.TryParse(TelaW.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double a) || a <= 0) return;
-        if (!double.TryParse(TelaH.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double b) || b <= 0) return;
-
-        int w = PercentMode ? (int)Math.Round(_pctBaseW * a / 100.0) : (int)Math.Round(a);
-        int h = PercentMode ? (int)Math.Round(_pctBaseH * b / 100.0) : (int)Math.Round(b);
-        ApplyCanvasSize(Math.Max(w, 1), Math.Max(h, 1));
+        if (TryReadTelaFields(out int w, out int h))
+            ApplyCanvasSize(w, h);
     }
 
     private void ApplyCanvasSize(int w, int h)
     {
         _liveCanvasSize = null;
-        if (w <= 0 || h <= 0 || (w == _vm.Bitmap.Width && h == _vm.Bitmap.Height)) return;
+        if (w <= 0 || h <= 0 || (w == _vm.Bitmap.Width && h == _vm.Bitmap.Height))
+        {
+            UpdateTelaFields(); // nada a aplicar: apaga o botão
+            return;
+        }
         if (_vm.ResizeImageWithCanvas)
             _vm.ApplyResize(w, h);
         else
@@ -899,6 +975,7 @@ public partial class ImageEditorWindow : Window
         TelaW.Text = ((int)w).ToString(CultureInfo.InvariantCulture);
         TelaH.Text = ((int)h).ToString(CultureInfo.InvariantCulture);
         _updatingTela = false;
+        UpdateApplyCanvasState();
     }
 
     // ── Pintura ─────────────────────────────────────────────────────────────────
@@ -942,8 +1019,9 @@ public partial class ImageEditorWindow : Window
             canvas.Restore();
         }
 
-        // Moldura + alças da camada selecionada (só na ferramenta Camadas).
-        if (_vm.Tool == EditorTool.Layers && _vm.ActiveLayer is { } active)
+        // Moldura + alças da camada selecionada (Camadas, e Forma/Texto pra camada do tipo).
+        if (_vm.ActiveLayer is { } active &&
+            (_vm.Tool == EditorTool.Layers || (ToolLayerKind() is { } k && active.Kind == k)))
         {
             var b = active.Bounds;
             var p1 = ToScreen(new SKPoint(b.Left, b.Top));
@@ -1050,6 +1128,7 @@ public partial class ImageEditorWindow : Window
                 canvas.DrawRect(new SKRect(p.X - hs, p.Y - hs, p.X + hs, p.Y + hs), handle);
         }
 
+        // Prévia da forma sendo arrastada (vira camada ao soltar).
         if (_liveShape is { } shape)
         {
             using var paint = new SKPaint
@@ -1058,6 +1137,7 @@ public partial class ImageEditorWindow : Window
                 Style = _vm.ShapeFilled && _vm.Shape != ShapeKind.Linha ? SKPaintStyle.Fill : SKPaintStyle.Stroke,
                 StrokeWidth = (float)(_vm.BrushSize * scale),
                 IsAntialias = true,
+                StrokeCap = SKStrokeCap.Round,
             };
             var a = ToScreen(shape.A);
             var b = ToScreen(shape.B);
@@ -1068,15 +1148,42 @@ public partial class ImageEditorWindow : Window
                 case ShapeKind.Elipse: canvas.DrawOval(rect, paint); break;
                 case ShapeKind.Linha: canvas.DrawLine(a, b, paint); break;
             }
+        }
 
-            // Contorno + alças: a forma fica pendente (editável) até "Concluir forma".
-            using var outlinePaint = new SKPaint { Color = SKColors.Lime, Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f };
-            canvas.DrawRect(rect, outlinePaint);
-            using var handlePaint = new SKPaint { Color = SKColors.Lime, Style = SKPaintStyle.Fill };
-            const float hs = 5;
-            foreach (var c in new[] { new SKPoint(rect.Left, rect.Top), new SKPoint(rect.Right, rect.Top),
-                                       new SKPoint(rect.Left, rect.Bottom), new SKPoint(rect.Right, rect.Bottom) })
-                canvas.DrawRect(new SKRect(c.X - hs, c.Y - hs, c.X + hs, c.Y + hs), handlePaint);
+        // Prévia da caixa de texto: o texto já aparece no tamanho que vai entrar.
+        if (_liveTextBox is { } tb && tb.Height > 0)
+        {
+            var a = ToScreen(new SKPoint(tb.Left, tb.Top));
+            var b = ToScreen(new SKPoint(tb.Right, tb.Bottom));
+            using var dash = new SKPaint
+            {
+                Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1,
+                PathEffect = SKPathEffect.CreateDash([4f, 4f], 0),
+            };
+            canvas.DrawRect(new SKRect(a.X, a.Y, b.X, b.Y), dash);
+            using var text = new SKPaint
+            {
+                Color = _vm.BrushColor.WithAlpha(200), IsAntialias = true,
+                TextSize = (b.Y - a.Y) / EditorLayer.LineHeightPerPoint(),
+                Typeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyle.Bold),
+            };
+            canvas.DrawText(string.IsNullOrWhiteSpace(_vm.TextInput) ? "Texto" : _vm.TextInput, a.X, a.Y - text.FontMetrics.Ascent, text);
+        }
+
+        // Guias dos ímãs (só enquanto a camada está grudada em algo).
+        if (_snapGuidesX.Count > 0 || _snapGuidesY.Count > 0)
+        {
+            using var guide = new SKPaint { Color = new SKColor(0xFF, 0x3D, 0xD6), StrokeWidth = 1, IsAntialias = false };
+            foreach (float gx in _snapGuidesX)
+            {
+                var top = ToScreen(new SKPoint(gx, 0));
+                canvas.DrawLine(top.X, 0, top.X, e.Info.Height, guide);
+            }
+            foreach (float gy in _snapGuidesY)
+            {
+                var left = ToScreen(new SKPoint(0, gy));
+                canvas.DrawLine(0, left.Y, e.Info.Width, left.Y, guide);
+            }
         }
     }
 }

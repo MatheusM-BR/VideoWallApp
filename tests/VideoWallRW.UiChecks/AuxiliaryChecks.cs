@@ -82,7 +82,7 @@ internal static class AuxiliaryChecks
                 Math.Abs(behaviorVm.ActiveLayer!.X - (originalX - 40)) > .01 || Math.Abs(behaviorVm.ActiveLayer.Y - (originalY - 30)) > .01)
                 throw new Exception("Crop did not preserve layer alignment");
             behaviorVm.UndoCommand.Execute(null);
-            if (behaviorVm.Bitmap.Width != 640 || behaviorVm.Bitmap.Height != 360 || behaviorVm.Layers.Count != 1)
+            if (behaviorVm.Bitmap.Width != 640 || behaviorVm.Bitmap.Height != 360 || behaviorVm.Layers.Count != 2) // imagem original + camada adicionada
                 throw new Exception("Undo did not restore the complete composition");
             behaviorVm.ApplyCanvasResize(800, 500);
             if (behaviorVm.Bitmap.Width != 800 || behaviorVm.ActiveLayer!.X <= originalX)
@@ -92,6 +92,27 @@ internal static class AuxiliaryChecks
                 throw new Exception("Undo canvas expansion lost material position");
         }
         Console.WriteLine("Crop, layer alignment, canvas expansion and complete undo checks passed.");
+        using (var layersVm = new ImageEditorViewModel(Path.GetFullPath("artifacts/ui-review/demo-clip-0.png")))
+        {
+            if (layersVm.Layers.Count != 1 || layersVm.Layers[0].Kind != EditorLayerKind.Image)
+                throw new Exception("Original image did not open as its own layer");
+            layersVm.Tool = EditorTool.Shape;
+            if (layersVm.AddShapeLayer(new SKPoint(10, 10), new SKPoint(110, 60)) is not { Kind: EditorLayerKind.Shape } shape ||
+                Math.Abs(shape.Width - 100) > .01 || !ReferenceEquals(layersVm.ActiveLayer, shape))
+                throw new Exception("Shape was not inserted as a selected layer on release");
+            layersVm.Tool = EditorTool.Text;
+            var text = layersVm.AddTextLayer(new SKRect(20, 20, 300, 120)) ?? throw new Exception("Text layer not created");
+            layersVm.TextInput = "Lote 12";
+            if (text.Text != "Lote 12" || layersVm.Layers.Count != 3)
+                throw new Exception("Editing the text field did not update the selected text layer");
+            layersVm.UndoCommand.Execute(null);
+            if (layersVm.Layers.OfType<EditorLayer>().Any(l => l.Kind == EditorLayerKind.Text && l.Text == "Lote 12"))
+                throw new Exception("Text edit was not undoable");
+            if (ImageEditorViewModel.EditedFileName(1920, 1080) != "16x9 - Edited.png" ||
+                ImageEditorViewModel.EditedFileName(1080, 1920) != "9x16 - Edited.png")
+                throw new Exception("Edited file name does not follow the 16x9/9x16 pattern");
+        }
+        Console.WriteLine("Original-as-layer, shape/text layers and edited file name checks passed.");
         var path = Path.GetFullPath("artifacts/ui-review/demo-clip-0.png");
         var editorVm = new ImageEditorViewModel(path);
         var editor = new ImageEditorWindow(editorVm);

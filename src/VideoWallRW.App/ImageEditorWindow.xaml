@@ -19,6 +19,32 @@
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
     </Style>
+    <!-- Ícones dos pincéis (24×24) — reconhecer a ferramenta pela figura, não só pelo nome. -->
+    <Geometry x:Key="IconBrush">M20.7,3.3 C19.9,2.5 18.6,2.5 17.8,3.3 L9,12.1 L11.9,15 L20.7,6.2 C21.5,5.4 21.5,4.1 20.7,3.3 Z M7.5,13.5 C5.6,13.5 4,15.1 4,17 C4,18.3 2.9,19 2,19 C3,20.3 4.7,21 6.5,21 C8.9,21 11,18.9 11,16.5 C11,14.8 9.4,13.5 7.5,13.5 Z</Geometry>
+    <Geometry x:Key="IconEraser">M16.2,3.6 L21.4,8.8 C22.2,9.6 22.2,10.8 21.4,11.6 L12.5,20.5 L20,20.5 L20,22 L8,22 L2.6,16.6 C1.8,15.8 1.8,14.6 2.6,13.8 L13.4,3.6 C14.2,2.8 15.4,2.8 16.2,3.6 Z M4,15.2 L8.8,20 L10.4,20 L13.5,16.9 L8.3,11.7 Z</Geometry>
+    <Geometry x:Key="IconBucket">M16.6,8.9 L7.7,0 L6.3,1.4 L8.7,3.8 L3.5,9 C2.9,9.6 2.9,10.5 3.5,11.1 L9,16.6 C9.6,17.2 10.6,17.2 11.2,16.6 L16.6,11.2 C17.2,10.6 17.2,9.6 16.6,8.9 Z M5.2,10 L10.1,5.2 L15,10 Z M19,11.5 C19,11.5 17,13.7 17,15 C17,16.1 17.9,17 19,17 C20.1,17 21,16.1 21,15 C21,13.7 19,11.5 19,11.5 Z M2,20 L22,20 L22,24 L2,24 Z</Geometry>
+    <Geometry x:Key="IconEyedropper">M20.7,5.6 L18.4,3.3 C18,2.9 17.4,2.9 17,3.3 L13.8,6.4 L11.9,4.5 L10.5,5.9 L11.9,7.3 L3,16.3 L3,21 L7.8,21 L16.7,12.1 L18.1,13.5 L19.5,12.1 L17.6,10.2 L20.7,7.1 C21.1,6.7 21.1,6 20.7,5.6 Z M6.9,19 L5,17.1 L13.1,9 L15,10.9 Z</Geometry>
+
+    <!-- Aplicar tamanho: cinza parado; azul quando há tamanho pendente (Tag="pending"). -->
+    <Style x:Key="ApplyCanvasStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Background" Value="{StaticResource CellBg}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BorderDim}" />
+      <Setter Property="Foreground" Value="{StaticResource FgDim}" />
+      <Style.Triggers>
+        <Trigger Property="Tag" Value="pending">
+          <Setter Property="Background" Value="#FF1F6FD6" />
+          <Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+          <Setter Property="Foreground" Value="White" />
+          <Setter Property="FontWeight" Value="Bold" />
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+
+    <!-- Atalhos de pintura na barra superior (conta-gotas, balde) -->
+    <Style x:Key="QuickTool" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+      <Setter Property="Width" Value="44" /><Setter Property="Height" Value="44" />
+      <Setter Property="Margin" Value="0,0,4,0" /><Setter Property="Padding" Value="0" />
+    </Style>
   </ResourceDictionary></Window.Resources>
   <Grid Margin="8" Background="{StaticResource Bg}">
     <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="30" /></Grid.RowDefinitions>
@@ -34,6 +60,46 @@
     </Border>
     <!-- UX do Paint 3D: categorias no topo, área de desenho ao centro e opções à direita. -->
     <Border Grid.Row="1" Style="{StaticResource SurfacePanel}" Padding="8,2" Margin="0,0,0,6">
+      <DockPanel>
+      <!-- Acesso rápido: conta-gotas, balde e a cor atual, sem abrir a categoria Pincéis. -->
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+        <Button AutomationProperties.Name="Conta-gotas" ToolTip="Conta-gotas: clique na imagem pra pegar uma cor" Tag="{x:Static vm:EditorTool.Eyedropper}" Click="OnQuickToolClick">
+          <Button.Style><Style TargetType="Button" BasedOn="{StaticResource QuickTool}"><Style.Triggers>
+            <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Eyedropper}"><Setter Property="Background" Value="{StaticResource SelectionBg}" /><Setter Property="BorderBrush" Value="{StaticResource Selection}" /></DataTrigger>
+          </Style.Triggers></Style></Button.Style>
+          <Path Data="{StaticResource IconEyedropper}" Fill="{StaticResource Fg}" Width="20" Height="20" Stretch="Uniform" />
+        </Button>
+        <Button AutomationProperties.Name="Balde de tinta" ToolTip="Balde: preenche uma área com a cor atual" Tag="{x:Static vm:EditorTool.Bucket}" Click="OnQuickToolClick">
+          <Button.Style><Style TargetType="Button" BasedOn="{StaticResource QuickTool}"><Style.Triggers>
+            <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Bucket}"><Setter Property="Background" Value="{StaticResource SelectionBg}" /><Setter Property="BorderBrush" Value="{StaticResource Selection}" /></DataTrigger>
+          </Style.Triggers></Style></Button.Style>
+          <Path Data="{StaticResource IconBucket}" Fill="{StaticResource Fg}" Width="20" Height="20" Stretch="Uniform" />
+        </Button>
+        <ToggleButton x:Name="ColorSwatchToggle" Width="44" Height="44" Padding="5" AutomationProperties.Name="Cor selecionada" ToolTip="Cor selecionada — clique pra trocar">
+          <Border Background="{Binding BrushColorHex}" BorderBrush="{StaticResource Fg}" BorderThickness="1" />
+        </ToggleButton>
+        <Popup IsOpen="{Binding IsChecked, ElementName=ColorSwatchToggle}" PlacementTarget="{Binding ElementName=ColorSwatchToggle}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+               Closed="OnColorPopupClosed">
+          <Border Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1" Padding="8">
+            <StackPanel Width="190">
+              <TextBlock Text="Cores" FontWeight="Bold" Margin="0,0,0,4" />
+              <ItemsControl ItemsSource="{Binding Palette}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate><DataTemplate>
+                  <Button Width="28" Height="22" Margin="1" Padding="0" BorderThickness="1" BorderBrush="{StaticResource BorderDim}" Background="{Binding}" Click="OnPaletteClick" ToolTip="{Binding}" />
+                </DataTemplate></ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Text="Histórico (conta-gotas)" FontSize="10" Foreground="{StaticResource FgDim}" Margin="0,6,0,3" />
+              <ItemsControl ItemsSource="{Binding ColorHistory}">
+                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate><DataTemplate>
+                  <Button Width="28" Height="22" Margin="1" Padding="0" BorderThickness="1" BorderBrush="{StaticResource BorderDim}" Background="{Binding}" Click="OnPaletteClick" ToolTip="{Binding}" />
+                </DataTemplate></ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </Popup>
+      </StackPanel>
       <StackPanel Orientation="Horizontal"><Button AutomationProperties.Name="Pincéis" Tag="{x:Static vm:EditorTool.Brush}" Click="OnEditorCategoryClick" ToolTip="Pincéis">
   <Button.Style><Style TargetType="Button" BasedOn="{StaticResource EditorCategory}"><Style.Triggers>
     <DataTrigger Binding="{Binding IsPaintingTool}" Value="True">
@@ -82,6 +148,7 @@
   </Style.Triggers></Style></Button.Style>
   <StackPanel><TextBlock Text="⌗" FontSize="21" HorizontalAlignment="Center" /><TextBlock Text="Recortar" Margin="0,3,0,0" HorizontalAlignment="Center" /></StackPanel>
 </Button></StackPanel>
+      </DockPanel>
     </Border>
     <Grid Grid.Row="2" x:Name="EditorWorkspace">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*" MinWidth="520" /><ColumnDefinition Width="6" /><ColumnDefinition Width="0.34*" MinWidth="280" MaxWidth="360" /></Grid.ColumnDefinitions>
@@ -98,6 +165,18 @@
                 <Button AutomationProperties.Name="Aproximar visualização" Content="+" Click="OnZoomInClick" Width="28" ToolTip="Aproximar visualização" Margin="0,0,6,0" />
                 <Button AutomationProperties.Name="Restaurar o enquadramento da imagem" Content="Ajustar à tela" Click="OnFitCanvasClick" ToolTip="Restaurar o enquadramento da imagem" />
               </StackPanel>
+              <ToggleButton DockPanel.Dock="Left" IsChecked="{Binding SnapEnabled}" Click="OnSnapToggled" Padding="8,3" Margin="0,0,10,0"
+                            AutomationProperties.Name="Ímãs de alinhamento"
+                            ToolTip="Ímãs: ao mover uma camada ela gruda no centro e nas bordas da tela e das outras camadas. Segure Alt pra mover livre.">
+                <ToggleButton.Style><Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+                  <Setter Property="Content" Value="🧲 Ímãs: desligados" />
+                  <Style.Triggers><Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Content" Value="🧲 Ímãs: ligados" />
+                    <Setter Property="Background" Value="{StaticResource SelectionBg}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+                  </Trigger></Style.Triggers>
+                </Style></ToggleButton.Style>
+              </ToggleButton>
               <TextBlock Text="Roda do mouse para aproximar" TextTrimming="CharacterEllipsis" Foreground="{StaticResource FgDim}" FontSize="11" VerticalAlignment="Center" />
             </DockPanel>
           </Border>
@@ -189,8 +268,8 @@
               </Style>
             </StackPanel.Style>
             <TextBlock Text="Camadas" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" />
-            <Button AutomationProperties.Name="Selecionar a imagem base" Click="OnSelectBaseLayer" HorizontalContentAlignment="Stretch" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" Padding="8" Margin="0,0,0,8" ToolTip="Selecionar a imagem base">
-              <DockPanel><TextBlock DockPanel.Dock="Left" Text="▣" FontSize="16" Margin="0,0,8,0" /><StackPanel><TextBlock Text="Imagem base" FontWeight="SemiBold" /><TextBlock Text="Use Recortar ou Tela para alterar" FontSize="10" Foreground="{StaticResource FgDim}" /></StackPanel></DockPanel>
+            <Button AutomationProperties.Name="Selecionar o fundo" Click="OnSelectBaseLayer" HorizontalContentAlignment="Stretch" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" Padding="8" Margin="0,0,0,8" ToolTip="Selecionar o fundo (os pincéis passam a pintar nele)">
+              <DockPanel><TextBlock DockPanel.Dock="Left" Text="▣" FontSize="16" Margin="0,0,8,0" /><StackPanel><TextBlock Text="Fundo (tela)" FontWeight="SemiBold" /><TextBlock Text="Fica atrás de tudo · Tela/Recortar mudam o tamanho" FontSize="10" Foreground="{StaticResource FgDim}" /></StackPanel></DockPanel>
             </Button>
             <Button Content="＋ Adicionar imagem" Click="OnAddLayer" Padding="0,6" Margin="0,0,0,8"
                     Background="{StaticResource SelectionBg}" BorderBrush="{StaticResource Selection}" />
@@ -203,6 +282,7 @@
                   <DockPanel MinWidth="185">
                     <CheckBox DockPanel.Dock="Left" IsChecked="{Binding Visible}" Margin="0,0,5,0"
                               VerticalAlignment="Center" ToolTip="Mostrar/ocultar" />
+                    <TextBlock DockPanel.Dock="Left" Text="{Binding KindIcon}" Width="18" TextAlignment="Center" VerticalAlignment="Center" Margin="0,0,4,0" />
                     <TextBlock Text="{Binding Name}" FontSize="11" TextTrimming="CharacterEllipsis"
                                VerticalAlignment="Center" />
                   </DockPanel>
@@ -222,13 +302,20 @@
                       Margin="2,0,0,0" Padding="0,4" ToolTip="Remover camada" />
             </Grid>
 
+            <Grid Margin="0,0,0,8">
+              <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+              <Button Grid.Column="0" Content="Centralizar" Command="{Binding CenterLayerCommand}" CommandParameter="both" Margin="0,0,2,0" Padding="0,4" ToolTip="Centro da tela (horizontal e vertical)" />
+              <Button Grid.Column="1" Content="Centro ↔" Command="{Binding CenterLayerCommand}" CommandParameter="h" Margin="2,0" Padding="0,4" ToolTip="Centralizar só na horizontal" />
+              <Button Grid.Column="2" Content="Centro ↕" Command="{Binding CenterLayerCommand}" CommandParameter="v" Margin="2,0,0,0" Padding="0,4" ToolTip="Centralizar só na vertical" />
+            </Grid>
+            <Button Content="Ajustar à tela" Command="{Binding FitLayerToCanvasCommand}" Padding="0,4" Margin="0,0,0,8" ToolTip="Camada ocupa a tela inteira (imagem e texto mantêm a proporção)" />
             <TextBlock Text="Opacidade" FontSize="11" />
             <Slider Minimum="0" Maximum="1" Value="{Binding ActiveLayer.Opacity, Mode=TwoWay, FallbackValue=1}"
                     IsEnabled="{Binding HasLayers}" Margin="0,0,0,8" />
 
             <Button Content="Mesclar camadas na imagem" Command="{Binding FlattenLayersCommand}"
                     IsEnabled="{Binding HasLayers}" Padding="0,6" />
-            <TextBlock Text="Arraste a camada na imagem pra mover · alças dos cantos redimensionam (mantém proporção) · salvar já sai com tudo junto; mesclar só quando quiser fixar."
+            <TextBlock Text="A imagem original também é uma camada, separada do fundo. Arraste pra mover · cantos redimensionam (Shift deforma) · Del exclui · salvar já sai com tudo junto; mesclar só quando quiser fixar."
                        Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0" />
           </StackPanel>
 
@@ -273,8 +360,8 @@
                       ToolTip="A área nova entra transparente em vez de branca" />
             <Grid Margin="0,0,0,4"><Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
             <Button Grid.Column="0" Content="Redefinir" Click="OnResetCanvas" Padding="0,6" Margin="0,0,3,0" />
-            <Button Grid.Column="1" Content="Aplicar tamanho" Click="OnApplyCanvas" Padding="0,6" Margin="3,0,0,0"
-                    Background="{StaticResource SelectionBg}" BorderBrush="{StaticResource Selection}" FontWeight="Bold" />
+            <Button x:Name="ApplyCanvasButton" Grid.Column="1" Content="Aplicar tamanho" Click="OnApplyCanvas" Padding="0,6" Margin="3,0,0,0"
+                    Style="{StaticResource ApplyCanvasStyle}" ToolTip="Acende quando há um tamanho novo pendente" />
             </Grid>
             <TextBlock Text="Ou arraste as guias em qualquer borda/canto da imagem — a arte original sempre fica centralizada na tela nova."
                        Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0" />
@@ -289,12 +376,21 @@
 <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Eyedropper}"><Setter Property="Visibility" Value="Visible" /></DataTrigger>
   </Style.Triggers></Style></StackPanel.Style>
 <TextBlock Text="Pincéis" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,6" />
-<TextBlock Text="Escolha como pintar ou preencher a imagem." TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,12" />
+<TextBlock Text="Escolha como pintar ou preencher a imagem." TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6" />
+<TextBlock TextWrapping="Wrap" FontSize="11" Margin="0,0,0,12"><Run Text="Pintando em: " Foreground="{StaticResource FgDim}" /><Run Text="{Binding PaintTargetName, Mode=OneWay}" FontWeight="SemiBold" /><Run Text=" (troque em Camadas)" Foreground="{StaticResource FgDim}" /></TextBlock>
 <UniformGrid Columns="2">
-<RadioButton Content="Pincel" GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Brush}}" />
-<RadioButton Content="Borracha" GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Eraser}}" />
-<RadioButton Content="Preencher" GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Bucket}}" />
-<RadioButton Content="Conta-gotas" GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Eyedropper}}" />
+<RadioButton GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" AutomationProperties.Name="Pincel" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Brush}}">
+  <StackPanel><Path Data="{StaticResource IconBrush}" Fill="{StaticResource Fg}" Width="26" Height="26" Stretch="Uniform" HorizontalAlignment="Center" /><TextBlock Text="Pincel" Margin="0,5,0,0" HorizontalAlignment="Center" /></StackPanel>
+</RadioButton>
+<RadioButton GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" AutomationProperties.Name="Borracha" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Eraser}}">
+  <StackPanel><Path Data="{StaticResource IconEraser}" Fill="{StaticResource Fg}" Width="26" Height="26" Stretch="Uniform" HorizontalAlignment="Center" /><TextBlock Text="Borracha" Margin="0,5,0,0" HorizontalAlignment="Center" /></StackPanel>
+</RadioButton>
+<RadioButton GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" AutomationProperties.Name="Preencher" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Bucket}}">
+  <StackPanel><Path Data="{StaticResource IconBucket}" Fill="{StaticResource Fg}" Width="26" Height="26" Stretch="Uniform" HorizontalAlignment="Center" /><TextBlock Text="Preencher" Margin="0,5,0,0" HorizontalAlignment="Center" /></StackPanel>
+</RadioButton>
+<RadioButton GroupName="PaintTool" Style="{StaticResource PaintToolChoice}" AutomationProperties.Name="Conta-gotas" IsChecked="{Binding Tool, Converter={StaticResource EnumBoolConverter}, ConverterParameter={x:Static vm:EditorTool.Eyedropper}}">
+  <StackPanel><Path Data="{StaticResource IconEyedropper}" Fill="{StaticResource Fg}" Width="26" Height="26" Stretch="Uniform" HorizontalAlignment="Center" /><TextBlock Text="Conta-gotas" Margin="0,5,0,0" HorizontalAlignment="Center" /></StackPanel>
+</RadioButton>
 </UniformGrid>
 </StackPanel>
 <StackPanel>
@@ -304,29 +400,8 @@
 <TextBlock Text="Formas 2D" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />          <TextBlock Text="Forma" FontSize="11" Margin="0,8,0,2" />
           <ComboBox ItemsSource="{Binding Shapes}" SelectedItem="{Binding Shape}" />
           <CheckBox Content="Preenchida" IsChecked="{Binding ShapeFilled}" Margin="0,4,0,0" />
-          <StackPanel Margin="0,6,0,0">
-            <StackPanel.Style>
-              <Style TargetType="StackPanel">
-                <Setter Property="Visibility" Value="Collapsed" />
-                <Style.Triggers>
-                  <DataTrigger Binding="{Binding Tool}" Value="{x:Static vm:EditorTool.Shape}">
-                    <Setter Property="Visibility" Value="Visible" />
-                  </DataTrigger>
-                </Style.Triggers>
-              </Style>
-            </StackPanel.Style>
-            <TextBlock Text="Depois de desenhar, arraste por dentro pra mover ou os cantos pra redimensionar."
-                       Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,6" />
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition /><ColumnDefinition />
-              </Grid.ColumnDefinitions>
-              <Button Grid.Column="0" Content="Cancelar" Click="OnCancelShape" Margin="0,0,3,0" Padding="0,6" />
-              <Button Grid.Column="1" Content="Concluir forma" Click="OnApplyShape" Margin="3,0,0,0" Padding="0,6"
-                      Background="{StaticResource SelectionBg}" BorderBrush="{StaticResource Selection}" FontWeight="Bold" />
-            </Grid>
-          </StackPanel>
-
+          <TextBlock Text="Arraste na imagem pra desenhar — ao soltar, a forma vira camada. Depois: arraste por dentro pra mover, cantos pra redimensionar (Shift mantém proporção). Com a forma selecionada, cor/preenchimento/espessura mudam ela. Del exclui."
+                     Foreground="{StaticResource FgDim}" FontSize="10" TextWrapping="Wrap" Margin="0,8,0,0" />
 
 </StackPanel>
 <StackPanel>
@@ -337,9 +412,9 @@
           <TextBox Text="{Binding TextInput, UpdateSourceTrigger=PropertyChanged}" />
           <DockPanel Margin="0,4,0,0">
             <TextBlock DockPanel.Dock="Left" Text="Tamanho" FontSize="11" VerticalAlignment="Center" Margin="0,0,6,0" />
-            <TextBox Text="{Binding TextSize, UpdateSourceTrigger=PropertyChanged}" Width="46" HorizontalAlignment="Left" />
+            <TextBox Text="{Binding TextSize, UpdateSourceTrigger=PropertyChanged}" Width="56" HorizontalAlignment="Left" />
           </DockPanel>
-<TextBlock Text="Digite o conteúdo e clique na imagem para inserir." TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,8,0,0" />
+<TextBlock Text="Clique na imagem pra inserir no tamanho acima, ou ARRASTE uma caixa: a altura dela define o tamanho da letra. O texto vira camada — arraste pra mover, cantos pra redimensionar. Com o texto selecionado, editar o campo, o tamanho ou a cor muda ele. Del exclui." TextWrapping="Wrap" Foreground="{StaticResource FgDim}" FontSize="10" Margin="0,8,0,0" />
 </StackPanel>
 <StackPanel>
   <StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers>

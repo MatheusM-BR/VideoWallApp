@@ -16,9 +16,13 @@ public sealed record AspectPreset(string Name, double? Ratio); // null = livre
 /// <summary>
 /// Editor de imagem estilo Paint 3D (Fase 10 T10.5, revisado): crop com presets de
 /// proporção, pincel, borracha, conta-gotas, balde de tinta (flood fill com
-/// tolerância), formas geométricas (contorno ou preenchida), texto, redimensionar
-/// imagem/tela e undo/redo. Documento = <see cref="SKBitmap"/> BGRA mutável; cada
-/// operação destrutiva empilha uma cópia (máx. 20 níveis).
+/// tolerância), formas e texto como camadas editáveis, redimensionar imagem/tela e
+/// undo/redo (máx. 20 níveis).
+///
+/// Documento = FUNDO (<see cref="Bitmap"/>, do tamanho da tela) + CAMADAS por cima.
+/// A imagem aberta entra como a primeira camada ("Imagem original"): dá pra mover e
+/// redimensionar sobre o fundo, e os pincéis pintam na camada de imagem selecionada
+/// (ou no fundo, quando nenhuma está selecionada).
 /// </summary>
 public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 {
@@ -35,6 +39,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     }
     private readonly Stack<EditorSnapshot> _undoStack = new();
     private readonly Stack<EditorSnapshot> _redoStack = new();
+    private string? _lastSavedPath;
 
     [ObservableProperty] private SKBitmap _bitmap;
     [ObservableProperty]
@@ -45,13 +50,21 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     [ObservableProperty] private SKColor _brushColor = SKColors.Red;
     [ObservableProperty] private string _brushColorHex = "#FF0000";
     [ObservableProperty] private int _brushSize = 12;
-    [ObservableProperty] private string _textInput = "";
-    [ObservableProperty] private int _textSize = 32;
+    [ObservableProperty] private string _textInput = "Texto";
+    [ObservableProperty] private int _textSize = 48;
     [ObservableProperty] private AspectPreset? _selectedPreset;
     [ObservableProperty] private ShapeKind _shape = ShapeKind.Retângulo;
     [ObservableProperty] private bool _shapeFilled = true;
     [ObservableProperty] private int _bucketTolerance = 32;
     [ObservableProperty] private string _statusText = "";
+
+    /// <summary>Ímãs: ao mover uma camada ela "gruda" no centro/bordas da tela e de
+    /// outras camadas, com guia desenhada. Botão no rodapé da área de edição.</summary>
+    [ObservableProperty] private bool _snapEnabled = true;
+
+    /// <summary>Cor que a borracha devolve ao FUNDO: branco, ou transparente quando a
+    /// imagem original já tinha transparência (logo/PNG).</summary>
+    private readonly SKColor _backgroundFill;
 
     /// <summary>Fixar proporção (corte e tela) — igual ao Paint 3D.</summary>
     [ObservableProperty] private bool _lockAspect = true;
@@ -87,18 +100,23 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     {
         _sourcePath = sourcePath;
         _onSaved = onSaved;
+        SKBitmap decoded;
         using (var stream = File.OpenRead(sourcePath))
-        {
-            var decoded = SKBitmap.Decode(stream) ?? throw new InvalidOperationException($"Não foi possível abrir '{sourcePath}'.");
-            // Normaliza pra BGRA8888 — o balde de tinta opera direto nos bytes.
-            if (decoded.ColorType != SKColorType.Bgra8888)
-            {
-                var converted = decoded.Copy(SKColorType.Bgra8888);
-                decoded.Dispose();
-                decoded = converted ?? throw new InvalidOperationException("Formato de pixel não suportado.");
-            }
-            _bitmap = decoded;
-        }
+            decoded = SKBitmap.Decode(stream) ?? throw new InvalidOperationException($"Não foi possível abrir '{sourcePath}'.");
+
+        // A imagem original vira CAMADA, destacada do fundo; o fundo nasce do mesmo
+        // tamanho, branco (ou transparente se a arte já tinha transparência) — então
+        // salvar sem mexer em nada sai idêntico ao original.
+        var original = EditorLayer.FromImage(decoded, "Imagem original", 0, 0);
+        _backgroundFill = HasTransparency(original.Bitmap!) ? SKColors.Transparent : SKColors.White;
+        _bitmap = new SKBitmap(new SKImageInfo(original.Bitmap!.Width, original.Bitmap.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        using (var bg = new SKCanvas(_bitmap)) bg.Clear(_backgroundFill);
+        AttachLayer(original);
+        Layers.Add(original);
+        _activeLayer = original;
+
+        // Texto num tamanho que aparece na arte (32px some num banner 1920×1080).
+        _textSize = Math.Clamp(_bitmap.Height / 10, 24, 400);
 
         AspectPresets =
         [
@@ -118,6 +136,37 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         // definida ele não travava nada, então o padrão é a proporção original da imagem.
         SelectedPreset = AspectPresets[0];
     }
+
+    private static bool HasTransparency(SKBitmap bitmap)
+    {
+        var span = MemoryMarshal.Cast<byte, uint>(bitmap.GetPixelSpan());
+        foreach (uint px in span)
+            if ((px >> 24) != 0xFF) return true;
+        return false;
+    }
+
+    // ── Alvo da pintura ──────────────────────────────────────────────────────
+    // Pincel/borracha/balde agem na camada de IMAGEM selecionada. Com texto/forma (ou
+    // nada) selecionado, agem na camada de imagem mais alta — senão a tinta iria pro
+    // fundo, escondido atrás da imagem, e pareceria que o pincel não funciona. O fundo
+    // só recebe tinta quando o operador escolhe "Fundo" no painel Camadas.
+
+    private bool _paintOnBackground;
+
+    public EditorLayer? PaintLayer =>
+        ActiveLayer is { Kind: EditorLayerKind.Image, Visible: true } active ? active
+        : _paintOnBackground ? null
+        : Layers.LastOrDefault(l => l is { Kind: EditorLayerKind.Image, Visible: true });
+
+    /// <summary>Botão "Fundo (tela)": deseleciona as camadas e manda os pincéis pro fundo.</summary>
+    public void SelectBackground()
+    {
+        ActiveLayer = null;
+        _paintOnBackground = true;
+        OnPropertyChanged(nameof(PaintTargetName));
+    }
+
+    public string PaintTargetName => PaintLayer?.Name ?? "Fundo";
 
     public bool CanUndo => _undoStack.Count > 0;
     public bool CanRedo => _redoStack.Count > 0;
@@ -194,15 +243,25 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     public void PaintStroke(SKPoint from, SKPoint to)
     {
-        using var canvas = new SKCanvas(Bitmap);
+        var layer = PaintLayer;
+        var target = layer?.Bitmap ?? Bitmap;
+        float scale = layer?.LocalScale ?? 1f;
+        if (layer is not null) { from = layer.ToLocal(from); to = layer.ToLocal(to); }
+
+        bool erase = Tool == EditorTool.Eraser;
+        using var canvas = new SKCanvas(target);
         using var paint = new SKPaint
         {
-            Color = Tool == EditorTool.Eraser ? SKColors.White : BrushColor,
-            StrokeWidth = BrushSize,
+            // Borracha: na camada abre transparência (aparece o fundo); no fundo volta
+            // à cor de fundo (branco, ou transparente se a arte era transparente).
+            Color = erase ? (layer is null ? _backgroundFill : SKColors.Transparent) : BrushColor,
+            BlendMode = erase ? SKBlendMode.Src : SKBlendMode.SrcOver,
+            StrokeWidth = BrushSize * scale,
             StrokeCap = SKStrokeCap.Round,
             IsAntialias = true,
         };
         canvas.DrawLine(from, to, paint);
+        target.NotifyPixelsChanged();
     }
 
     // ── Conta-gotas ──────────────────────────────────────────────────────────
@@ -211,7 +270,11 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     {
         int x = (int)p.X, y = (int)p.Y;
         if (x < 0 || y < 0 || x >= Bitmap.Width || y >= Bitmap.Height) return;
-        var color = Bitmap.GetPixel(x, y);
+        // Pega a cor do que se VÊ (fundo + camadas), não só do fundo.
+        var composed = ComposeFlattened();
+        var color = composed.GetPixel(x, y);
+        if (!ReferenceEquals(composed, Bitmap)) composed.Dispose();
+        if (color.Alpha == 0) return; // área transparente: não tem cor pra pegar
         BrushColor = color;
         BrushColorHex = $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
         StatusText = $"Cor capturada: {BrushColorHex}";
@@ -226,17 +289,21 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     public void FloodFillAt(SKPoint p)
     {
+        var layer = PaintLayer;
+        var fillTarget = layer?.Bitmap ?? Bitmap;
+        if (layer is not null) p = layer.ToLocal(p);
+
         int startX = (int)p.X, startY = (int)p.Y;
-        int w = Bitmap.Width, h = Bitmap.Height;
+        int w = fillTarget.Width, h = fillTarget.Height;
         if (startX < 0 || startY < 0 || startX >= w || startY >= h) return;
-        if (Bitmap.GetPixel(startX, startY) == BrushColor) return; // já é a cor destino
+        if (fillTarget.GetPixel(startX, startY) == BrushColor) return; // já é a cor destino
 
         PushUndo();
 
         // Bytes BGRA copiados pra um buffer gerenciado, preenchidos, e devolvidos —
         // sem código unsafe, e ordens de grandeza mais rápido que Get/SetPixel.
-        nint ptr = Bitmap.GetPixels();
-        int byteCount = Bitmap.ByteCount;
+        nint ptr = fillTarget.GetPixels();
+        int byteCount = fillTarget.ByteCount;
         byte[] buffer = new byte[byteCount];
         Marshal.Copy(ptr, buffer, 0, byteCount);
         var pixels = MemoryMarshal.Cast<byte, uint>(buffer.AsSpan());
@@ -272,35 +339,143 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         }
 
         Marshal.Copy(buffer, 0, ptr, byteCount);
-        Bitmap.NotifyPixelsChanged();
+        fillTarget.NotifyPixelsChanged();
         BitmapChanged?.Invoke();
     }
 
-    // ── Formas geométricas ───────────────────────────────────────────────────
+    // ── Formas geométricas (viram camada ao soltar o clique) ─────────────────
 
-    public void ApplyShape(SKPoint a, SKPoint b)
+    /// <summary>Cria a camada de forma do retângulo arrastado (a→b) e já seleciona —
+    /// sem passo de "concluir": fica móvel/redimensionável como qualquer camada.</summary>
+    public EditorLayer? AddShapeLayer(SKPoint a, SKPoint b)
+    {
+        var rect = SKRect.Create(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Abs(b.X - a.X), Math.Abs(b.Y - a.Y));
+        if (rect.Width < 3 && rect.Height < 3) return null; // clique acidental
+        // Linha reta na horizontal/vertical: caixa com espessura mínima pra continuar pegável.
+        if (Shape == ShapeKind.Linha)
+        {
+            if (rect.Width < 1) rect = SKRect.Create(rect.Left, rect.Top, 1, rect.Height);
+            if (rect.Height < 1) rect = SKRect.Create(rect.Left, rect.Top, rect.Width, 1);
+        }
+        bool rising = (b.X - a.X) * (b.Y - a.Y) < 0;
+        var layer = EditorLayer.FromShape(Shape, rect, rising, ShapeFilled, BrushSize, BrushColor);
+        InsertLayer(layer, $"{Shape} inserido — arraste pra mover, cantos pra redimensionar");
+        return layer;
+    }
+
+    // ── Texto (vira camada) ──────────────────────────────────────────────────
+
+    /// <summary>Clique: texto no tamanho do campo, com o canto no ponto clicado.</summary>
+    public EditorLayer? AddTextLayer(SKPoint topLeft) => AddTextLayer(topLeft, TextSize);
+
+    /// <summary>Arrastou uma caixa: o tamanho da fonte sai da ALTURA da caixa.</summary>
+    public EditorLayer? AddTextLayer(SKRect box)
+    {
+        int size = (int)Math.Clamp(Math.Round(box.Height / EditorLayer.LineHeightPerPoint()), 6, 2000);
+        return AddTextLayer(new SKPoint(box.Left, box.Top), size);
+    }
+
+    private EditorLayer? AddTextLayer(SKPoint topLeft, int fontSize)
+    {
+        string text = string.IsNullOrWhiteSpace(TextInput) ? "Texto" : TextInput;
+        var layer = EditorLayer.FromText(text, fontSize, BrushColor, topLeft.X, topLeft.Y);
+        _syncingFromLayer = true;
+        TextSize = fontSize;
+        TextInput = text;
+        _syncingFromLayer = false;
+        InsertLayer(layer, "Texto inserido — digite no campo pra trocar, cantos redimensionam");
+        return layer;
+    }
+
+    private void InsertLayer(EditorLayer layer, string status)
     {
         PushUndo();
-        using var canvas = new SKCanvas(Bitmap);
-        using var paint = new SKPaint
-        {
-            Color = BrushColor,
-            IsAntialias = true,
-            Style = ShapeFilled && Shape != ShapeKind.Linha ? SKPaintStyle.Fill : SKPaintStyle.Stroke,
-            StrokeWidth = BrushSize,
-        };
-
-        var rect = SKRect.Create(
-            System.Math.Min(a.X, b.X), System.Math.Min(a.Y, b.Y),
-            System.Math.Abs(b.X - a.X), System.Math.Abs(b.Y - a.Y));
-
-        switch (Shape)
-        {
-            case ShapeKind.Retângulo: canvas.DrawRect(rect, paint); break;
-            case ShapeKind.Elipse: canvas.DrawOval(rect, paint); break;
-            case ShapeKind.Linha: canvas.DrawLine(a, b, paint); break;
-        }
+        AttachLayer(layer);
+        Layers.Add(layer);
+        ActiveLayer = layer;
+        OnPropertyChanged(nameof(HasLayers));
+        StatusText = status;
         BitmapChanged?.Invoke();
+    }
+
+    // Editar campos com texto/forma selecionado altera a CAMADA (como no Paint 3D).
+    // Um nível de desfazer por "sessão de edição" da camada, não um por tecla.
+    private bool _syncingFromLayer;
+    private EditorLayer? _editUndoTakenFor;
+
+    private bool BeginLayerPropertyEdit(EditorLayerKind kind, out EditorLayer layer)
+    {
+        layer = ActiveLayer!;
+        if (_syncingFromLayer || ActiveLayer is null || ActiveLayer.Kind != kind) return false;
+        if (!ReferenceEquals(_editUndoTakenFor, ActiveLayer))
+        {
+            PushUndo();
+            _editUndoTakenFor = ActiveLayer;
+        }
+        return true;
+    }
+
+    partial void OnTextInputChanged(string value)
+    {
+        if (Tool != EditorTool.Text || string.IsNullOrEmpty(value) || !BeginLayerPropertyEdit(EditorLayerKind.Text, out var layer)) return;
+        layer.Text = value;
+        layer.FitTextBox();
+    }
+
+    partial void OnTextSizeChanged(int value)
+    {
+        if (Tool != EditorTool.Text || value < 4 || !BeginLayerPropertyEdit(EditorLayerKind.Text, out var layer)) return;
+        layer.FontSize = value;
+        layer.FitTextBox();
+    }
+
+    partial void OnBrushColorChanged(SKColor value)
+    {
+        if (Tool == EditorTool.Text && BeginLayerPropertyEdit(EditorLayerKind.Text, out var text)) text.Color = value;
+        else if (Tool == EditorTool.Shape && BeginLayerPropertyEdit(EditorLayerKind.Shape, out var shape)) shape.Color = value;
+    }
+
+    partial void OnShapeChanged(ShapeKind value)
+    {
+        if (Tool == EditorTool.Shape && BeginLayerPropertyEdit(EditorLayerKind.Shape, out var layer))
+        {
+            layer.Shape = value;
+            layer.Name = value.ToString();
+        }
+    }
+
+    partial void OnShapeFilledChanged(bool value)
+    {
+        if (Tool == EditorTool.Shape && BeginLayerPropertyEdit(EditorLayerKind.Shape, out var layer)) layer.Filled = value;
+    }
+
+    partial void OnBrushSizeChanged(int value)
+    {
+        if (Tool == EditorTool.Shape && value > 0 && BeginLayerPropertyEdit(EditorLayerKind.Shape, out var layer)) layer.StrokeWidth = value;
+    }
+
+    /// <summary>Selecionar texto/forma traz as propriedades dele pros campos.</summary>
+    private void SyncFieldsFromLayer(EditorLayer? layer)
+    {
+        if (layer is null || layer.Kind == EditorLayerKind.Image) return;
+        _syncingFromLayer = true;
+        try
+        {
+            BrushColor = layer.Color;
+            BrushColorHex = $"#{layer.Color.Red:X2}{layer.Color.Green:X2}{layer.Color.Blue:X2}";
+            if (layer.Kind == EditorLayerKind.Text)
+            {
+                TextInput = layer.Text;
+                TextSize = (int)Math.Round(layer.FontSize * (layer.Height / Math.Max(layer.NaturalTextSize().Height, 1)));
+            }
+            else
+            {
+                Shape = layer.Shape;
+                ShapeFilled = layer.Filled;
+                BrushSize = (int)Math.Round(layer.StrokeWidth);
+            }
+        }
+        finally { _syncingFromLayer = false; }
     }
 
     // ── Crop / redimensionar ─────────────────────────────────────────────────
@@ -343,9 +518,15 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         float scaleY = height / (float)Math.Max(oldHeight, 1);
         foreach (var layer in Layers)
         {
-            layer.X *= scaleX;
-            layer.Y *= scaleY;
-            layer.Scale *= Math.Min(scaleX, scaleY);
+            // Imagem/texto não deformam: escala uniforme centrada no mesmo ponto relativo.
+            float sx = layer.KeepsAspect ? Math.Min(scaleX, scaleY) : scaleX;
+            float sy = layer.KeepsAspect ? Math.Min(scaleX, scaleY) : scaleY;
+            float cx = (layer.X + layer.Width / 2) * scaleX, cy = (layer.Y + layer.Height / 2) * scaleY;
+            layer.Width *= sx;
+            layer.Height *= sy;
+            if (layer.Kind == EditorLayerKind.Shape) layer.StrokeWidth *= Math.Min(scaleX, scaleY);
+            layer.X = cx - layer.Width / 2;
+            layer.Y = cy - layer.Height / 2;
         }
         StatusText = $"Imagem e camadas redimensionadas para {width} × {height} px.";
         BitmapChanged?.Invoke();
@@ -363,7 +544,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         var canvasBitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Premul));
         using (var canvas = new SKCanvas(canvasBitmap))
         {
-            canvas.Clear(TransparentCanvas ? SKColors.Transparent : SKColors.White);
+            canvas.Clear(TransparentCanvas ? SKColors.Transparent : _backgroundFill);
             float offsetX = (width - Bitmap.Width) / 2f;
             float offsetY = (height - Bitmap.Height) / 2f;
             canvas.DrawBitmap(oldBitmap, offsetX, offsetY);
@@ -376,23 +557,6 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         Bitmap = canvasBitmap;
         oldBitmap.Dispose();
         StatusText = $"Tela alterada para {width} × {height} px; conteúdo centralizado.";
-        BitmapChanged?.Invoke();
-    }
-
-    // ── Texto ────────────────────────────────────────────────────────────────
-
-    public void ApplyText(SKPoint position)
-    {
-        if (string.IsNullOrWhiteSpace(TextInput)) return;
-        PushUndo();
-        using var canvas = new SKCanvas(Bitmap);
-        using var paint = new SKPaint
-        {
-            Color = BrushColor,
-            IsAntialias = true,
-            TextSize = TextSize,
-        };
-        canvas.DrawText(TextInput, position, paint);
         BitmapChanged?.Invoke();
     }
 
@@ -425,18 +589,10 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
             if (bmp.Width > maxW || bmp.Height > maxH)
                 scale = Math.Min(maxW / bmp.Width, maxH / bmp.Height);
 
-            var layer = new EditorLayer(bmp, Path.GetFileNameWithoutExtension(path),
+            var layer = EditorLayer.FromImage(bmp, Path.GetFileNameWithoutExtension(path),
                 (Bitmap.Width - bmp.Width * scale) / 2f,
-                (Bitmap.Height - bmp.Height * scale) / 2f)
-            { Scale = scale };
-
-            PushUndo();
-            AttachLayer(layer);
-            Layers.Add(layer);
-            ActiveLayer = layer;
-            OnPropertyChanged(nameof(HasLayers));
-            StatusText = $"Camada adicionada: {layer.Name} — arraste na imagem pra posicionar";
-            BitmapChanged?.Invoke();
+                (Bitmap.Height - bmp.Height * scale) / 2f, scale);
+            InsertLayer(layer, $"Camada adicionada: {layer.Name} — arraste na imagem pra posicionar");
         }
         catch (Exception ex)
         {
@@ -445,9 +601,53 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     }
 
     private void AttachLayer(EditorLayer layer)
-        => layer.PropertyChanged += (_, _) => BitmapChanged?.Invoke();
+        => layer.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(EditorLayer.Visible) or nameof(EditorLayer.Name))
+                OnPropertyChanged(nameof(PaintTargetName));
+            BitmapChanged?.Invoke();
+        };
 
-    partial void OnActiveLayerChanged(EditorLayer? value) => BitmapChanged?.Invoke();
+    partial void OnActiveLayerChanged(EditorLayer? value)
+    {
+        _editUndoTakenFor = null;
+        if (value is not null) _paintOnBackground = false;
+        SyncFieldsFromLayer(value);
+        OnPropertyChanged(nameof(PaintTargetName));
+        BitmapChanged?.Invoke();
+    }
+
+    /// <summary>Centraliza a camada selecionada na tela (botões do painel Camadas).</summary>
+    [RelayCommand]
+    private void CenterLayer(string? axis)
+    {
+        if (ActiveLayer is not { } layer) return;
+        PushUndo();
+        if (axis is null or "both" or "h") layer.X = (Bitmap.Width - layer.Width) / 2f;
+        if (axis is null or "both" or "v") layer.Y = (Bitmap.Height - layer.Height) / 2f;
+    }
+
+    /// <summary>Faz a camada selecionada ocupar a tela toda (imagem/texto mantêm proporção, cabendo).</summary>
+    [RelayCommand]
+    private void FitLayerToCanvas()
+    {
+        if (ActiveLayer is not { } layer) return;
+        PushUndo();
+        float w = Bitmap.Width, h = Bitmap.Height;
+        if (layer.KeepsAspect)
+        {
+            float s = Math.Min(w / Math.Max(layer.Width, 1), h / Math.Max(layer.Height, 1));
+            layer.Width *= s;
+            layer.Height *= s;
+        }
+        else
+        {
+            layer.Width = w;
+            layer.Height = h;
+        }
+        layer.X = (w - layer.Width) / 2f;
+        layer.Y = (h - layer.Height) / 2f;
+    }
 
     [RelayCommand]
     private void RemoveLayer(EditorLayer? layer)
@@ -520,31 +720,57 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         return flat;
     }
 
-    public string SaveTargetPath => Path.Combine(
-        AppPaths.EnsureMediaRoot(),
-        Path.GetFileNameWithoutExtension(_sourcePath) + "-edit.png");
+    /// <summary>
+    /// Arquivo salvo: na MESMA pasta da imagem de origem (a pasta do leilão, no caso da
+    /// Agenda/PDF), com o nome pela orientação — "16x9 - Edited.png" (paisagem/quadrado)
+    /// ou "9x16 - Edited.png" (retrato). São só esses dois nomes por pasta: salvar de
+    /// novo na mesma orientação substitui a edição anterior daquela pasta.
+    /// Origem em cache/temporário (não é pasta de operação) → pasta padrão C:\Video Wall.
+    /// </summary>
+    public string SaveTargetPath => Path.Combine(SaveFolder(), EditedFileName(Bitmap.Width, Bitmap.Height));
+
+    public static string EditedFileName(int width, int height)
+        => (height > width ? "9x16" : "16x9") + " - Edited.png";
+
+    private string SaveFolder()
+    {
+        string? folder = Path.GetDirectoryName(Path.GetFullPath(_sourcePath));
+        if (folder is null || !Directory.Exists(folder)) return AppPaths.EnsureMediaRoot();
+        string appData = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VideoWallRW");
+        bool transient = folder.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase)
+                      || folder.StartsWith(appData, StringComparison.OrdinalIgnoreCase);
+        return transient ? AppPaths.EnsureMediaRoot() : folder;
+    }
+
+    /// <summary>Disparado depois de gravar o arquivo (caminho completo) — a janela
+    /// principal usa pra abrir a Biblioteca direto na pasta, com o arquivo selecionado.</summary>
+    public event Action<string>? FileSaved;
 
     [RelayCommand]
     private void Save()
     {
         // Salva a composição (base + camadas), mas mantém as camadas separadas em
         // memória — salvar não pode "queimar" o que o operador ainda está ajustando.
+        string target = SaveTargetPath;
         var composed = ComposeFlattened();
         using var image = SKImage.FromBitmap(composed);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-        using (var stream = File.Create(SaveTargetPath))
+        using (var stream = File.Create(target))
             data.SaveTo(stream);
         if (!ReferenceEquals(composed, Bitmap)) composed.Dispose();
-        StatusText = $"Salvo: {SaveTargetPath} — arraste o chip \"🖼\" até uma célula da grade";
+        _lastSavedPath = target;
+        StatusText = $"Salvo: {target} — arraste o chip \"🖼\" até uma célula da grade";
         // Editando a imagem de uma célula: salvar já atualiza o clip no ar.
-        _onSaved?.Invoke(SaveTargetPath, Path.GetFileNameWithoutExtension(_sourcePath));
+        _onSaved?.Invoke(target, Path.GetFileNameWithoutExtension(_sourcePath));
+        FileSaved?.Invoke(target);
     }
 
     /// <summary>Garante o PNG salvo em disco (usado pelo chip de arrastar).</summary>
     public string EnsureSaved()
     {
         Save();
-        return SaveTargetPath;
+        return _lastSavedPath ?? SaveTargetPath;
     }
 
     public void Dispose()
