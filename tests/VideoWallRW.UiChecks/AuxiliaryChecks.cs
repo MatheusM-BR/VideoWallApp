@@ -157,6 +157,26 @@ internal static class AuxiliaryChecks
             if (editorVm.Tool != tool) throw new Exception("Tool selection failed: " + tool);
             Save(editor, "editor-" + tool.ToString().ToLowerInvariant());
         }
+        // Seleção: marca uma área do fundo e estica ela pra direita (pedaço flutuando,
+        // com alças e o rótulo de tamanho/%) — print do manual e conferência visual.
+        Children(editor).OfType<Button>().First(b => b.Tag is EditorTool.Select).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+        Frame();
+        int bw = editorVm.Bitmap.Width, bh = editorVm.Bitmap.Height;
+        var area = new SKRect(bw * 0.45f, bh * 0.40f, bw * 0.65f, bh * 0.75f);
+        editorVm.SetSelection(area);
+        if (!editorVm.LiftSelection()) throw new Exception("Selection lift failed");
+        editorVm.SetFloatingRect(new SKRect(area.Left, area.Top, bw * 0.95f, area.Bottom));
+        Frame();
+        if (editorVm.Selection is not { } stretched || Math.Abs(stretched.Right - bw * 0.95f) > 0.5f)
+            throw new Exception("Selection stretch failed");
+        if (((TextBox)editor.FindName("SelectW")).Text != ((int)Math.Round(stretched.Width)).ToString())
+            throw new Exception("Selection width field did not follow the stretch");
+        Save(editor, "editor-select-stretch");
+        editorVm.CommitSelection();
+        Frame();
+        Save(editor, "editor-select-applied");
+        editorVm.Tool = EditorTool.Crop;
+        Frame();
         Children(editor).OfType<Button>().First(b => Equals(b.Content, "+")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
         if (((TextBlock)editor.FindName("ZoomLabel")).Text.StartsWith("100")) throw new Exception("Zoom button failed");
         Children(editor).OfType<Button>().First(b => Equals(b.Content, "Ajustar à tela")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));

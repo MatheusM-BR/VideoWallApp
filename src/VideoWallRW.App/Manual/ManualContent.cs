@@ -176,6 +176,20 @@ public static class ManualContent
                 "O texto vira camada: arraste para mover, cantos para redimensionar (sem perder nitidez).",
                 "Com o texto selecionado, editar o campo, o tamanho ou a cor muda ele na hora.")),
 
+        new("Editor · Seleção", "Marcar uma área e mover ou esticar só ela",
+            new Paragraph("A ferramenta **⬚ Seleção** transforma só um pedaço da imagem — por exemplo, alongar uma faixa de fundo até a borda sem mexer no resto."),
+            new Picture("editor-select.png", "Área selecionada sendo esticada para a direita"),
+            new Steps(
+                "Clique em **Seleção** e **arraste** na imagem para marcar a área (`Shift` deixa quadrada). `Ctrl+A` seleciona a imagem inteira.",
+                "Arraste **por dentro** para mover, ou puxe as **alças**: as dos **cantos** esticam nos dois sentidos (`Shift` mantém a proporção); as do **meio dos lados** esticam num sentido só.",
+                "**Enter** (ou **Aplicar**) grava. Clicar fora ou trocar de ferramenta também grava. **Esc** (ou `Ctrl+Z`) cancela e a imagem volta como estava."),
+            new Bullets(
+                "Os campos **Largura/Altura** definem o tamanho exato em pixels.",
+                "**Tela inteira**, **↔ Largura** e **↕ Altura** esticam a área até as bordas da imagem.",
+                "**Apagar** (ou `Delete`) limpa a área — fica a cor de fundo.",
+                "Setas movem 1 px (`Shift` 10 px). Enquanto a área está solta, o lugar de onde ela saiu fica com a cor de fundo."),
+            new Tip("No **modo camadas**, a seleção age na camada de imagem que está debaixo dela; com as camadas mescladas (padrão), age na imagem.")),
+
         new("Editor · Camadas, tela e recorte", "Organizar, mudar o tamanho da tela e recortar",
             new Subtitle("Camadas"),
             new Bullets(
@@ -241,7 +255,8 @@ public static class ManualContent
                 ("PageDown / PageUp", "Próxima / cena anterior"),
                 ("Ctrl+S / Ctrl+O / Ctrl+N", "Salvar / abrir / novo projeto"),
                 ("Ctrl+C / Ctrl+V", "Copiar / colar clipe"),
-                ("Ctrl+Z / Ctrl+Y", "Desfazer / refazer no editor")),
+                ("Ctrl+Z / Ctrl+Y", "Desfazer / refazer no editor"),
+                ("Ctrl+A", "Editor: selecionar a imagem inteira (Seleção)")),
             new Picture("keymap.png", "Ferramentas → Atalhos de teclado"),
             new Paragraph("Em **Ferramentas → Atalhos de teclado** dá para trocar qualquer tecla e, nos disparos de coluna, escolher qual camada recebe o comando. **Restaurar padrão** volta à tabela acima.")),
 

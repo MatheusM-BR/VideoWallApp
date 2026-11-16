@@ -165,6 +165,21 @@ public partial class ImageEditorWindow
         // Em campo de texto, Ctrl+Z/Y continuam sendo o desfazer do próprio campo.
         if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
 
+        // Ctrl+A: seleciona a imagem inteira (abre a ferramenta Seleção).
+        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.A && Mouse.Captured is null)
+        {
+            _vm.SelectAllCommand.Execute(null);
+            UpdateSelectFields();
+            Canvas.InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+        if (Mouse.Captured is null && HandleSelectKey(e.Key))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Ctrl+Z desfaz, Ctrl+Y ou Ctrl+Shift+Z refaz (padrão Windows). Ignorado com o
         // botão do mouse pressionado no meio de um traço/arraste.
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.Z or Key.Y)

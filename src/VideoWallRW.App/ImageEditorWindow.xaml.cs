@@ -68,6 +68,8 @@ public partial class ImageEditorWindow : Window
         {
             if (e.PropertyName == nameof(ImageEditorViewModel.Tool))
                 Dispatcher.Invoke(InitializeToolOverlay);
+            else if (e.PropertyName == nameof(ImageEditorViewModel.Selection))
+                Dispatcher.Invoke(UpdateSelectFields);
             else if (e.PropertyName == nameof(ImageEditorViewModel.SnapEnabled))
                 Dispatcher.Invoke(Canvas.InvalidateVisual);
             else if (e.PropertyName == nameof(ImageEditorViewModel.SelectedPreset))
@@ -388,6 +390,10 @@ public partial class ImageEditorWindow : Window
                     _liveTextBox = new SKRect(pt.X, pt.Y, pt.X, pt.Y);
                 }
                 break;
+            case EditorTool.Select:
+                BeginSelectDrag(pt);
+                Canvas.InvalidateVisual();
+                break;
         }
         Canvas.CaptureMouse();
     }
@@ -436,6 +442,11 @@ public partial class ImageEditorWindow : Window
             _liveShape = (s.A, pt);
             Canvas.InvalidateVisual();
         }
+        else if (_vm.Tool == EditorTool.Select && _selectDrag != SelectDrag.None)
+        {
+            ContinueSelectDrag(pt);
+            Canvas.InvalidateVisual();
+        }
         else if (_vm.Tool == EditorTool.Text && _liveTextBox is not null)
         {
             _liveTextBox = new SKRect(Math.Min(_textBoxStart.X, pt.X), Math.Min(_textBoxStart.Y, pt.Y),
@@ -449,6 +460,12 @@ public partial class ImageEditorWindow : Window
     private void UpdateHandleCursor(SKPoint pt)
     {
         float tol = (float)(12 / Math.Max(CanvasScale(), 0.01));
+
+        if (_vm.Tool == EditorTool.Select)
+        {
+            Cursor = CursorFor(HitSelection(pt));
+            return;
+        }
 
         if (_vm.Tool == EditorTool.Crop && _liveCropRect is { } crop)
         {
@@ -551,6 +568,7 @@ public partial class ImageEditorWindow : Window
             Canvas.InvalidateVisual();
         }
 
+        if (_selectDrag != SelectDrag.None) EndSelectDrag();
         _layerDrag = LayerDragMode.None;
         Cursor = Cursors.Arrow;
         _dragStart = null;

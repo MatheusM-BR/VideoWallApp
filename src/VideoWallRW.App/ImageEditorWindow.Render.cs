@@ -136,6 +136,9 @@ public partial class ImageEditorWindow
             canvas.DrawText(dimensions, sel.Left + 7, labelY + 14, labelText);
         }
 
+        // Seleção: pedaço sendo movido/esticado + tracejado e alças.
+        DrawSelectionOverlay(canvas, scale, offsetX, offsetY, dest);
+
         // Guias da TELA (estilo Paint): contorno provisório CENTRADO na imagem atual —
         // o resultado final sempre centraliza (ApplyCanvasResize), então a prévia já
         // mostra pra onde a arte vai, não importa de que lado você arrastou a alça.

@@ -7,7 +7,7 @@ using SkiaSharp;
 
 namespace VideoWallRW.App.ViewModels;
 
-public enum EditorTool { Crop, Canvas, Brush, Eraser, Eyedropper, Bucket, Shape, Text, Layers }
+public enum EditorTool { Crop, Canvas, Brush, Eraser, Eyedropper, Bucket, Shape, Text, Layers, Select }
 
 public enum ShapeKind { Retângulo, Elipse, Linha }
 
@@ -189,7 +189,17 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(PaintTargetName));
     }
 
-    partial void OnToolChanged(EditorTool value) => MergeLayersExcept(null);
+    partial void OnToolChanged(EditorTool value)
+    {
+        // Sair da Seleção aplica o que estiver sendo esticado e desmarca a área.
+        if (value != EditorTool.Select && (Selection is not null || IsSelectionFloating))
+        {
+            CommitSelection();
+            Selection = null;
+            RaiseSelectionChanged();
+        }
+        MergeLayersExcept(null);
+    }
 
     /// <summary>Funde na imagem as camadas (menos <paramref name="keep"/>) quando o modo
     /// camadas está desligado. Não cria passo de desfazer próprio: o Ctrl+Z volta para
@@ -298,7 +308,10 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Undo()
     {
+        // Durante uma transformação da Seleção, desfazer = cancelar a transformação.
+        if (IsSelectionFloating) { CancelSelection(); return; }
         if (_undoStack.Count == 0) return;
+        if (Selection is not null) { Selection = null; RaiseSelectionChanged(); }
         _redoStack.Push(CaptureSnapshot());
         RestoreSnapshot(_undoStack.Pop());
         BitmapChanged?.Invoke();
@@ -310,7 +323,8 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void Redo()
     {
-        if (_redoStack.Count == 0) return;
+        if (_redoStack.Count == 0 || IsSelectionFloating) return;
+        if (Selection is not null) { Selection = null; RaiseSelectionChanged(); }
         _undoStack.Push(CaptureSnapshot());
         RestoreSnapshot(_redoStack.Pop());
         BitmapChanged?.Invoke();
@@ -812,6 +826,17 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     /// </summary>
     public SKBitmap ComposeFlattened()
     {
+        // Pedaço da Seleção ainda flutuando entra no arquivo como está na tela.
+        if (IsSelectionFloating)
+        {
+            var withFloat = new SKBitmap(new SKImageInfo(Bitmap.Width, Bitmap.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+            using var c = new SKCanvas(withFloat);
+            c.Clear(SKColors.Transparent);
+            c.DrawBitmap(Bitmap, 0, 0);
+            foreach (var layer in Layers) layer.Draw(c);
+            DrawFloatingSelection(c);
+            return withFloat;
+        }
         if (Layers.Count == 0) return Bitmap;
         var flat = new SKBitmap(new SKImageInfo(Bitmap.Width, Bitmap.Height,
             SKColorType.Bgra8888, SKAlphaType.Premul));
@@ -902,6 +927,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        DropFloating();
         Bitmap.Dispose();
         foreach (var layer in Layers) layer.Dispose();
         foreach (var snapshot in _undoStack) snapshot.Dispose();
