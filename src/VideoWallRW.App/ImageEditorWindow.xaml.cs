@@ -153,8 +153,11 @@ public partial class ImageEditorWindow : Window
         var img = ToImageSpace(at);
         _viewZoom = Math.Clamp(_viewZoom * factor, MinZoom, MaxZoom);
         var (scale, _, _) = ViewTransform(Canvas.ActualWidth, Canvas.ActualHeight);
-        _scrollX = FracForOffset(Canvas.ActualWidth, _vm.Bitmap.Width * scale, at.X - img.X * scale, _scrollX);
-        _scrollY = FracForOffset(Canvas.ActualHeight, _vm.Bitmap.Height * scale, at.Y - img.Y * scale, _scrollY);
+        var (sw, sh) = SceneSize();
+        var bmp = _vm.Bitmap;
+        // Offset desejado da CENA para o ponto da imagem continuar debaixo do mouse.
+        _scrollX = FracForOffset(Canvas.ActualWidth, sw * scale, at.X - img.X * scale - (sw - bmp.Width) / 2.0 * scale, _scrollX);
+        _scrollY = FracForOffset(Canvas.ActualHeight, sh * scale, at.Y - img.Y * scale - (sh - bmp.Height) / 2.0 * scale, _scrollY);
         ZoomLabel.Text = $"{_viewZoom:P0} do ajuste";
         Canvas.InvalidateVisual();
     }
@@ -167,7 +170,9 @@ public partial class ImageEditorWindow : Window
     private double _scrollX = 0.5, _scrollY = 0.5;
     private Point? _panStart;
     private double _panStartX, _panStartY;
-    private const double ScrollMargin = 0.03; // folga em volta da imagem, fração da área
+    // Folga em volta da imagem, fração da área. Tem que ser < 3% (metade da folga de
+    // 6% do encaixe), senão no 100% sobrava 0,3% e as barras apareciam à toa.
+    private const double ScrollMargin = 0.02;
 
     private static double AxisOffset(double view, double content, double frac)
     {
@@ -188,8 +193,9 @@ public partial class ImageEditorWindow : Window
     {
         if (HScroll is null || VScroll is null) return;
         var (scale, _, _) = ViewTransform(Canvas.ActualWidth, Canvas.ActualHeight);
-        Configure(HScroll, Canvas.ActualWidth, _vm.Bitmap.Width * scale, _scrollX);
-        Configure(VScroll, Canvas.ActualHeight, _vm.Bitmap.Height * scale, _scrollY);
+        var (sw, sh) = SceneSize();
+        Configure(HScroll, Canvas.ActualWidth, sw * scale, _scrollX);
+        Configure(VScroll, Canvas.ActualHeight, sh * scale, _scrollY);
 
         static void Configure(System.Windows.Controls.Primitives.ScrollBar bar, double view, double content, double frac)
         {
@@ -216,8 +222,9 @@ public partial class ImageEditorWindow : Window
     private void PanBy(double dx, double dy)
     {
         var (scale, _, _) = ViewTransform(Canvas.ActualWidth, Canvas.ActualHeight);
-        double rangeX = _vm.Bitmap.Width * scale + 2 * Canvas.ActualWidth * ScrollMargin - Canvas.ActualWidth;
-        double rangeY = _vm.Bitmap.Height * scale + 2 * Canvas.ActualHeight * ScrollMargin - Canvas.ActualHeight;
+        var (sw, sh) = SceneSize();
+        double rangeX = sw * scale + 2 * Canvas.ActualWidth * ScrollMargin - Canvas.ActualWidth;
+        double rangeY = sh * scale + 2 * Canvas.ActualHeight * ScrollMargin - Canvas.ActualHeight;
         if (rangeX > 0) _scrollX = Math.Clamp(_panStartX - dx / rangeX, 0, 1);
         if (rangeY > 0) _scrollY = Math.Clamp(_panStartY - dy / rangeY, 0, 1);
         Canvas.InvalidateVisual();
@@ -258,20 +265,36 @@ public partial class ImageEditorWindow : Window
     private (double Scale, double OffsetX, double OffsetY) ViewTransform(double viewW, double viewH)
     {
         var bmp = _vm.Bitmap;
-        // Durante o arraste da TELA a prévia cresce além da imagem: encaixa no MAIOR
-        // dos dois pra nada vazar pra fora da área visível.
-        float contentW = bmp.Width, contentH = bmp.Height;
-        if (_vm.Tool == EditorTool.Canvas && _liveCanvasSize is { } live)
-        {
-            contentW = Math.Max(contentW, live.X);
-            contentH = Math.Max(contentH, live.Y);
-        }
+        var (sceneW, sceneH) = SceneSize();
+        // Durante o ARRASTE de uma alça da Tela, escala e posição ficam congeladas no
+        // tamanho do começo do arraste — se mudassem a cada movimento, a alça fugia do
+        // mouse. Ao soltar, reencaixa no tamanho novo.
+        if (_fitFreeze is { } frozen) { sceneW = frozen.X; sceneH = frozen.Y; }
+        float fitW = sceneW, fitH = sceneH;
         // Folga de 6% deixa as alças da borda visíveis; _viewZoom é o zoom manual.
-        double scale = Math.Min(viewW / (contentW * 1.06), viewH / (contentH * 1.06)) * _viewZoom;
-        double offsetX = AxisOffset(viewW, bmp.Width * scale, _scrollX);
-        double offsetY = AxisOffset(viewH, bmp.Height * scale, _scrollY);
+        double scale = Math.Min(viewW / (fitW * 1.06), viewH / (fitH * 1.06)) * _viewZoom;
+        // A "cena" (imagem, ou a prévia da Tela se for maior) é o que rola; a imagem
+        // fica sempre no meio dela, igual ao resultado do Aplicar.
+        double offsetX = AxisOffset(viewW, sceneW * scale, _scrollX) + (sceneW - bmp.Width) / 2.0 * scale;
+        double offsetY = AxisOffset(viewH, sceneH * scale, _scrollY) + (sceneH - bmp.Height) / 2.0 * scale;
         return (scale, offsetX, offsetY);
     }
+
+    /// <summary>Tamanho do que aparece na área: a imagem, ou a prévia da Tela quando maior.</summary>
+    private (float W, float H) SceneSize()
+    {
+        var bmp = _vm.Bitmap;
+        float w = bmp.Width, h = bmp.Height;
+        if (_vm.Tool == EditorTool.Canvas && _liveCanvasSize is { } live)
+        {
+            w = Math.Max(w, live.X);
+            h = Math.Max(h, live.Y);
+        }
+        return (w, h);
+    }
+
+    /// <summary>Tamanho usado no encaixe enquanto uma alça da Tela é arrastada.</summary>
+    private SKPoint? _fitFreeze;
 
     private double CanvasScale() => ViewTransform(Canvas.ActualWidth, Canvas.ActualHeight).Scale;
 
@@ -524,6 +547,7 @@ public partial class ImageEditorWindow : Window
         if (_vm.Tool == EditorTool.Canvas && _canvasDrag != CanvasHandle.None)
         {
             _canvasDrag = CanvasHandle.None;
+            _fitFreeze = null; // reencaixa no tamanho novo
             Canvas.InvalidateVisual();
         }
 

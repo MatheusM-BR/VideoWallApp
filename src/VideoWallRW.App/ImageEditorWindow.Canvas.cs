@@ -153,20 +153,36 @@ public partial class ImageEditorWindow
     /// </summary>
     private void BeginCanvasDrag(SKPoint pt)
     {
-        _canvasDrag = HitCanvasHandle(pt);
         _liveCanvasSize ??= new SKPoint(_vm.Bitmap.Width, _vm.Bitmap.Height);
+        _canvasDrag = HitCanvasHandle(pt);
+        if (_canvasDrag != CanvasHandle.None)
+        {
+            var (w, h) = SceneSize();
+            _fitFreeze = new SKPoint(w, h);
+        }
+    }
+
+    /// <summary>Retângulo do TRACEJADO em coordenadas da imagem: a tela nova
+    /// centralizada na imagem atual (mesma conta do desenho e do Aplicar).</summary>
+    private SKRect LiveCanvasRect()
+    {
+        var bmp = _vm.Bitmap;
+        var size = _liveCanvasSize ?? new SKPoint(bmp.Width, bmp.Height);
+        float left = (bmp.Width - size.X) / 2f, top = (bmp.Height - size.Y) / 2f;
+        return new SKRect(left, top, left + size.X, top + size.Y);
     }
 
     private CanvasHandle HitCanvasHandle(SKPoint pt)
     {
-        var bmp = _vm.Bitmap;
+        // As alças são as do tracejado (tamanho em prévia), não as da imagem atual.
+        var r = LiveCanvasRect();
         float tolerance = (float)(16 / Math.Max(CanvasScale(), 0.01));
-        bool nearLeft = Math.Abs(pt.X) <= tolerance;
-        bool nearRight = Math.Abs(pt.X - bmp.Width) <= tolerance;
-        bool nearTop = Math.Abs(pt.Y) <= tolerance;
-        bool nearBottom = Math.Abs(pt.Y - bmp.Height) <= tolerance;
-        bool midY = pt.Y > -tolerance && pt.Y < bmp.Height + tolerance;
-        bool midX = pt.X > -tolerance && pt.X < bmp.Width + tolerance;
+        bool nearLeft = Math.Abs(pt.X - r.Left) <= tolerance;
+        bool nearRight = Math.Abs(pt.X - r.Right) <= tolerance;
+        bool nearTop = Math.Abs(pt.Y - r.Top) <= tolerance;
+        bool nearBottom = Math.Abs(pt.Y - r.Bottom) <= tolerance;
+        bool midY = pt.Y > r.Top - tolerance && pt.Y < r.Bottom + tolerance;
+        bool midX = pt.X > r.Left - tolerance && pt.X < r.Right + tolerance;
 
         return (nearLeft, nearRight, nearTop, nearBottom) switch
         {
@@ -189,12 +205,13 @@ public partial class ImageEditorWindow
         float w = live.X, h = live.Y;
         double aspect = bmp.Height > 0 ? (double)bmp.Width / bmp.Height : 1;
 
-        // Arrastar pra fora de qualquer lado (inclusive esquerda/cima, onde a
-        // coordenada fica negativa) aumenta o tamanho correspondente.
-        float wFromRight() => Math.Max(pt.X, 8);
-        float wFromLeft() => Math.Max(bmp.Width - pt.X, 8);
-        float hFromBottom() => Math.Max(pt.Y, 8);
-        float hFromTop() => Math.Max(bmp.Height - pt.Y, 8);
+        // A tela cresce igual pros DOIS lados (a imagem fica no meio), então a alça
+        // fica exatamente sob o mouse quando a largura = 2 × distância ao centro.
+        float cx = bmp.Width / 2f, cy = bmp.Height / 2f;
+        float wFromRight() => Math.Max(2 * (pt.X - cx), 8);
+        float wFromLeft() => Math.Max(2 * (cx - pt.X), 8);
+        float hFromBottom() => Math.Max(2 * (pt.Y - cy), 8);
+        float hFromTop() => Math.Max(2 * (cy - pt.Y), 8);
 
         switch (_canvasDrag)
         {
