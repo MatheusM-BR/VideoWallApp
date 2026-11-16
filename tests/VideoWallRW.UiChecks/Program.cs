@@ -61,7 +61,7 @@ internal static class Program
         // O mesmo XAML e controles do aplicativo, com dados fictícios. Nenhum engine, saída ou projeto é iniciado.
         var xaml = NeutralDemo.Xaml(File.ReadAllText("src/VideoWallRW.App/MainWindow.xaml"));
         xaml = Regex.Replace(xaml, " x:Class=\"[^\"]*\"", "");
-        xaml = Regex.Replace(xaml, "\\s+(?:PreviewKeyDown|Click|Drop|PreviewMouseLeftButtonDown|MouseDoubleClick|PreviewMouseMove)=\"On[^\"]*\"", "");
+        xaml = Regex.Replace(xaml, "\\s+(?:PreviewKeyDown|Click|Drop|PreviewMouseLeftButtonDown|MouseDoubleClick|PreviewMouseMove|SelectionChanged)=\"On[^\"]*\"", "");
         xaml = xaml.Replace("clr-namespace:VideoWallRW.App.Controls", "clr-namespace:VideoWallRW.App.Controls;assembly=VideoWallRW.App")
             .Replace("Source=\"Themes/Workspace.xaml\"", "Source=\"/VideoWallRW.App;component/Themes/Workspace.xaml\"")
             .Replace("Source=\"Assets/AppIcon.png\"", "Source=\"pack://application:,,,/VideoWallRW.App;component/Assets/AppIcon.png\"");
