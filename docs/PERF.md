@@ -50,20 +50,25 @@ tabela acima com confiança (sem GPU dedicada exclusiva para o teste, sem
 controle sobre carga concorrente do sistema). **Rode a tabela de cenários na
 máquina real antes de fechar o dimensionamento de uma instalação.**
 
-## Decode por hardware (D3D11VA) — não implementado nesta versão
+## Decode por hardware (D3D11VA) — experimental, desligado por padrão
 
-O plano original (`docs/fases/FASE-6.md` T6.1–T6.3) previa decode H.264/H.265/VP9
-via D3D11VA com textura NV12 direto na GPU (zero cópia). Essa parte foi
-**deliberadamente adiada**: é a peça de maior risco de todo o roadmap (integração
-zero-copy entre FFmpeg e D3D11 é notoriamente sensível a driver/GPU específicos,
-e exige testes extensivos em hardware real NVIDIA/AMD/Intel que não é possível
-validar com confiança neste ambiente). Retomar quando houver acesso a máquinas
-de teste reais com GPUs variadas.
+Liga em **Ferramentas → Decodificar vídeo pela GPU (experimental)** (fica salvo em
+`%AppData%\VideoWallRW\settings.json` e vale para os clipes abertos depois).
 
-**Consequência prática**: todo vídeo H.264/H.265 comum decodifica por software
-(CPU) nesta versão. Para muitos layers simultâneos ou 4K+, prefira **HAP**
-(T6.4/T6.5) — o codec já entrega o benefício de "decode quase grátis" sem
-depender de D3D11VA, e já está implementado e validado.
+Como funciona: o FFmpeg decodifica H.264/H.265/VP9 na placa de vídeo, num device
+D3D11 **próprio** (não o do render), e o quadro volta para a memória (NV12) pelo mesmo
+caminho do decode por software. Não há interop de textura entre devices — a parte do
+plano original (T6.1–T6.3) mais sensível a driver —, então o ganho é o de tirar a
+decodificação do processador, com uma cópia GPU→memória por quadro.
+
+Segurança: codec sem D3D11VA (HAP, ProRes, imagens) segue no processador; se a GPU
+recusar o vídeo na abertura, ele abre por software; se falhar no meio da reprodução, o
+mesmo clipe é reaberto no processador a partir do ponto onde estava e a GPU é desligada
+até o fim da sessão. O log mostra `decodificação GPU (D3D11VA)` ou `processador` por clipe.
+
+**Antes de ligar em produção**, rode a tabela de cenários acima com a opção desligada e
+ligada na máquina do estúdio e compare CPU/GPU ("Video Decode" no Gerenciador de Tarefas).
+Zero-copy (textura NV12 direto no render) continua como evolução futura.
 
 ## Como estender esta tabela
 

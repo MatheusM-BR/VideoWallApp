@@ -19,6 +19,8 @@ public sealed unsafe class MediaDecoder : IDisposable
     private SwsContext* _swsCtx;
     private AVPacket* _packet;
     private AVFrame* _frame;
+    private AVFrame* _swFrame;      // destino da cópia GPU→memória (decodificação pela GPU)
+    private AVBufferRef* _hwDevice;
     private int _videoStreamIndex;
     private bool _disposed;
     private double _lastPts = -1;
@@ -42,6 +44,26 @@ public sealed unsafe class MediaDecoder : IDisposable
     public double FrameRate { get; }
     public bool HasAudio => _audioStreamIndex >= 0;
 
+    // ── Decodificação pela GPU (D3D11VA) ────────────────────────────────────────
+    // O FFmpeg decodifica na placa de vídeo, num device D3D11 PRÓPRIO (não o do render),
+    // e o quadro volta pra memória (NV12) pelo mesmo caminho do decode por software.
+    // Sem interop de textura entre devices — a parte que mais quebra entre drivers —,
+    // mas o pesado (decodificar H.264/H.265/VP9) sai do processador.
+    // Desligada por padrão (Ferramentas → Decodificar vídeo pela GPU). Qualquer falha
+    // da GPU cai pro software; uma falha no meio da reprodução desliga a GPU pros
+    // próximos clipes da sessão (o clipe atual é pulado e o autopilot segue).
+
+    /// <summary>Liga a tentativa de decodificar pela GPU nos próximos vídeos abertos.</summary>
+    public static bool HardwareDecodeEnabled { get; set; }
+
+    private static volatile bool _hardwareBroken;
+
+    /// <summary>AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX (libavcodec/codec.h) — o FFmpeg.AutoGen 7.1 não expõe.</summary>
+    private const int AvCodecHwConfigMethodHwDeviceCtx = 0x01;
+
+    /// <summary>True se ESTE vídeo está sendo decodificado pela GPU.</summary>
+    public bool IsHardwareDecoding => _hwDevice != null;
+
     /// <summary>Format-ratios do stream (para cálculo de PTS).</summary>
     private readonly AVRational _timeBase;
 
@@ -49,8 +71,9 @@ public sealed unsafe class MediaDecoder : IDisposable
         int streamIndex, AVRational timeBase, double duration,
         int width, int height, double frameRate,
         AVCodecContext* audioCodecCtx, int audioStreamIndex, SwrContext* swrCtx,
-        Action<float[], int>? onAudioSamples)
+        Action<float[], int>? onAudioSamples, AVBufferRef* hwDevice)
     {
+        _hwDevice = hwDevice;
         _fmtCtx = fmtCtx;
         _codecCtx = codecCtx;
         _videoStreamIndex = streamIndex;
@@ -66,6 +89,8 @@ public sealed unsafe class MediaDecoder : IDisposable
 
         _packet = ffmpeg.av_packet_alloc();
         _frame = ffmpeg.av_frame_alloc();
+        if (_hwDevice != null)
+            _swFrame = ffmpeg.av_frame_alloc();
         if (_audioStreamIndex >= 0)
             _audioFrame = ffmpeg.av_frame_alloc();
     }
@@ -78,7 +103,7 @@ public sealed unsafe class MediaDecoder : IDisposable
     /// Falha ao abrir/inicializar áudio nunca impede a abertura do vídeo — o clipe
     /// simplesmente segue sem som.
     /// </summary>
-    public static MediaDecoder Open(string path, Action<float[], int>? onAudioSamples = null)
+    public static MediaDecoder Open(string path, Action<float[], int>? onAudioSamples = null, bool allowHardware = false)
     {
         AVFormatContext* fmtCtx = null;
         var ret = ffmpeg.avformat_open_input(&fmtCtx, path, null, null);
@@ -115,12 +140,28 @@ public sealed unsafe class MediaDecoder : IDisposable
             throw new MediaOpenException($"Falha ao copiar parâmetros do codec: {AvError(ret)}", ret);
         }
 
-        // Multi-threaded software decode.
-        codecCtx->thread_count = 0; // auto (deixar o FFmpeg decidir)
+        AVBufferRef* hwDevice = allowHardware && HardwareDecodeEnabled && !_hardwareBroken
+            ? TryAttachHardware(codecCtx, codec)
+            : null;
+
+        // Software: multi-thread automático. GPU: o próprio hardware paraleliza.
+        codecCtx->thread_count = hwDevice != null ? 1 : 0;
 
         ret = ffmpeg.avcodec_open2(codecCtx, codec, null);
+        if (ret < 0 && hwDevice != null)
+        {
+            // Codec não abriu com a GPU: tenta de novo por software antes de desistir.
+            Log.Warning("Decodificação pela GPU recusada para '{Path}' ({Err}) — usando o processador", path, AvError(ret));
+            ffmpeg.avcodec_free_context(&codecCtx);
+            ffmpeg.av_buffer_unref(&hwDevice);
+            codecCtx = ffmpeg.avcodec_alloc_context3(codec);
+            ffmpeg.avcodec_parameters_to_context(codecCtx, fmtCtx->streams[streamIndex]->codecpar);
+            codecCtx->thread_count = 0;
+            ret = ffmpeg.avcodec_open2(codecCtx, codec, null);
+        }
         if (ret < 0)
         {
+            if (hwDevice != null) ffmpeg.av_buffer_unref(&hwDevice);
             ffmpeg.avcodec_free_context(&codecCtx);
             ffmpeg.avformat_close_input(&fmtCtx);
             throw new MediaOpenException($"Falha ao abrir codec '{ffmpeg.avcodec_get_name(codecCtx->codec_id)}': {AvError(ret)}", ret);
@@ -135,14 +176,47 @@ public sealed unsafe class MediaDecoder : IDisposable
         int width = codecCtx->width;
         int height = codecCtx->height;
 
-        Log.Debug("Vídeo aberto: {Path} — {W}×{H} @ {Fps:F2}fps, duração {Dur:F2}s, codec {Codec}",
+        Log.Debug("Vídeo aberto: {Path} — {W}×{H} @ {Fps:F2}fps, duração {Dur:F2}s, codec {Codec}, decodificação {Decode}",
             path, width, height, frameRate, duration,
-            ffmpeg.avcodec_get_name(codecCtx->codec_id));
+            ffmpeg.avcodec_get_name(codecCtx->codec_id), hwDevice != null ? "GPU (D3D11VA)" : "processador");
 
         OpenAudio(path, fmtCtx, out var audioCodecCtx, out var audioStreamIndex, out var swrCtx);
 
         return new MediaDecoder(fmtCtx, codecCtx, streamIndex, timeBase, duration, width, height, frameRate,
-            audioCodecCtx, audioStreamIndex, swrCtx, onAudioSamples);
+            audioCodecCtx, audioStreamIndex, swrCtx, onAudioSamples, hwDevice);
+    }
+
+    /// <summary>
+    /// Se o codec decodifica por D3D11VA, cria o device da GPU e liga no contexto (o
+    /// get_format padrão do FFmpeg escolhe o formato de hardware sozinho quando há
+    /// hw_device_ctx). Devolve a referência que o decoder guarda, ou null = software.
+    /// </summary>
+    private static AVBufferRef* TryAttachHardware(AVCodecContext* codecCtx, AVCodec* codec)
+    {
+        bool supported = false;
+        for (int i = 0; ; i++)
+        {
+            AVCodecHWConfig* config = ffmpeg.avcodec_get_hw_config(codec, i);
+            if (config == null) break;
+            if (config->device_type == AVHWDeviceType.AV_HWDEVICE_TYPE_D3D11VA &&
+                (config->methods & AvCodecHwConfigMethodHwDeviceCtx) != 0)
+            {
+                supported = true;
+                break;
+            }
+        }
+        if (!supported) return null; // ex.: HAP, ProRes, PNG — seguem no processador
+
+        AVBufferRef* device = null;
+        int ret = ffmpeg.av_hwdevice_ctx_create(&device, AVHWDeviceType.AV_HWDEVICE_TYPE_D3D11VA, null, null, 0);
+        if (ret < 0 || device == null)
+        {
+            Log.Warning("GPU sem decodificação D3D11VA disponível ({Err}) — desligando para esta sessão", AvError(ret));
+            _hardwareBroken = true;
+            return null;
+        }
+        codecCtx->hw_device_ctx = ffmpeg.av_buffer_ref(device);
+        return device;
     }
 
     /// <summary>
@@ -347,6 +421,21 @@ public sealed unsafe class MediaDecoder : IDisposable
             : rawPts * ffmpeg.av_q2d(_timeBase);
         _lastPts = pts;
 
+        // Quadro decodificado pela GPU: copia pra memória (NV12) e segue o caminho normal.
+        AVFrame* src = _frame;
+        if ((AVPixelFormat)_frame->format == AVPixelFormat.AV_PIX_FMT_D3D11)
+        {
+            ffmpeg.av_frame_unref(_swFrame);
+            int tr = ffmpeg.av_hwframe_transfer_data(_swFrame, _frame, 0);
+            if (tr < 0)
+            {
+                ffmpeg.av_frame_unref(_frame);
+                _hardwareBroken = true; // próximos clipes da sessão vão pelo processador
+                throw new MediaOpenException($"Falha ao copiar quadro da GPU ({AvError(tr)}); decodificação pela GPU desligada.", tr);
+            }
+            src = _swFrame;
+        }
+
         int dstStride = Width * 4; // BGRA: 4 bytes por pixel
         int needed = dstStride * Height;
         // FOLGA OBRIGATÓRIA no fim do buffer: as rotinas SIMD do swscale escrevem em
@@ -368,19 +457,19 @@ public sealed unsafe class MediaDecoder : IDisposable
         // Só comparar resolução deixava o contexto preso ao formato do primeiro frame —
         // se o decoder passasse a entregar outro formato (mesmas dimensões), o swscale
         // leria os planos da origem com o layout ERRADO.
-        var srcFormat = (AVPixelFormat)_frame->format;
+        var srcFormat = (AVPixelFormat)src->format;
         if (_swsCtx == null ||
-            _frame->width != _swsSrcWidth || _frame->height != _swsSrcHeight || srcFormat != _swsSrcFormat)
+            src->width != _swsSrcWidth || src->height != _swsSrcHeight || srcFormat != _swsSrcFormat)
         {
             if (_swsCtx != null) ffmpeg.sws_freeContext(_swsCtx);
             _swsCtx = ffmpeg.sws_getContext(
-                _frame->width, _frame->height, srcFormat,
+                src->width, src->height, srcFormat,
                 Width, Height, AVPixelFormat.AV_PIX_FMT_BGRA,
                 ffmpeg.SWS_BILINEAR, null, null, null);
             if (_swsCtx == null)
                 throw new MediaOpenException("sws_getContext falhou.");
-            _swsSrcWidth = _frame->width;
-            _swsSrcHeight = _frame->height;
+            _swsSrcWidth = src->width;
+            _swsSrcHeight = src->height;
             _swsSrcFormat = srcFormat;
         }
 
@@ -396,7 +485,7 @@ public sealed unsafe class MediaDecoder : IDisposable
             // access violation dentro do coreclr.
             byte*[] dstData = [dstPtr, null, null, null];
             int[] dstLinesize = [dstStride, 0, 0, 0];
-            ffmpeg.sws_scale(_swsCtx, _frame->data, _frame->linesize, 0, _frame->height,
+            ffmpeg.sws_scale(_swsCtx, src->data, src->linesize, 0, src->height,
                 dstData, dstLinesize);
 
             // sws_scale não garante alpha=255 ao converter de um formato sem alpha (ex.: YUV420P)
@@ -415,6 +504,7 @@ public sealed unsafe class MediaDecoder : IDisposable
         target.Height = Height;
         target.PtsSeconds = pts;
         ffmpeg.av_frame_unref(_frame);
+        if (_swFrame != null) ffmpeg.av_frame_unref(_swFrame);
     }
 
     public void Dispose()
@@ -437,9 +527,11 @@ public sealed unsafe class MediaDecoder : IDisposable
         if (_swsCtx != null) { ffmpeg.sws_freeContext(_swsCtx); _swsCtx = null; }
         if (_swrCtx != null) { fixed (SwrContext** p = &_swrCtx) ffmpeg.swr_free(p); }
         if (_frame != null) { fixed (AVFrame** p = &_frame) ffmpeg.av_frame_free(p); }
+        if (_swFrame != null) { fixed (AVFrame** p = &_swFrame) ffmpeg.av_frame_free(p); }
         if (_audioFrame != null) { fixed (AVFrame** p = &_audioFrame) ffmpeg.av_frame_free(p); }
         if (_packet != null) { fixed (AVPacket** p = &_packet) ffmpeg.av_packet_free(p); }
         if (_codecCtx != null) { fixed (AVCodecContext** p = &_codecCtx) ffmpeg.avcodec_free_context(p); }
+        if (_hwDevice != null) { fixed (AVBufferRef** p = &_hwDevice) ffmpeg.av_buffer_unref(p); }
         if (_audioCodecCtx != null) { fixed (AVCodecContext** p = &_audioCodecCtx) ffmpeg.avcodec_free_context(p); }
         if (_fmtCtx != null) { fixed (AVFormatContext** p = &_fmtCtx) ffmpeg.avformat_close_input(p); }
     }

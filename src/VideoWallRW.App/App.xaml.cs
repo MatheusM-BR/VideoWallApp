@@ -24,6 +24,7 @@ public partial class App : Application
     private Input.OscService? _osc;
     private Remote.RemoteWebService? _remoteWeb;
     private Media.Ndi.NdiFinder? _ndiFinder;
+    private AppSettings _settings = new();
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
@@ -144,6 +145,10 @@ public partial class App : Application
         // etc.) nunca derruba o programa — os clipes seguem tocando normalmente, sem som.
         _audio = AudioEngine.Create();
 
+        _settings = AppSettings.Load();
+        VideoWallRW.Media.Decoding.MediaDecoder.HardwareDecodeEnabled = _settings.HardwareDecode;
+        Log.Information("Decodificação de vídeo: {Mode}", _settings.HardwareDecode ? "GPU (experimental)" : "processador");
+
         _render = new RenderThread(_gfx);
 
         // Descoberta de fontes NDI: fica rodando em background durante toda a sessão
@@ -183,6 +188,7 @@ public partial class App : Application
         // OSC também começa DESLIGADO (sem senha): liga em Ferramentas → Entrada OSC.
         _osc = new Input.OscService(_render, vm.ResolveSceneByName);
         vm.AttachOsc(_osc);
+        vm.AttachSettings(_settings);
 
         // Controle remoto começa DESLIGADO: o operador liga pelo botão do topo, que
         // mostra o endereço da máquina e o PIN (antes subia sempre, com o PIN só no log).

@@ -54,8 +54,9 @@ public sealed class VideoDecodeWorker : IDisposable
         MediaDecoder? decoder = null;
         try
         {
-            decoder = MediaDecoder.Open(_filePath, _onAudioSamples);
-            Log.Information("Decode worker iniciado: {File} (áudio: {HasAudio})", _filePath, decoder.HasAudio);
+            decoder = MediaDecoder.Open(_filePath, _onAudioSamples, allowHardware: true);
+            Log.Information("Decode worker iniciado: {File} (áudio: {HasAudio}, GPU: {Gpu})", _filePath, decoder.HasAudio, decoder.IsHardwareDecoding);
+            double lastPts = 0;
 
             while (!ct.IsCancellationRequested)
             {
@@ -75,7 +76,30 @@ public sealed class VideoDecodeWorker : IDisposable
                 var frame = _queue.Rent();
                 frame.Generation = gen;
 
-                if (!decoder.TryDecodeNext(frame))
+                bool decoded;
+                try
+                {
+                    decoded = decoder.TryDecodeNext(frame);
+                }
+                catch (MediaOpenException ex) when (decoder.IsHardwareDecoding)
+                {
+                    // A GPU falhou no meio do vídeo: reabre o MESMO arquivo no processador
+                    // (o MediaDecoder já desligou a GPU pro resto da sessão) e continua de
+                    // onde parou — o telão não perde o clipe.
+                    Log.Warning(ex, "Decodificação pela GPU falhou em {File}; continuando pelo processador", _filePath);
+                    _queue.Return(frame);
+                    decoder.Dispose();
+                    decoder = MediaDecoder.Open(_filePath, _onAudioSamples, allowHardware: true);
+                    if (lastPts > 0)
+                    {
+                        decoder.Seek(lastPts);
+                        DiscardUntil(decoder, lastPts, ct);
+                    }
+                    continue;
+                }
+                if (decoded) lastPts = frame.PtsSeconds;
+
+                if (!decoded)
                 {
                     // EOF: quem manda no transporte é o ClipPlayer (Loop = ele pede o
                     // seek; Hold/Once = ninguém pede). Loopar aqui sozinho fazia o clip

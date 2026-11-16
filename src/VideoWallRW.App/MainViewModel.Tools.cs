@@ -57,6 +57,28 @@ public sealed partial class MainViewModel
             : clients > 0 ? $"Remoto · LIG. ({clients})" : "Remoto · LIG.";
     }
 
+    // ── Decodificação pela GPU (Ferramentas → marcável; vale pros próximos clipes) ──
+    private AppSettings? _settings;
+    [ObservableProperty] private bool _hardwareDecode;
+
+    public void AttachSettings(AppSettings settings)
+    {
+        // Sem _settings ainda, o OnHardwareDecodeChanged não salva nem mostra aviso.
+        HardwareDecode = settings.HardwareDecode;
+        _settings = settings;
+    }
+
+    partial void OnHardwareDecodeChanged(bool value)
+    {
+        if (_settings is null) return;
+        _settings.HardwareDecode = value;
+        _settings.Save();
+        VideoWallRW.Media.Decoding.MediaDecoder.HardwareDecodeEnabled = value;
+        StatusText = value
+            ? "Decodificação pela GPU ligada (experimental) — vale para os próximos clipes abertos. Se algum vídeo falhar, ele volta sozinho para o processador."
+            : "Decodificação pela GPU desligada — os próximos clipes usam o processador.";
+    }
+
     private Input.OscService? _osc;
 
     /// <summary>Menu Ferramentas → "Entrada OSC (porta 7000)" (marcável). Desligada ao abrir.</summary>

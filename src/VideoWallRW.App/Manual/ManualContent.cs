@@ -223,7 +223,11 @@ public static class ManualContent
 
         new("Conversor HAP", "Vídeos leves para muitas camadas",
             new Picture("hap.png", "Ferramentas → Conversor HAP"),
-            new Paragraph("HAP é um formato que a placa de vídeo decodifica quase sem usar processador — ideal para várias camadas de vídeo ao mesmo tempo ou 4K. Adicione os arquivos, escolha o perfil e o destino e clique em **Converter tudo**. Use o arquivo convertido na grade normalmente.")),
+            new Paragraph("HAP é um formato que a placa de vídeo decodifica quase sem usar processador — ideal para várias camadas de vídeo ao mesmo tempo ou 4K. Adicione os arquivos, escolha o perfil e o destino e clique em **Converter tudo**. Use o arquivo convertido na grade normalmente."),
+            new Subtitle("Decodificar vídeo pela GPU (experimental)"),
+            new Paragraph("Para vídeos comuns (MP4 H.264/H.265), **Ferramentas → Decodificar vídeo pela GPU** usa a placa de vídeo em vez do processador — ajuda com 4K e várias camadas de vídeo. Começa desligado e vale para os clipes abertos depois de ligar. Se algum vídeo não funcionar pela GPU, ele volta sozinho para o processador sem sair do ar."),
+            new Tip("Teste numa máquina antes de usar no estúdio: ligue, toque os vídeos de um evento e acompanhe o uso de CPU e de \"Video Decode\" da GPU no Gerenciador de Tarefas.")),
+
 
         new("Atalhos de teclado", "Padrões e como mudar",
             new KeyTable(

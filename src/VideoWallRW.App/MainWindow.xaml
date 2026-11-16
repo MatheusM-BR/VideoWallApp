@@ -62,6 +62,8 @@
               <Separator />
               <MenuItem Header="Manual" Command="{Binding OpenHelpCommand}" />
               <MenuItem Header="Controle remoto..." Command="{Binding OpenRemoteControlCommand}" />
+              <MenuItem Header="Decodificar vídeo pela GPU (experimental)" IsCheckable="True" IsChecked="{Binding HardwareDecode}"
+                        ToolTip="H.264/H.265/VP9 decodificados pela placa de vídeo — alivia o processador em 4K e em várias camadas. Se falhar, volta sozinho para o processador." />
               <MenuItem Header="Entrada OSC (porta 7000)" IsCheckable="True" IsChecked="{Binding OscEnabled}"
                         ToolTip="Recebe comandos OSC (Companion, TouchOSC). Sem senha — começa desligada; ligue só quando for usar." />
             </MenuItem>
