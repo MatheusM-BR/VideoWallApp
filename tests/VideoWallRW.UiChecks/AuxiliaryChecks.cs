@@ -74,6 +74,7 @@ internal static class AuxiliaryChecks
         Console.WriteLine("Crop geometry checks passed for corners, edges, aspect ratio and numeric height edits.");
         using (var behaviorVm = new ImageEditorViewModel(Path.GetFullPath("artifacts/ui-review/demo-clip-0.png")))
         {
+            behaviorVm.LayerMode = true;
             behaviorVm.AddImageLayer(Path.GetFullPath("artifacts/ui-review/demo-clip-1.png"));
             var floating = behaviorVm.ActiveLayer ?? throw new Exception("Layer selection failed");
             float originalX = floating.X, originalY = floating.Y;
@@ -82,7 +83,7 @@ internal static class AuxiliaryChecks
                 Math.Abs(behaviorVm.ActiveLayer!.X - (originalX - 40)) > .01 || Math.Abs(behaviorVm.ActiveLayer.Y - (originalY - 30)) > .01)
                 throw new Exception("Crop did not preserve layer alignment");
             behaviorVm.UndoCommand.Execute(null);
-            if (behaviorVm.Bitmap.Width != 640 || behaviorVm.Bitmap.Height != 360 || behaviorVm.Layers.Count != 2) // imagem original + camada adicionada
+            if (behaviorVm.Bitmap.Width != 640 || behaviorVm.Bitmap.Height != 360 || behaviorVm.Layers.Count != 1) // camada adicionada
                 throw new Exception("Undo did not restore the complete composition");
             behaviorVm.ApplyCanvasResize(800, 500);
             if (behaviorVm.Bitmap.Width != 800 || behaviorVm.ActiveLayer!.X <= originalX)
@@ -94,8 +95,16 @@ internal static class AuxiliaryChecks
         Console.WriteLine("Crop, layer alignment, canvas expansion and complete undo checks passed.");
         using (var layersVm = new ImageEditorViewModel(Path.GetFullPath("artifacts/ui-review/demo-clip-0.png")))
         {
-            if (layersVm.Layers.Count != 1 || layersVm.Layers[0].Kind != EditorLayerKind.Image)
-                throw new Exception("Original image did not open as its own layer");
+            // Padrão: camadas mescladas — a foto abre como a própria imagem.
+            if (layersVm.Layers.Count != 0 || layersVm.LayerMode)
+                throw new Exception("Editor did not open with merged layers by default");
+            layersVm.Tool = EditorTool.Shape;
+            layersVm.AddShapeLayer(new SKPoint(10, 10), new SKPoint(110, 60));
+            layersVm.Tool = EditorTool.Brush;
+            if (layersVm.Layers.Count != 0)
+                throw new Exception("Merged mode did not fuse the shape when switching tools");
+            layersVm.UndoCommand.Execute(null);
+            layersVm.LayerMode = true;
             layersVm.Tool = EditorTool.Shape;
             if (layersVm.AddShapeLayer(new SKPoint(10, 10), new SKPoint(110, 60)) is not { Kind: EditorLayerKind.Shape } shape ||
                 Math.Abs(shape.Width - 100) > .01 || !ReferenceEquals(layersVm.ActiveLayer, shape))
@@ -103,7 +112,7 @@ internal static class AuxiliaryChecks
             layersVm.Tool = EditorTool.Text;
             var text = layersVm.AddTextLayer(new SKRect(20, 20, 300, 120)) ?? throw new Exception("Text layer not created");
             layersVm.TextInput = "Evento 1";
-            if (text.Text != "Evento 1" || layersVm.Layers.Count != 3)
+            if (text.Text != "Evento 1" || layersVm.Layers.Count != 2)
                 throw new Exception("Editing the text field did not update the selected text layer");
             layersVm.UndoCommand.Execute(null);
             if (layersVm.Layers.OfType<EditorLayer>().Any(l => l.Kind == EditorLayerKind.Text && l.Text == "Evento 1"))
@@ -113,13 +122,14 @@ internal static class AuxiliaryChecks
                 ImageEditorViewModel.EditedFileName(1920, 1080, 3) != "16x9 - Edited v3.png")
                 throw new Exception("Edited file name does not follow the 16x9/9x16 pattern");
         }
-        Console.WriteLine("Original-as-layer, shape/text layers and edited file name checks passed.");
+        Console.WriteLine("Merged-by-default, layer mode, shape/text layers and edited file name checks passed.");
         var path = Path.GetFullPath("artifacts/ui-review/demo-clip-0.png");
         var editorVm = new ImageEditorViewModel(path);
         var editor = new ImageEditorWindow(editorVm);
         Show(editor); Save(editor, "editor-paint3d");
         editor.Width = 1000; editor.Height = 680;
         // Camadas de exemplo pros prints do manual: uma faixa (forma) e um texto por cima da arte.
+        editorVm.LayerMode = true;
         editorVm.Tool = EditorTool.Shape; editorVm.SetColorHex("#ED1C24");
         var demoShape = editorVm.AddShapeLayer(new SKPoint(24, 24), new SKPoint(250, 84))!;
         editorVm.Tool = EditorTool.Text; editorVm.SetColorHex("#FFFFFF");

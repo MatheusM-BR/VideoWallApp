@@ -177,6 +177,18 @@
                   </Trigger></Style.Triggers>
                 </Style></ToggleButton.Style>
               </ToggleButton>
+<ToggleButton DockPanel.Dock="Left" IsChecked="{Binding LayerMode}" Padding="8,3" Margin="0,0,10,0"
+                            AutomationProperties.Name="Modo camadas"
+                            ToolTip="Desligado (padrão): forma, texto e imagem se fundem na foto ao terminar de ajustar. Ligado: cada elemento fica numa camada separada, editável depois.">
+                <ToggleButton.Style><Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+                  <Setter Property="Content" Value="▧ Camadas: mescladas" />
+                  <Style.Triggers><Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Content" Value="▧ Modo camadas: ligado" />
+                    <Setter Property="Background" Value="{StaticResource SelectionBg}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+                  </Trigger></Style.Triggers>
+                </Style></ToggleButton.Style>
+              </ToggleButton>
               <TextBlock Text="Roda: zoom · segure a roda e arraste para mover" TextTrimming="CharacterEllipsis" Foreground="{StaticResource FgDim}" FontSize="11" VerticalAlignment="Center" />
             </DockPanel>
           </Border>
@@ -277,6 +289,18 @@
               </Style>
             </StackPanel.Style>
             <TextBlock Text="Camadas" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" />
+            <ToggleButton HorizontalAlignment="Stretch" IsChecked="{Binding LayerMode}" Padding="8,3" Margin="0,0,0,8"
+                            AutomationProperties.Name="Modo camadas"
+                            ToolTip="Desligado (padrão): forma, texto e imagem se fundem na foto ao terminar de ajustar. Ligado: cada elemento fica numa camada separada, editável depois.">
+                <ToggleButton.Style><Style TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+                  <Setter Property="Content" Value="▧ Camadas: mescladas" />
+                  <Style.Triggers><Trigger Property="IsChecked" Value="True">
+                    <Setter Property="Content" Value="▧ Modo camadas: ligado" />
+                    <Setter Property="Background" Value="{StaticResource SelectionBg}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Selection}" />
+                  </Trigger></Style.Triggers>
+                </Style></ToggleButton.Style>
+              </ToggleButton>
             <Button AutomationProperties.Name="Selecionar o fundo" Click="OnSelectBaseLayer" HorizontalContentAlignment="Stretch" Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" Padding="8" Margin="0,0,0,8" ToolTip="Selecionar o fundo (os pincéis passam a pintar nele)">
               <DockPanel><TextBlock DockPanel.Dock="Left" Text="▣" FontSize="16" Margin="0,0,8,0" /><StackPanel><TextBlock Text="Fundo (tela)" FontWeight="SemiBold" /><TextBlock Text="Fica atrás de tudo · Tela/Recortar mudam o tamanho" FontSize="10" Foreground="{StaticResource FgDim}" /></StackPanel></DockPanel>
             </Button>

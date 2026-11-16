@@ -138,7 +138,7 @@ public static class ManualContent
             new Picture("editor-layers.png", "Editor de imagem — painel Camadas"),
             new Paragraph("Abra pelo botão direito numa célula com imagem (**Editar imagem...**), pela Agenda ou pelo PDF. As categorias ficam no topo; as opções da ferramenta, à direita."),
             new Bullets(
-                "A **imagem original vira uma camada** separada do **fundo** — dá para mover, redimensionar e colocar texto/formas por cima.",
+                "Por padrão as **camadas ficam mescladas**: a foto é a própria imagem, e forma, texto ou imagem adicionada podem ser ajustados enquanto estão selecionados — ao trocar de ferramenta, clicar fora ou criar outro elemento, eles se fundem na foto (`Ctrl+Z` desfaz). Clique em **▧ Camadas: mescladas** (rodapé ou painel Camadas) para ligar o **modo camadas** e manter cada elemento separado, editável depois.",
                 "Na barra superior, à direita: **conta-gotas**, **balde** e a **cor atual** (clique para trocar), em qualquer ferramenta.",
                 "**🧲 Ímãs** (rodapé da área de edição): ao mover uma camada ela gruda no centro e nas bordas da tela e de outras camadas, com uma linha guia rosa. Segure `Alt` para mover livre.",
                 "Roda do mouse aproxima/afasta (no ponto do mouse). **Segure a roda e arraste** para mover a visualização, ou use as **barras de rolagem**; `Shift`+roda rola para os lados. **Ajustar à tela** volta ao enquadramento.",
@@ -157,8 +157,8 @@ public static class ManualContent
                 "**Pincel** pinta com a cor e o tamanho escolhidos.",
                 "**Borracha**: numa camada abre transparência (aparece o fundo); no fundo, volta à cor de fundo.",
                 "**Preencher** (balde) pinta uma área de cor parecida — ajuste a **Tolerância**.",
-                "**Conta-gotas** pega a cor de qualquer ponto da imagem; as cores pegas ficam no **Histórico**.",
-                "O painel mostra **Pintando em:** — os pincéis agem na camada de imagem selecionada (contorno azul tracejado). Começando o traço **fora** dela — por exemplo na área branca depois de aumentar a tela — a tinta vai para o fundo. Para pintar só no fundo, clique em **Fundo (tela)** no painel Camadas.")),
+                "**Conta-gotas** pega a cor de qualquer ponto da imagem e **já passa para o balde** — o próximo clique preenche com a cor pega. As cores pegas ficam no **Histórico**.",
+                "O painel mostra **Pintando em:** — com as camadas mescladas é sempre a **Imagem**. No modo camadas, os pincéis agem na camada de imagem selecionada (contorno azul tracejado); começando o traço **fora** dela, a tinta vai para o fundo.")),
 
         new("Editor · Formas e texto", "Inserir como camadas editáveis",
             new Picture("editor-shape.png", "Formas 2D"),

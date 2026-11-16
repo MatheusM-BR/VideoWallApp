@@ -111,9 +111,10 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         _backgroundFill = HasTransparency(original.Bitmap!) ? SKColors.Transparent : SKColors.White;
         _bitmap = new SKBitmap(new SKImageInfo(original.Bitmap!.Width, original.Bitmap.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
         using (var bg = new SKCanvas(_bitmap)) bg.Clear(_backgroundFill);
-        AttachLayer(original);
-        Layers.Add(original);
-        _activeLayer = original;
+        // Padrão: camadas MESCLADAS — a foto já é a própria imagem (pinta, preenche e
+        // aumenta a tela direto nela). O modo camadas é ligado pelo operador.
+        using (var bg = new SKCanvas(_bitmap)) original.Draw(bg);
+        original.Dispose();
 
         // Texto num tamanho que aparece na arte (32px some num banner 1920×1080).
         _textSize = Math.Clamp(_bitmap.Height / 10, 24, 400);
@@ -166,7 +167,53 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(PaintTargetName));
     }
 
-    public string PaintTargetName => PaintLayer?.Name ?? "Fundo";
+    public string PaintTargetName => PaintLayer?.Name ?? (LayerMode ? "Fundo" : "Imagem");
+
+    // ── Modo camadas × camadas mescladas ─────────────────────────────────────
+
+    /// <summary>
+    /// Desligado (padrão): tudo é mesclado na imagem. Forma/texto continuam ajustáveis
+    /// enquanto selecionados, e se fundem na imagem ao trocar de ferramenta, clicar
+    /// fora ou criar outro elemento. Ligado: cada elemento fica como camada separada.
+    /// </summary>
+    [ObservableProperty] private bool _layerMode;
+
+    private bool _merging, _restoring;
+
+    partial void OnLayerModeChanged(bool value)
+    {
+        if (!value) MergeLayersExcept(null);
+        StatusText = value
+            ? "Modo camadas ligado: formas, textos e imagens ficam em camadas separadas."
+            : "Camadas mescladas: cada elemento se funde na imagem ao terminar de ajustar.";
+        OnPropertyChanged(nameof(PaintTargetName));
+    }
+
+    partial void OnToolChanged(EditorTool value) => MergeLayersExcept(null);
+
+    /// <summary>Funde na imagem as camadas (menos <paramref name="keep"/>) quando o modo
+    /// camadas está desligado. Não cria passo de desfazer próprio: o Ctrl+Z volta para
+    /// antes do elemento ter sido criado/alterado, como num editor sem camadas.</summary>
+    private void MergeLayersExcept(EditorLayer? keep)
+    {
+        if (LayerMode || _merging || _restoring) return;
+        var toMerge = Layers.Where(l => !ReferenceEquals(l, keep)).ToList();
+        if (toMerge.Count == 0) return;
+        _merging = true;
+        try
+        {
+            using (var canvas = new SKCanvas(Bitmap))
+                foreach (var layer in toMerge) layer.Draw(canvas);
+            Bitmap.NotifyPixelsChanged();
+            foreach (var layer in toMerge) Layers.Remove(layer);
+            if (ActiveLayer is not null && !Layers.Contains(ActiveLayer)) ActiveLayer = null;
+            foreach (var layer in toMerge) layer.Dispose();
+            OnPropertyChanged(nameof(HasLayers));
+            OnPropertyChanged(nameof(PaintTargetName));
+            BitmapChanged?.Invoke();
+        }
+        finally { _merging = false; }
+    }
 
     /// <summary>
     /// Onde a tinta cai NESTE ponto: a camada de pintura se o ponto está dentro dela;
@@ -224,14 +271,19 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         // acesso inválido de memória nativa, que derruba o app sem passar pelo log.
         var oldBitmap = Bitmap;
         var oldLayers = Layers.ToList();
-        Bitmap = snapshot.Bitmap;
-        Layers.Clear();
-        foreach (var layer in snapshot.Layers)
+        _restoring = true;
+        try
         {
-            AttachLayer(layer);
-            Layers.Add(layer);
+            Bitmap = snapshot.Bitmap;
+            Layers.Clear();
+            foreach (var layer in snapshot.Layers)
+            {
+                AttachLayer(layer);
+                Layers.Add(layer);
+            }
+            ActiveLayer = Layers.LastOrDefault();
         }
-        ActiveLayer = Layers.LastOrDefault();
+        finally { _restoring = false; }
         OnPropertyChanged(nameof(HasLayers));
         OnPropertyChanged(nameof(PaintTargetName));
 
@@ -314,12 +366,15 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         if (color.Alpha == 0) return; // área transparente: não tem cor pra pegar
         BrushColor = color;
         BrushColorHex = $"#{color.Red:X2}{color.Green:X2}{color.Blue:X2}";
-        StatusText = $"Cor capturada: {BrushColorHex}";
+        StatusText = $"Cor capturada: {BrushColorHex} — balde selecionado.";
 
         ColorHistory.Remove(BrushColorHex);
         ColorHistory.Insert(0, BrushColorHex);
         while (ColorHistory.Count > MaxColorHistory)
             ColorHistory.RemoveAt(ColorHistory.Count - 1);
+
+        // Fluxo mais comum: pegou a cor pra preencher. Já entra no balde.
+        Tool = EditorTool.Bucket;
     }
 
     // ── Balde de tinta (flood fill com tolerância) ───────────────────────────
@@ -656,6 +711,8 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     partial void OnActiveLayerChanged(EditorLayer? value)
     {
+        // Camadas mescladas: ao selecionar outra (ou nenhuma), a anterior se funde.
+        MergeLayersExcept(value);
         _editUndoTakenFor = null;
         if (value is not null) _paintOnBackground = false;
         SyncFieldsFromLayer(value);
