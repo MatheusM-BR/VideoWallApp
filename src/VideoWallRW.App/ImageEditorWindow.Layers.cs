@@ -162,7 +162,23 @@ public partial class ImageEditorWindow
 
     private void OnEditorKeyDown(object sender, KeyEventArgs e)
     {
+        // Em campo de texto, Ctrl+Z/Y continuam sendo o desfazer do próprio campo.
         if (Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase) return;
+
+        // Ctrl+Z desfaz, Ctrl+Y ou Ctrl+Shift+Z refaz (padrão Windows). Ignorado com o
+        // botão do mouse pressionado no meio de um traço/arraste.
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.Z or Key.Y)
+        {
+            if (Mouse.Captured is null)
+            {
+                bool redo = e.Key == Key.Y || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+                var command = redo ? _vm.RedoCommand : _vm.UndoCommand;
+                if (command.CanExecute(null)) command.Execute(null);
+            }
+            e.Handled = true;
+            return;
+        }
+
         if (_vm.Tool == EditorTool.Crop && NormalizedCrop() is { } crop)
         {
             if (e.Key == Key.Enter) OnApplyCrop(sender, e);

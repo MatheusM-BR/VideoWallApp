@@ -51,8 +51,8 @@
     <Border Style="{StaticResource SurfacePanel}" Padding="14,10" Margin="0,0,0,6">
       <DockPanel>
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-          <Button Content="Desfazer" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" Margin="0,0,4,0" Padding="10,6" />
-          <Button Content="Refazer" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" Margin="0,0,16,0" Padding="10,6" />
+          <Button Content="Desfazer" ToolTip="Desfazer (Ctrl+Z)" Command="{Binding UndoCommand}" IsEnabled="{Binding CanUndo}" Margin="0,0,4,0" Padding="10,6" />
+          <Button Content="Refazer" ToolTip="Refazer (Ctrl+Y)" Command="{Binding RedoCommand}" IsEnabled="{Binding CanRedo}" Margin="0,0,16,0" Padding="10,6" />
           <Button Content="Salvar imagem" Command="{Binding SaveCommand}" Style="{StaticResource PrimaryAction}" />
         </StackPanel>
         <TextBlock Text="Editor de imagem" Style="{StaticResource PageTitle}" />

@@ -201,10 +201,14 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     private void RestoreSnapshot(EditorSnapshot snapshot)
     {
-        Bitmap.Dispose();
-        foreach (var layer in Layers) layer.Dispose();
-        Layers.Clear();
+        // ORDEM IMPORTA: primeiro troca tudo pelo estado restaurado e só DEPOIS libera
+        // o antigo. Liberar antes fazia o Layers.Clear()/ActiveLayer disparar o
+        // redesenho (síncrono, via BitmapChanged) lendo um SKBitmap já liberado —
+        // acesso inválido de memória nativa, que derruba o app sem passar pelo log.
+        var oldBitmap = Bitmap;
+        var oldLayers = Layers.ToList();
         Bitmap = snapshot.Bitmap;
+        Layers.Clear();
         foreach (var layer in snapshot.Layers)
         {
             AttachLayer(layer);
@@ -212,7 +216,15 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         }
         ActiveLayer = Layers.LastOrDefault();
         OnPropertyChanged(nameof(HasLayers));
+        OnPropertyChanged(nameof(PaintTargetName));
+
+        oldBitmap.Dispose();
+        foreach (var layer in oldLayers) layer.Dispose();
     }
+
+    /// <summary>Disparado depois de Desfazer/Refazer: a janela refaz os quadros de
+    /// recorte/tela, que podem ter ficado com o tamanho da imagem anterior.</summary>
+    public event Action? HistoryRestored;
 
     [RelayCommand]
     private void Undo()
@@ -221,6 +233,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         _redoStack.Push(CaptureSnapshot());
         RestoreSnapshot(_undoStack.Pop());
         BitmapChanged?.Invoke();
+        HistoryRestored?.Invoke();
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
     }
@@ -232,6 +245,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         _undoStack.Push(CaptureSnapshot());
         RestoreSnapshot(_redoStack.Pop());
         BitmapChanged?.Invoke();
+        HistoryRestored?.Invoke();
         OnPropertyChanged(nameof(CanUndo));
         OnPropertyChanged(nameof(CanRedo));
     }
@@ -693,9 +707,10 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         using (var canvas = new SKCanvas(Bitmap))
             foreach (var layer in Layers) layer.Draw(canvas);
 
-        foreach (var layer in Layers) layer.Dispose();
+        var merged = Layers.ToList();
         Layers.Clear();
         ActiveLayer = null;
+        foreach (var layer in merged) layer.Dispose(); // só depois de sair da lista/tela
         OnPropertyChanged(nameof(HasLayers));
         StatusText = "Camadas mescladas na imagem.";
         BitmapChanged?.Invoke();

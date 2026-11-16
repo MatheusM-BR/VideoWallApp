@@ -60,6 +60,7 @@ public partial class ImageEditorWindow : Window
             Canvas.InvalidateVisual();
             UpdateTelaFields();
         });
+        viewModel.HistoryRestored += () => Dispatcher.Invoke(InitializeToolOverlay);
         Closed += (_, _) => viewModel.Dispose();
         Loaded += (_, _) => UpdateTelaFields();
         Loaded += (_, _) => InitializeToolOverlay();

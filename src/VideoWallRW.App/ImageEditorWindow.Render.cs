@@ -45,7 +45,11 @@ public partial class ImageEditorWindow
         // da visualização enquanto elas são compostas.
         if (_vm.Layers.Count > 0)
         {
+            // Recortadas na área da tela: o que passa da borda NÃO vai pro arquivo
+            // salvo, então também não aparece aqui (antes, depois de um recorte a foto
+            // continuava "vazando" e parecia que o recorte não tinha funcionado).
             canvas.Save();
+            canvas.ClipRect(dest);
             canvas.Translate((float)offsetX, (float)offsetY);
             canvas.Scale((float)scale);
             foreach (var layer in _vm.Layers) layer.Draw(canvas);
