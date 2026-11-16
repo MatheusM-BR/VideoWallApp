@@ -103,7 +103,7 @@ public static class ManualContent
                 "**Arquivos** abre em `C:\\Video Wall`. Clique num arquivo para ver a miniatura embaixo.",
                 "Depois de salvar uma imagem no editor ou baixar um banner da Agenda, a Biblioteca abre **direto na pasta** com o arquivo selecionado.",
                 "**Fontes / NDI** lista as câmeras e computadores que transmitem NDI na rede. Arraste para a grade ou dê duplo-clique.",
-                "**Recentes** guarda as últimas mídias usadas."),
+                "**Recentes** guarda as últimas mídias usadas; clicar numa delas mostra a miniatura no painel de baixo, igual à lista de pastas."),
             new Tip("A conexão NDI fica aberta por 90 segundos depois que a câmera sai do ar: voltar para ela (inclusive pelo AUTO) é instantâneo. Enquanto está no telão, o tally da câmera acende."),
             new Warning("Se uma fonte NDI não aparece: confira se o computador está na mesma rede da câmera e se o Firewall do Windows permite o RWVideoWall.")),
 

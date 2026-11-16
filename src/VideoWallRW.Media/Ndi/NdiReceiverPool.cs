@@ -190,6 +190,29 @@ internal sealed unsafe class NdiReceiver
         NdiInterop.NDIlib_recv_set_tally(_recv, &tally);
     }
 
+    private const int IdleCaptureIntervalMs = 250; // ~4 quadros/s fora do ar
+    private const int SnapshotWidth = 320;          // miniatura da célula
+
+    /// <summary>Redução por amostragem (vizinho mais próximo) de BGRA — barata o
+    /// bastante pra rodar na thread de captura, e só a cada 30s.</summary>
+    private static (byte[] Pixels, int Width, int Height) Downscale(byte* src, int w, int h, int stride, int maxW)
+    {
+        int tw = Math.Min(w, maxW);
+        int th = Math.Max(1, (int)((long)h * tw / Math.Max(w, 1)));
+        var dst = new byte[tw * th * 4];
+        fixed (byte* d = dst)
+        {
+            uint* outPx = (uint*)d;
+            for (int y = 0; y < th; y++)
+            {
+                uint* row = (uint*)(src + (long)(y * h / th) * stride);
+                for (int x = 0; x < tw; x++)
+                    outPx[y * tw + x] = row[x * w / tw];
+            }
+        }
+        return (dst, tw, th);
+    }
+
     private void CaptureLoop()
     {
         var lastFpsCheck = DateTime.UtcNow;
@@ -199,6 +222,13 @@ internal sealed unsafe class NdiReceiver
 
         while (_running)
         {
+            // Aquecido mas FORA DO AR (ninguém usando, esperando os 90s): a conexão fica
+            // aberta pra voltar instantâneo, mas só decodifica ~4 quadros/s em vez de
+            // 30/60 — o NDI descompacta no capture, então pular capturas é o que
+            // economiza CPU. Volta à taxa cheia no AddRef.
+            if (RefCount == 0 && HasFrame)
+                Thread.Sleep(IdleCaptureIntervalMs);
+
             NdiInterop.video_frame_v2_t frame;
             var type = NdiInterop.NDIlib_recv_capture_v3(_recv, &frame, IntPtr.Zero, IntPtr.Zero, 500);
             if (!_running) break;
@@ -217,6 +247,21 @@ internal sealed unsafe class NdiReceiver
                 int stride = frame.line_stride_in_bytes > 0 ? frame.line_stride_in_bytes : w * 4;
                 int size = stride * h;
 
+                // Prévia da célula a cada 30s (só enquanto alguém está usando a fonte):
+                // reduzida AQUI, direto do quadro do NDI, pra ~320px — antes clonava o
+                // quadro inteiro (33MB em 4K) e reduzia depois.
+                var now = DateTime.UtcNow;
+                if (RefCount > 0 && now >= nextSnapshot)
+                {
+                    nextSnapshot = now.AddSeconds(30);
+                    try
+                    {
+                        var (snap, sw, sh) = Downscale((byte*)frame.p_data, w, h, stride, SnapshotWidth);
+                        NdiSnapshotHub.Publish(SourceName, snap, sw, sh, sw * 4);
+                    }
+                    catch { /* nunca deixar a prévia derrubar a captura */ }
+                }
+
                 // Buffers reaproveitados: um quadro 4K (~33MB) alocado do zero a cada
                 // captura ia pro Large Object Heap e as pausas do GC derrubavam a taxa.
                 if (_back is null || _back.Length != size) _back = new byte[size];
@@ -233,7 +278,6 @@ internal sealed unsafe class NdiReceiver
                 Error = null; // voltou a chegar quadro: a fonte se recuperou sozinha
 
                 framesSinceCheck++;
-                var now = DateTime.UtcNow;
                 var elapsed = (now - lastFpsCheck).TotalSeconds;
                 if (elapsed >= 1.0)
                 {
@@ -242,15 +286,6 @@ internal sealed unsafe class NdiReceiver
                     lastFpsCheck = now;
                 }
 
-                // Prévia da célula a cada 30s (só enquanto alguém está usando a fonte).
-                if (RefCount > 0 && now >= nextSnapshot)
-                {
-                    nextSnapshot = now.AddSeconds(30);
-                    byte[] snap;
-                    lock (_frameLock) snap = (byte[])_front!.Clone();
-                    try { NdiSnapshotHub.Publish(SourceName, snap, w, h, stride); }
-                    catch { /* nunca deixar a prévia derrubar a captura */ }
-                }
             }
             finally
             {

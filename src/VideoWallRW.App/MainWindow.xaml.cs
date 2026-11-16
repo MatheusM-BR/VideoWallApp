@@ -86,6 +86,13 @@ public partial class MainWindow : Window
             _vm.FileBrowser.Open(item);
     }
 
+    /// <summary>Clique num Recente mostra a miniatura no painel de baixo, igual à lista de pastas.</summary>
+    private void OnRecentSourceSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListBox { SelectedItem: string path })
+            _vm.FileBrowser.Preview(path);
+    }
+
     private void OnRecentSourceDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (sender is ListBox { SelectedItem: string path })

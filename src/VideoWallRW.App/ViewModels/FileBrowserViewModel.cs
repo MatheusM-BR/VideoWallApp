@@ -42,13 +42,35 @@ public sealed partial class FileBrowserViewModel : ObservableObject
         Navigate(AppPaths.EnsureMediaRoot());
     }
 
+    /// <summary>O que o painel de miniatura mostra: o item clicado em Arquivos OU o
+    /// arquivo clicado em Fontes → Recentes (o último clicado em qualquer um dos dois).</summary>
+    [ObservableProperty] private FileBrowserItem? _previewItem;
+
     partial void OnSelectedItemChanged(FileBrowserItem? value)
     {
         if (value is null || value.IsFolder) return;
-        ThumbnailProvider.Request(value.FullPath, thumb =>
+        PreviewItem = value;
+        RequestThumbnail(value);
+    }
+
+    /// <summary>Miniatura de um arquivo fora da pasta aberta (lista Recentes).</summary>
+    public void Preview(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        var item = Items.FirstOrDefault(i => !i.IsFolder &&
+                       string.Equals(i.FullPath, path, StringComparison.OrdinalIgnoreCase))
+                   ?? new FileBrowserItem { Name = Path.GetFileName(path), FullPath = path, IsFolder = false };
+        PreviewItem = item;
+        RequestThumbnail(item);
+    }
+
+    private void RequestThumbnail(FileBrowserItem item)
+    {
+        if (item.ThumbnailPath is not null) return;
+        ThumbnailProvider.Request(item.FullPath, thumb =>
         {
-            if (SelectedItem == value) // pode ter trocado a seleção enquanto gerava
-                value.ThumbnailPath = thumb;
+            if (PreviewItem == item) // pode ter trocado a seleção enquanto gerava
+                item.ThumbnailPath = thumb;
         });
     }
 

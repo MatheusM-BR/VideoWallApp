@@ -401,7 +401,7 @@
 
       <!-- PREVIEW (embaixo das pastas): mostra o arquivo clicado na lista Files -->
       <Border DockPanel.Dock="Bottom" Background="{StaticResource PanelBg}" BorderBrush="{StaticResource BorderDim}"
-              BorderThickness="1" Padding="6" Margin="0,6,0,0" DataContext="{Binding FileBrowser.SelectedItem}">
+              BorderThickness="1" Padding="6" Margin="0,6,0,0" DataContext="{Binding FileBrowser.PreviewItem}">
         <StackPanel>
           <TextBlock Text="MINIATURA DO ARQUIVO" Foreground="{StaticResource FgDim}" FontSize="11" FontWeight="Bold" Margin="0,0,0,4" />
           <Border Background="{StaticResource InputBg}" BorderBrush="{StaticResource BorderDim}" BorderThickness="1"
@@ -499,7 +499,8 @@
                      Foreground="{StaticResource FgDim}" Margin="0,6,0,0" />
 
           <TextBlock DockPanel.Dock="Top" Text="Recentes" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,0,0,3" />
-          <ListBox ItemsSource="{Binding Grid.RecentSources}" MouseDoubleClick="OnRecentSourceDoubleClick">
+          <ListBox ItemsSource="{Binding Grid.RecentSources}" MouseDoubleClick="OnRecentSourceDoubleClick"
+                   SelectionChanged="OnRecentSourceSelected">
             <ListBox.ItemTemplate>
               <DataTemplate>
                 <StackPanel Orientation="Horizontal" ToolTip="{Binding}">
