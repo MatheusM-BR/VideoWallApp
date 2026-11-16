@@ -146,10 +146,80 @@ public partial class ImageEditorWindow : Window
     private void OnZoomOutClick(object sender, RoutedEventArgs e) => ChangeZoom(1 / 1.12);
     private void OnFitCanvasClick(object sender, RoutedEventArgs e) => ResetZoom();
 
-    private void ChangeZoom(double factor)
+    /// <summary>Zoom mantendo parado o ponto sob o mouse (ou o centro da área).</summary>
+    private void ChangeZoom(double factor, Point? anchor = null)
     {
+        var at = anchor ?? new Point(Canvas.ActualWidth / 2, Canvas.ActualHeight / 2);
+        var img = ToImageSpace(at);
         _viewZoom = Math.Clamp(_viewZoom * factor, MinZoom, MaxZoom);
+        var (scale, _, _) = ViewTransform(Canvas.ActualWidth, Canvas.ActualHeight);
+        _scrollX = FracForOffset(Canvas.ActualWidth, _vm.Bitmap.Width * scale, at.X - img.X * scale, _scrollX);
+        _scrollY = FracForOffset(Canvas.ActualHeight, _vm.Bitmap.Height * scale, at.Y - img.Y * scale, _scrollY);
         ZoomLabel.Text = $"{_viewZoom:P0} do ajuste";
+        Canvas.InvalidateVisual();
+    }
+
+    // ── Rolagem: barras + arrastar com a roda pressionada ───────────────────────
+
+    /// <summary>Posição da rolagem em cada eixo, 0..1 (0,5 = centralizado). Fração e
+    /// não pixels: o desenho (pixels do surface) e o mouse (unidades WPF) usam escalas
+    /// diferentes em telas com DPI alto, e a fração vale igual nos dois.</summary>
+    private double _scrollX = 0.5, _scrollY = 0.5;
+    private Point? _panStart;
+    private double _panStartX, _panStartY;
+    private const double ScrollMargin = 0.03; // folga em volta da imagem, fração da área
+
+    private static double AxisOffset(double view, double content, double frac)
+    {
+        double margin = view * ScrollMargin;
+        double extent = content + 2 * margin;
+        if (extent <= view) return (view - content) / 2;   // cabe: centraliza, sem rolagem
+        return margin - Math.Clamp(frac, 0, 1) * (extent - view);
+    }
+
+    private static double FracForOffset(double view, double content, double offset, double fallback)
+    {
+        double margin = view * ScrollMargin;
+        double range = content + 2 * margin - view;
+        return range <= 0 ? fallback : Math.Clamp((margin - offset) / range, 0, 1);
+    }
+
+    private void UpdateScrollBars()
+    {
+        if (HScroll is null || VScroll is null) return;
+        var (scale, _, _) = ViewTransform(Canvas.ActualWidth, Canvas.ActualHeight);
+        Configure(HScroll, Canvas.ActualWidth, _vm.Bitmap.Width * scale, _scrollX);
+        Configure(VScroll, Canvas.ActualHeight, _vm.Bitmap.Height * scale, _scrollY);
+
+        static void Configure(System.Windows.Controls.Primitives.ScrollBar bar, double view, double content, double frac)
+        {
+            double range = content + 2 * view * ScrollMargin - view;
+            if (range <= 0 || view <= 0) { bar.Visibility = Visibility.Collapsed; return; }
+            bar.Visibility = Visibility.Visible;
+            bar.Minimum = 0;
+            bar.Maximum = range;
+            bar.ViewportSize = view;
+            bar.SmallChange = Math.Max(view / 20, 1);
+            bar.LargeChange = view * 0.9;
+            bar.Value = Math.Clamp(frac, 0, 1) * range;
+        }
+    }
+
+    private void OnScrollBarScroll(object sender, System.Windows.Controls.Primitives.ScrollEventArgs e)
+    {
+        var bar = (System.Windows.Controls.Primitives.ScrollBar)sender;
+        double frac = bar.Maximum > 0 ? bar.Value / bar.Maximum : 0.5;
+        if (ReferenceEquals(bar, HScroll)) _scrollX = frac; else _scrollY = frac;
+        Canvas.InvalidateVisual();
+    }
+
+    private void PanBy(double dx, double dy)
+    {
+        var (scale, _, _) = ViewTransform(Canvas.ActualWidth, Canvas.ActualHeight);
+        double rangeX = _vm.Bitmap.Width * scale + 2 * Canvas.ActualWidth * ScrollMargin - Canvas.ActualWidth;
+        double rangeY = _vm.Bitmap.Height * scale + 2 * Canvas.ActualHeight * ScrollMargin - Canvas.ActualHeight;
+        if (rangeX > 0) _scrollX = Math.Clamp(_panStartX - dx / rangeX, 0, 1);
+        if (rangeY > 0) _scrollY = Math.Clamp(_panStartY - dy / rangeY, 0, 1);
         Canvas.InvalidateVisual();
     }
 
@@ -198,8 +268,8 @@ public partial class ImageEditorWindow : Window
         }
         // Folga de 6% deixa as alças da borda visíveis; _viewZoom é o zoom manual.
         double scale = Math.Min(viewW / (contentW * 1.06), viewH / (contentH * 1.06)) * _viewZoom;
-        double offsetX = (viewW - bmp.Width * scale) / 2;
-        double offsetY = (viewH - bmp.Height * scale) / 2;
+        double offsetX = AxisOffset(viewW, bmp.Width * scale, _scrollX);
+        double offsetY = AxisOffset(viewH, bmp.Height * scale, _scrollY);
         return (scale, offsetX, offsetY);
     }
 
@@ -218,8 +288,18 @@ public partial class ImageEditorWindow : Window
     /// aumentar a tela pra além da imagem.</summary>
     private void OnCanvasMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        double factor = e.Delta > 0 ? 1.12 : 1 / 1.12;
-        ChangeZoom(factor);
+        // Shift+roda rola na horizontal; Ctrl+roda rola na vertical; roda pura dá zoom.
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) || Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            _panStartX = _scrollX; _panStartY = _scrollY;
+            bool horizontal = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+            PanBy(horizontal ? e.Delta / 2.0 : 0, horizontal ? 0 : e.Delta / 2.0);
+        }
+        else
+        {
+            double factor = e.Delta > 0 ? 1.12 : 1 / 1.12;
+            ChangeZoom(factor, e.GetPosition(Canvas));
+        }
         e.Handled = true;
     }
 
@@ -227,6 +307,7 @@ public partial class ImageEditorWindow : Window
     private void ResetZoom()
     {
         _viewZoom = 1.0;
+        _scrollX = _scrollY = 0.5;
         ZoomLabel.Text = "100% do ajuste";
         Canvas.InvalidateVisual();
     }
@@ -235,6 +316,18 @@ public partial class ImageEditorWindow : Window
 
     private void OnMouseDown(object sender, MouseButtonEventArgs e)
     {
+        // Roda pressionada (botão do meio): arrasta a visualização, em qualquer ferramenta.
+        if (e.ChangedButton == MouseButton.Middle)
+        {
+            _panStart = e.GetPosition(Canvas);
+            _panStartX = _scrollX; _panStartY = _scrollY;
+            Cursor = Cursors.SizeAll;
+            Canvas.CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+        if (e.ChangedButton != MouseButton.Left) return; // botão direito não pinta nem arrasta
+
         var pt = ToImageSpace(e.GetPosition(Canvas));
         switch (_vm.Tool)
         {
@@ -249,7 +342,7 @@ public partial class ImageEditorWindow : Window
                 break;
             case EditorTool.Brush:
             case EditorTool.Eraser:
-                _vm.BeginStroke();
+                _vm.BeginStroke(pt);
                 _lastPaintPoint = pt;
                 break;
             case EditorTool.Eyedropper:
@@ -278,6 +371,13 @@ public partial class ImageEditorWindow : Window
 
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
+        if (_panStart is { } panFrom)
+        {
+            var now = e.GetPosition(Canvas);
+            PanBy(now.X - panFrom.X, now.Y - panFrom.Y);
+            return;
+        }
+
         var pt = ToImageSpace(e.GetPosition(Canvas));
 
         if (e.LeftButton != MouseButtonState.Pressed)
@@ -389,6 +489,16 @@ public partial class ImageEditorWindow : Window
 
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (_panStart is not null)
+        {
+            if (e.ChangedButton != MouseButton.Middle) return;
+            _panStart = null;
+            Cursor = Cursors.Arrow;
+            Canvas.ReleaseMouseCapture();
+            e.Handled = true;
+            return;
+        }
+        if (e.ChangedButton != MouseButton.Left) return;
         Canvas.ReleaseMouseCapture();
 
         // Forma: soltou o clique, já vira camada (minúscula = clique acidental, descarta).

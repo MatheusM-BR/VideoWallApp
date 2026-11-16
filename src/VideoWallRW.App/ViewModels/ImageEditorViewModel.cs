@@ -168,6 +168,23 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     public string PaintTargetName => PaintLayer?.Name ?? "Fundo";
 
+    /// <summary>
+    /// Onde a tinta cai NESTE ponto: a camada de pintura se o ponto está dentro dela;
+    /// senão a camada de imagem visível mais alta que contém o ponto; senão o fundo.
+    /// Sem isto, depois de aumentar a tela a área nova (branca) não aceitava tinta —
+    /// o pincel continuava mirando a "Imagem original", que não cobre a área nova.
+    /// </summary>
+    public EditorLayer? PaintLayerAt(SKPoint p)
+    {
+        if (PaintLayer is { } preferred && preferred.Bounds.Contains(p.X, p.Y)) return preferred;
+        for (int i = Layers.Count - 1; i >= 0; i--)
+            if (Layers[i] is { Kind: EditorLayerKind.Image, Visible: true } l && l.Bounds.Contains(p.X, p.Y))
+                return l;
+        return null; // fundo (tela)
+    }
+
+    private EditorLayer? _strokeLayer;
+
     public bool CanUndo => _undoStack.Count > 0;
     public bool CanRedo => _redoStack.Count > 0;
 
@@ -252,12 +269,18 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     // ── Pincel / borracha ────────────────────────────────────────────────────
 
-    public void BeginStroke() => PushUndo();
+    /// <summary>Começo do traço: o alvo (camada ou fundo) é decidido pelo ponto
+    /// onde o clique começou e fica fixo até soltar.</summary>
+    public void BeginStroke(SKPoint start)
+    {
+        PushUndo();
+        _strokeLayer = PaintLayerAt(start);
+    }
     public void BeginLayerTransform() => PushUndo();
 
     public void PaintStroke(SKPoint from, SKPoint to)
     {
-        var layer = PaintLayer;
+        var layer = _strokeLayer is { } s && Layers.Contains(s) ? s : null;
         var target = layer?.Bitmap ?? Bitmap;
         float scale = layer?.LocalScale ?? 1f;
         if (layer is not null) { from = layer.ToLocal(from); to = layer.ToLocal(to); }
@@ -303,7 +326,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     public void FloodFillAt(SKPoint p)
     {
-        var layer = PaintLayer;
+        var layer = PaintLayerAt(p);
         var fillTarget = layer?.Bitmap ?? Bitmap;
         if (layer is not null) p = layer.ToLocal(p);
 
@@ -532,6 +555,15 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         float scaleY = height / (float)Math.Max(oldHeight, 1);
         foreach (var layer in Layers)
         {
+            // Camada que ocupava a tela inteira (ex.: "Imagem original" sem mexer)
+            // acompanha a tela nova exatamente — senão ficava menor, com faixas brancas,
+            // e parecia que o aumento não tinha sido aplicado.
+            if (Math.Abs(layer.X) < 1 && Math.Abs(layer.Y) < 1 &&
+                Math.Abs(layer.Width - oldWidth) < 1 && Math.Abs(layer.Height - oldHeight) < 1)
+            {
+                layer.X = 0; layer.Y = 0; layer.Width = width; layer.Height = height;
+                continue;
+            }
             // Imagem/texto não deformam: escala uniforme centrada no mesmo ponto relativo.
             float sx = layer.KeepsAspect ? Math.Min(scaleX, scaleY) : scaleX;
             float sy = layer.KeepsAspect ? Math.Min(scaleX, scaleY) : scaleY;

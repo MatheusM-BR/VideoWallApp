@@ -177,11 +177,20 @@
                   </Trigger></Style.Triggers>
                 </Style></ToggleButton.Style>
               </ToggleButton>
-              <TextBlock Text="Roda do mouse para aproximar" TextTrimming="CharacterEllipsis" Foreground="{StaticResource FgDim}" FontSize="11" VerticalAlignment="Center" />
+              <TextBlock Text="Roda: zoom · segure a roda e arraste para mover" TextTrimming="CharacterEllipsis" Foreground="{StaticResource FgDim}" FontSize="11" VerticalAlignment="Center" />
             </DockPanel>
           </Border>
           <Border Background="{StaticResource InputBg}" ClipToBounds="True">
-            <skia:SKElement x:Name="Canvas" PaintSurface="OnPaintSurface" MouseDown="OnMouseDown" MouseMove="OnMouseMove" MouseUp="OnMouseUp" MouseWheel="OnCanvasMouseWheel" ToolTip="Roda do mouse: afasta/aproxima a visualização" />
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+              <Grid.RowDefinitions><RowDefinition /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+              <skia:SKElement x:Name="Canvas" PaintSurface="OnPaintSurface" MouseDown="OnMouseDown" MouseMove="OnMouseMove" MouseUp="OnMouseUp" MouseWheel="OnCanvasMouseWheel"
+                              ToolTip="Roda: aproximar/afastar · segure a roda e arraste: mover · Shift+roda: rolar para os lados" />
+              <ScrollBar x:Name="VScroll" Grid.Column="1" Orientation="Vertical" Visibility="Collapsed" Scroll="OnScrollBarScroll"
+                         AutomationProperties.Name="Rolagem vertical da área de edição" />
+              <ScrollBar x:Name="HScroll" Grid.Row="1" Orientation="Horizontal" Visibility="Collapsed" Scroll="OnScrollBarScroll"
+                         AutomationProperties.Name="Rolagem horizontal da área de edição" />
+            </Grid>
           </Border>
         </DockPanel>
       </Border>

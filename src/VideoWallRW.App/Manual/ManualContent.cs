@@ -141,7 +141,7 @@ public static class ManualContent
                 "A **imagem original vira uma camada** separada do **fundo** — dá para mover, redimensionar e colocar texto/formas por cima.",
                 "Na barra superior, à direita: **conta-gotas**, **balde** e a **cor atual** (clique para trocar), em qualquer ferramenta.",
                 "**🧲 Ímãs** (rodapé da área de edição): ao mover uma camada ela gruda no centro e nas bordas da tela e de outras camadas, com uma linha guia rosa. Segure `Alt` para mover livre.",
-                "Roda do mouse aproxima/afasta; **Ajustar à tela** volta ao enquadramento.",
+                "Roda do mouse aproxima/afasta (no ponto do mouse). **Segure a roda e arraste** para mover a visualização, ou use as **barras de rolagem**; `Shift`+roda rola para os lados. **Ajustar à tela** volta ao enquadramento.",
                 "**Desfazer / Refazer** no topo (até 20 passos)."),
             new Subtitle("Salvar"),
             new Bullets(
@@ -158,7 +158,7 @@ public static class ManualContent
                 "**Borracha**: numa camada abre transparência (aparece o fundo); no fundo, volta à cor de fundo.",
                 "**Preencher** (balde) pinta uma área de cor parecida — ajuste a **Tolerância**.",
                 "**Conta-gotas** pega a cor de qualquer ponto da imagem; as cores pegas ficam no **Histórico**.",
-                "O painel mostra **Pintando em:** — os pincéis agem na camada de imagem selecionada. Para pintar no fundo, clique em **Fundo (tela)** no painel Camadas.")),
+                "O painel mostra **Pintando em:** — os pincéis agem na camada de imagem selecionada (contorno azul tracejado). Começando o traço **fora** dela — por exemplo na área branca depois de aumentar a tela — a tinta vai para o fundo. Para pintar só no fundo, clique em **Fundo (tela)** no painel Camadas.")),
 
         new("Editor · Formas e texto", "Inserir como camadas editáveis",
             new Picture("editor-shape.png", "Formas 2D"),

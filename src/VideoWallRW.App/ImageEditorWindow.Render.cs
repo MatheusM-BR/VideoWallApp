@@ -18,6 +18,7 @@ public partial class ImageEditorWindow
         var canvas = e.Surface.Canvas;
         canvas.Clear(new SKColor(0x17, 0x17, 0x1A)); // mesmo InputBg do tema escuro
         var bmp = _vm.Bitmap;
+        Dispatcher.BeginInvoke(UpdateScrollBars, System.Windows.Threading.DispatcherPriority.Render);
 
         // Mesma transformação usada no hit-test (ViewTransform) — desenho e mouse
         // SEMPRE alinhados, com zoom manual da roda incluído.
@@ -205,6 +206,21 @@ public partial class ImageEditorWindow
                 Typeface = SKTypeface.FromFamilyName("Segoe UI", SKFontStyle.Bold),
             };
             canvas.DrawText(string.IsNullOrWhiteSpace(_vm.TextInput) ? "Texto" : _vm.TextInput, a.X, a.Y - text.FontMetrics.Ascent, text);
+        }
+
+        // Ferramentas de pintura: contorno tracejado da camada que recebe a tinta quando
+        // o clique começa dentro dela. Fora desse contorno a tinta vai pro fundo (tela).
+        if (_vm.IsPaintingTool && _vm.Tool != EditorTool.Eyedropper && _vm.PaintLayer is { } paintTarget)
+        {
+            var b = paintTarget.Bounds;
+            var p1 = ToScreen(new SKPoint(b.Left, b.Top));
+            var p2 = ToScreen(new SKPoint(b.Right, b.Bottom));
+            using var dashed = new SKPaint
+            {
+                Color = new SKColor(0x4D, 0xA3, 0xFF, 200), Style = SKPaintStyle.Stroke, StrokeWidth = 1,
+                PathEffect = SKPathEffect.CreateDash([6f, 4f], 0),
+            };
+            canvas.DrawRect(new SKRect(p1.X, p1.Y, p2.X, p2.Y), dashed);
         }
 
         // Guias dos ímãs (só enquanto a camada está grudada em algo).
