@@ -50,6 +50,35 @@ public sealed partial class EditorLayer : ObservableObject, IDisposable
     /// <summary>Cor do texto/forma.</summary>
     [ObservableProperty] private SKColor _color = SKColors.Red;
 
+    /// <summary>Giro em graus (horário) em torno do centro, e espelhos — valem pra
+    /// qualquer tipo de camada. <see cref="Bounds"/> continua sendo a caixa SEM giro.</summary>
+    [ObservableProperty] private float _rotation;
+    [ObservableProperty] private bool _flipX;
+    [ObservableProperty] private bool _flipY;
+
+    public bool IsTransformed => Rotation != 0 || FlipX || FlipY;
+
+    /// <summary>Ponto da tela → "eixo da camada" (desfaz o giro em torno do centro).
+    /// Serve pra pegar alças e saber se o clique caiu dentro da camada girada.</summary>
+    public SKPoint ToFrame(SKPoint p)
+    {
+        if (Rotation == 0) return p;
+        var b = Bounds;
+        double rad = -Rotation * Math.PI / 180, c = Math.Cos(rad), s = Math.Sin(rad);
+        float dx = p.X - b.MidX, dy = p.Y - b.MidY;
+        return new SKPoint(b.MidX + (float)(dx * c - dy * s), b.MidY + (float)(dx * s + dy * c));
+    }
+
+    /// <summary>O clique caiu dentro da camada (girada ou não)?</summary>
+    public bool Contains(SKPoint p)
+    {
+        var f = ToFrame(p);
+        return Bounds.Contains(f.X, f.Y);
+    }
+
+    /// <summary>Contorno alinhado aos eixos da camada girada.</summary>
+    public SKRect DisplayBounds => ImageEditorViewModel.RotatedBounds(Bounds, Rotation);
+
     private EditorLayer(EditorLayerKind kind, SKBitmap? bitmap, string name)
     {
         Kind = kind;
@@ -151,6 +180,19 @@ public sealed partial class EditorLayer : ObservableObject, IDisposable
     public void Draw(SKCanvas canvas)
     {
         if (!Visible || Opacity <= 0 || Width <= 0 || Height <= 0) return;
+        if (!IsTransformed) { DrawUntransformed(canvas); return; }
+        var b = Bounds;
+        canvas.Save();
+        canvas.Translate(b.MidX, b.MidY);
+        if (Rotation != 0) canvas.RotateDegrees(Rotation);
+        canvas.Scale(FlipX ? -1 : 1, FlipY ? -1 : 1);
+        canvas.Translate(-b.MidX, -b.MidY);
+        DrawUntransformed(canvas);
+        canvas.Restore();
+    }
+
+    private void DrawUntransformed(SKCanvas canvas)
+    {
         byte alpha = (byte)Math.Clamp(Opacity * 255, 0, 255);
         switch (Kind)
         {
@@ -199,9 +241,16 @@ public sealed partial class EditorLayer : ObservableObject, IDisposable
     }
 
     /// <summary>Ponto da imagem → pixel do bitmap desta camada (só imagem).</summary>
-    public SKPoint ToLocal(SKPoint imagePoint) => Bitmap is null || Width <= 0 || Height <= 0
-        ? imagePoint
-        : new SKPoint((imagePoint.X - X) * Bitmap.Width / Width, (imagePoint.Y - Y) * Bitmap.Height / Height);
+    public SKPoint ToLocal(SKPoint imagePoint)
+    {
+        if (Bitmap is null || Width <= 0 || Height <= 0) return imagePoint;
+        // Desfaz giro e espelho: o pincel cai no pixel que aparece sob o ponteiro.
+        var p = ToFrame(imagePoint);
+        var b = Bounds;
+        if (FlipX) p.X = 2 * b.MidX - p.X;
+        if (FlipY) p.Y = 2 * b.MidY - p.Y;
+        return new SKPoint((p.X - X) * Bitmap.Width / Width, (p.Y - Y) * Bitmap.Height / Height);
+    }
 
     /// <summary>Quantos pixels do bitmap desta camada cabem em 1 pixel da imagem.</summary>
     public float LocalScale => Bitmap is null || Width <= 0 ? 1f : Bitmap.Width / Width;
@@ -253,6 +302,7 @@ public sealed partial class EditorLayer : ObservableObject, IDisposable
         Opacity = Opacity, Visible = Visible,
         Text = Text, FontSize = FontSize, Color = Color,
         Shape = Shape, Filled = Filled, StrokeWidth = StrokeWidth, LineRising = LineRising,
+        Rotation = Rotation, FlipX = FlipX, FlipY = FlipY,
     };
 
     public void Dispose() => Bitmap?.Dispose();

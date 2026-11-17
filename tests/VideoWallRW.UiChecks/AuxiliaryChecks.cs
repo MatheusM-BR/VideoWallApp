@@ -182,6 +182,25 @@ internal static class AuxiliaryChecks
         editorVm.CommitSelection();
         Frame();
         Save(editor, "editor-select-applied");
+        // Varinha mágica na faixa vermelha (a área marcada segue o formato, sem as letras).
+        editorVm.SelectMode = SelectShape.Varinha;
+        editorVm.SelectFeather = 4;
+        editorVm.SelectByColorAt(new SKPoint(28, 28));
+        Frame();
+        if (!editorVm.HasShapedSelection || editorVm.Selection is not { } wand || wand.Width < 150)
+            throw new Exception("Magic wand did not select the red band");
+        Save(editor, "editor-select-wand");
+        editorVm.SetSelection(null);
+        editorVm.SelectMode = SelectShape.Retângulo;
+        editorVm.SelectFeather = 0;
+        // Camada girada e espelhada: moldura e bolinha de giro acompanham.
+        editorVm.Tool = EditorTool.Layers;
+        editorVm.ActiveLayer = demoShape;
+        editorVm.RotateLayerCommand.Execute("horario");
+        demoShape.Rotation = -8;
+        Frame();
+        Save(editor, "editor-layer-rotate");
+        editorVm.ResetLayerRotationCommand.Execute(null);
         editorVm.Tool = EditorTool.Crop;
         Frame();
         Children(editor).OfType<Button>().First(b => Equals(b.Content, "+")).RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));

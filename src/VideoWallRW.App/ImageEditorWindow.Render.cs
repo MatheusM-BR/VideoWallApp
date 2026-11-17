@@ -65,9 +65,15 @@ public partial class ImageEditorWindow
             var p1 = ToScreen(new SKPoint(b.Left, b.Top));
             var p2 = ToScreen(new SKPoint(b.Right, b.Bottom));
             var box = new SKRect(p1.X, p1.Y, p2.X, p2.Y);
-            using (var pen = new SKPaint { Color = new SKColor(0x9A, 0xCD, 0x32), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f })
+            canvas.Save();
+            if (active.Rotation != 0) canvas.RotateDegrees(active.Rotation, box.MidX, box.MidY);
+            using (var pen = new SKPaint { Color = new SKColor(0x9A, 0xCD, 0x32), Style = SKPaintStyle.Stroke, StrokeWidth = 1.5f, IsAntialias = true })
+            {
                 canvas.DrawRect(box, pen);
-            using var grip = new SKPaint { Color = new SKColor(0x9A, 0xCD, 0x32), Style = SKPaintStyle.Fill };
+                // Bolinha de giro acima do meio da borda de cima.
+                canvas.DrawLine(box.MidX, box.Top, box.MidX, box.Top - RotateHandleGap + 5, pen);
+            }
+            using var grip = new SKPaint { Color = new SKColor(0x9A, 0xCD, 0x32), Style = SKPaintStyle.Fill, IsAntialias = true };
             const float hs = 5;
             foreach (var c in new[]
             {
@@ -75,6 +81,8 @@ public partial class ImageEditorWindow
                 new SKPoint(box.Left, box.Bottom), new SKPoint(box.Right, box.Bottom),
             })
                 canvas.DrawRect(new SKRect(c.X - hs, c.Y - hs, c.X + hs, c.Y + hs), grip);
+            canvas.DrawCircle(box.MidX, box.Top - RotateHandleGap, 5.5f, grip);
+            canvas.Restore();
         }
 
         if (_vm.Tool == EditorTool.Crop && _liveCropRect is { } crop)

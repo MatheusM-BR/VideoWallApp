@@ -13,11 +13,12 @@ public partial class ImageEditorWindow
 {
     // ── Camadas: adicionar, mover e redimensionar ─────────────────────────────
 
-    private enum LayerDragMode { None, Move, Scale }
+    private enum LayerDragMode { None, Move, Scale, Rotate }
     private LayerDragMode _layerDrag;
     private SKPoint _layerDragStart;
     private SKRect _layerOrigin;
     private LayerCorner _layerGrip;
+    private float _layerOriginRotation;
 
     private void OnAddLayer(object sender, RoutedEventArgs e)
     {
@@ -44,7 +45,7 @@ public partial class ImageEditorWindow
     {
         _layerDrag = LayerDragMode.None;
         bool Eligible(EditorLayer l) => l.Visible && (kind is null || l.Kind == kind);
-        EditorLayer? TopmostAt(SKPoint p) => _vm.Layers.LastOrDefault(l => Eligible(l) && l.Bounds.Contains(p.X, p.Y));
+        EditorLayer? TopmostAt(SKPoint p) => _vm.Layers.LastOrDefault(l => Eligible(l) && l.Contains(p));
 
         float tol = (float)(12 / Math.Max(CanvasScale(), 0.01));
         var layer = _vm.ActiveLayer is { } active && Eligible(active) ? active : null;
@@ -52,9 +53,13 @@ public partial class ImageEditorWindow
         // Qual das quatro alças foi pega (a mais próxima dentro da tolerância) — cada
         // canto ancora no oposto, então precisa saber QUAL, não só "perto de um canto".
         LayerCorner? grip = null;
+        bool rotateGrip = false;
         if (layer is not null)
         {
             var b = layer.Bounds;
+            var fp = layer.ToFrame(pt); // alças no "eixo" da camada (girada ou não)
+            float knobY = b.Top - (float)(RotateHandleGap / Math.Max(CanvasScale(), 0.01));
+            rotateGrip = Math.Abs(fp.X - b.MidX) <= tol && Math.Abs(fp.Y - knobY) <= tol;
             float best = tol;
             foreach (var (corner, at) in new (LayerCorner, SKPoint)[]
             {
@@ -64,13 +69,14 @@ public partial class ImageEditorWindow
                 (LayerCorner.BottomRight, new SKPoint(b.Right, b.Bottom)),
             })
             {
-                float d = SKPoint.Distance(pt, at);
+                float d = SKPoint.Distance(fp, at);
                 if (d <= best) { best = d; grip = corner; }
             }
         }
 
-        if (layer is not null && grip is { } g) { _layerDrag = LayerDragMode.Scale; _layerGrip = g; }
-        else if (layer is not null && layer.Bounds.Contains(pt.X, pt.Y)) _layerDrag = LayerDragMode.Move;
+        if (layer is not null && rotateGrip) _layerDrag = LayerDragMode.Rotate;
+        else if (layer is not null && grip is { } g) { _layerDrag = LayerDragMode.Scale; _layerGrip = g; }
+        else if (layer is not null && layer.Contains(pt)) _layerDrag = LayerDragMode.Move;
         else if (TopmostAt(pt) is { } hit)
         {
             // Clique em outra camada: seleciona a mais alta sob o cursor e já move.
@@ -86,6 +92,7 @@ public partial class ImageEditorWindow
 
         _layerDragStart = pt;
         _layerOrigin = layer.Bounds;
+        _layerOriginRotation = layer.Rotation;
         _vm.BeginLayerTransform();
         return true;
     }
@@ -105,13 +112,32 @@ public partial class ImageEditorWindow
             layer.X = Math.Clamp(x, -layer.Width + visibleX, _vm.Bitmap.Width - visibleX);
             layer.Y = Math.Clamp(y, -layer.Height + visibleY, _vm.Bitmap.Height - visibleY);
         }
+        else if (_layerDrag == LayerDragMode.Rotate)
+        {
+            // Bolinha de giro: Shift = de 15 em 15°.
+            layer.Rotation = SelectionGeometry.AngleFromCenter(
+                new SKPoint(_layerOrigin.MidX, _layerOrigin.MidY), pt, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+        }
         else
         {
             // Canto OPOSTO parado. Imagem/texto não deformam; forma é livre — Shift inverte.
             bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
             bool free = layer.KeepsAspect ? shift : !shift;
-            layer.ResizeFromCorner(_layerGrip, _layerOrigin, pt, free);
+            float angle = _layerOriginRotation;
+            var center = new SKPoint(_layerOrigin.MidX, _layerOrigin.MidY);
+            // Com giro: o cursor vai pro eixo da camada, e o centro novo volta pra tela —
+            // assim o canto oposto continua parado onde está na tela.
+            var cursor = angle == 0 ? pt : Offset(center, SelectionGeometry.Rotate(Diff(pt, center), -angle));
+            layer.ResizeFromCorner(_layerGrip, _layerOrigin, cursor, free);
+            if (angle != 0)
+            {
+                var shift2 = SelectionGeometry.Rotate(new SKPoint(layer.Bounds.MidX - center.X, layer.Bounds.MidY - center.Y), angle);
+                layer.X = center.X + shift2.X - layer.Width / 2;
+                layer.Y = center.Y + shift2.Y - layer.Height / 2;
+            }
         }
+        static SKPoint Diff(SKPoint a, SKPoint b) => new(a.X - b.X, a.Y - b.Y);
+        static SKPoint Offset(SKPoint a, SKPoint v) => new(a.X + v.X, a.Y + v.Y);
     }
 
     /// <summary>
@@ -174,7 +200,7 @@ public partial class ImageEditorWindow
             e.Handled = true;
             return;
         }
-        if (Mouse.Captured is null && (HandleClipboardKey(e.Key) || HandleSelectKey(e.Key) || HandleViewKey(e.Key) || HandleToolKey(e.Key)))
+        if (Mouse.Captured is null && (HandleClipboardKey(e.Key) || HandleSelectKey(e.Key) || HandleLayerTransformKey(e.Key) || HandleViewKey(e.Key) || HandleToolKey(e.Key)))
         {
             e.Handled = true;
             return;

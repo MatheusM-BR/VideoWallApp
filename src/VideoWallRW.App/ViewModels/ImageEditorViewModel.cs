@@ -196,6 +196,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         {
             CommitSelection();
             Selection = null;
+            ClearSelectionShape();
             RaiseSelectionChanged();
         }
         MergeLayersExcept(null);
@@ -233,9 +234,9 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     /// </summary>
     public EditorLayer? PaintLayerAt(SKPoint p)
     {
-        if (PaintLayer is { } preferred && preferred.Bounds.Contains(p.X, p.Y)) return preferred;
+        if (PaintLayer is { } preferred && preferred.Contains(p)) return preferred;
         for (int i = Layers.Count - 1; i >= 0; i--)
-            if (Layers[i] is { Kind: EditorLayerKind.Image, Visible: true } l && l.Bounds.Contains(p.X, p.Y))
+            if (Layers[i] is { Kind: EditorLayerKind.Image, Visible: true } l && l.Contains(p))
                 return l;
         return null; // fundo (tela)
     }
@@ -311,7 +312,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
         // Durante uma transformação da Seleção, desfazer = cancelar a transformação.
         if (IsSelectionFloating) { CancelSelection(); return; }
         if (_undoStack.Count == 0) return;
-        if (Selection is not null) { Selection = null; RaiseSelectionChanged(); }
+        if (Selection is not null) { Selection = null; ClearSelectionShape(); RaiseSelectionChanged(); }
         _redoStack.Push(CaptureSnapshot());
         RestoreSnapshot(_undoStack.Pop());
         BitmapChanged?.Invoke();
@@ -324,7 +325,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     private void Redo()
     {
         if (_redoStack.Count == 0 || IsSelectionFloating) return;
-        if (Selection is not null) { Selection = null; RaiseSelectionChanged(); }
+        if (Selection is not null) { Selection = null; ClearSelectionShape(); RaiseSelectionChanged(); }
         _undoStack.Push(CaptureSnapshot());
         RestoreSnapshot(_redoStack.Pop());
         BitmapChanged?.Invoke();
@@ -736,6 +737,47 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
 
     /// <summary>Centraliza a camada selecionada na tela (botões do painel Camadas).</summary>
     [RelayCommand]
+    private void RotateLayer(string? direction)
+    {
+        if (ActiveLayer is not { } layer) return;
+        PushUndo();
+        float a = layer.Rotation + (direction == "anti" ? -90 : 90);
+        layer.Rotation = NormalizeAngle(a);
+        StatusText = $"Camada girada: {layer.Rotation:0.#}°.";
+        BitmapChanged?.Invoke();
+    }
+
+    /// <summary>Espelha a camada selecionada (como se vê: com giro, o giro inverte junto).</summary>
+    [RelayCommand]
+    private void FlipLayer(string? axis)
+    {
+        if (ActiveLayer is not { } layer) return;
+        PushUndo();
+        if (axis == "v") layer.FlipY = !layer.FlipY; else layer.FlipX = !layer.FlipX;
+        layer.Rotation = NormalizeAngle(-layer.Rotation);
+        StatusText = axis == "v" ? "Camada espelhada na vertical." : "Camada espelhada na horizontal.";
+        BitmapChanged?.Invoke();
+    }
+
+    [RelayCommand]
+    private void ResetLayerRotation()
+    {
+        if (ActiveLayer is not { } layer || !layer.IsTransformed) return;
+        PushUndo();
+        layer.Rotation = 0; layer.FlipX = false; layer.FlipY = false;
+        StatusText = "Giro e espelho da camada desfeitos.";
+        BitmapChanged?.Invoke();
+    }
+
+    public static float NormalizeAngle(float degrees)
+    {
+        float a = degrees % 360f;
+        if (a > 180) a -= 360;
+        if (a <= -180) a += 360;
+        return a;
+    }
+
+    [RelayCommand]
     private void CenterLayer(string? axis)
     {
         if (ActiveLayer is not { } layer) return;
@@ -928,6 +970,7 @@ public sealed partial class ImageEditorViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         DropFloating();
+        ClearSelectionShape();
         Bitmap.Dispose();
         foreach (var layer in Layers) layer.Dispose();
         foreach (var snapshot in _undoStack) snapshot.Dispose();

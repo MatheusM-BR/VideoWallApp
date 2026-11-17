@@ -19,6 +19,8 @@ public partial class ImageEditorWindow
     private SKRect _selectOrigin;   // retângulo (sem giro) no começo do arraste
     private float _selectOriginAngle;
     private bool _updatingSelectFields;
+    /// <summary>Pontos do laço sendo desenhado (espaço da imagem).</summary>
+    private readonly List<SKPoint> _lassoPoints = new();
 
     /// <summary>Distância (px de tela) da alça de giro acima da borda de cima.</summary>
     private const float RotateHandleGap = 26;
@@ -78,6 +80,21 @@ public partial class ImageEditorWindow
     private void BeginSelectDrag(SKPoint pt)
     {
         var hit = HitSelection(pt);
+        if (hit == SelectDrag.None && _vm.SelectMode == SelectShape.Varinha)
+        {
+            _vm.SelectByColorAt(pt);
+            _selectDrag = SelectDrag.None;
+            UpdateSelectFields();
+            return;
+        }
+        if (hit == SelectDrag.None && _vm.SelectMode == SelectShape.Laço)
+        {
+            _vm.SetSelection(null);
+            _lassoPoints.Clear();
+            _lassoPoints.Add(ClampToCanvas(pt));
+            _selectDrag = SelectDrag.Create;
+            return;
+        }
         if (hit == SelectDrag.None)
         {
             // Clique fora: aplica o que estava sendo mexido e começa uma área nova.
@@ -99,6 +116,13 @@ public partial class ImageEditorWindow
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         switch (_selectDrag)
         {
+            case SelectDrag.Create when _lassoPoints.Count > 0:
+            {
+                var p = ClampToCanvas(pt);
+                // Só guarda ponto quando andou ~2 px de tela (laço leve, sem milhares de pontos).
+                if (SKPoint.Distance(p, _lassoPoints[^1]) * CanvasScale() >= 2) _lassoPoints.Add(p);
+                break;
+            }
             case SelectDrag.Create:
             {
                 var end = ClampToCanvas(pt);
@@ -128,6 +152,19 @@ public partial class ImageEditorWindow
 
     private void EndSelectDrag()
     {
+        if (_selectDrag == SelectDrag.Create && _lassoPoints.Count > 0)
+        {
+            if (_lassoPoints.Count >= 3)
+            {
+                using var path = new SKPath();
+                path.AddPoly(_lassoPoints.ToArray(), close: true);
+                _vm.SetSelectionPath(path);
+            }
+            _lassoPoints.Clear();
+            _selectDrag = SelectDrag.None;
+            UpdateSelectFields();
+            return;
+        }
         // Clique sem arrastar (área minúscula) só desmarca.
         if (_selectDrag == SelectDrag.Create && _vm.Selection is { } r && (r.Width < 2 || r.Height < 2))
             _vm.SetSelection(null);
@@ -137,6 +174,23 @@ public partial class ImageEditorWindow
 
     private SKPoint ClampToCanvas(SKPoint p) => new(
         Math.Clamp(p.X, 0, _vm.Bitmap.Width), Math.Clamp(p.Y, 0, _vm.Bitmap.Height));
+
+    /// <summary>H / V / R (Shift+R) com uma camada selecionada nas ferramentas de camada.</summary>
+    private bool HandleLayerTransformKey(Key key)
+    {
+        if (_vm.Tool is not (EditorTool.Layers or EditorTool.Shape or EditorTool.Text) || _vm.ActiveLayer is null) return false;
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) return false;
+        bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        switch (key)
+        {
+            case Key.H: _vm.FlipLayerCommand.Execute("h"); break;
+            case Key.V: _vm.FlipLayerCommand.Execute("v"); break;
+            case Key.R: _vm.RotateLayerCommand.Execute(shift ? "anti" : "horario"); break;
+            default: return false;
+        }
+        Canvas.InvalidateVisual();
+        return true;
+    }
 
     /// <summary>Teclas da Seleção (sem Ctrl). Devolve true se tratou.</summary>
     private bool HandleSelectKey(Key key)
@@ -299,7 +353,32 @@ public partial class ImageEditorWindow
             _vm.DrawFloatingSelection(canvas);
             canvas.Restore();
         }
-        if (_vm.Tool != EditorTool.Select || _vm.Selection is not { } r) return;
+        if (_vm.Tool != EditorTool.Select) return;
+
+        // Laço sendo desenhado: linha tracejada seguindo o mouse.
+        if (_lassoPoints.Count > 1)
+        {
+            using var live = new SKPath();
+            live.AddPoly(_lassoPoints.Select(p => new SKPoint((float)(offsetX + p.X * scale), (float)(offsetY + p.Y * scale))).ToArray(), close: false);
+            using var dark = new SKPaint { Color = new SKColor(0, 0, 0, 200), Style = SKPaintStyle.Stroke, StrokeWidth = 2, IsAntialias = true };
+            using var light = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1, IsAntialias = true, PathEffect = SKPathEffect.CreateDash([5f, 5f], 0) };
+            canvas.DrawPath(live, dark);
+            canvas.DrawPath(live, light);
+        }
+        if (_vm.Selection is not { } r) return;
+
+        // Laço/varinha: contorno real da área (as alças continuam na caixa em volta).
+        if (_vm.SelectionOutline is { } outline && !_vm.IsSelectionFloating)
+        {
+            using var screenPath = new SKPath(outline);
+            screenPath.Transform(SKMatrix.CreateScaleTranslation((float)scale, (float)scale, (float)offsetX, (float)offsetY));
+            using var tint = new SKPaint { Color = new SKColor(0x4D, 0xA3, 0xFF, 50), Style = SKPaintStyle.Fill };
+            using var dark = new SKPaint { Color = new SKColor(0, 0, 0, 200), Style = SKPaintStyle.Stroke, StrokeWidth = 2, IsAntialias = true };
+            using var light = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1, IsAntialias = true, PathEffect = SKPathEffect.CreateDash([5f, 5f], 0) };
+            canvas.DrawPath(screenPath, tint);
+            canvas.DrawPath(screenPath, dark);
+            canvas.DrawPath(screenPath, light);
+        }
 
         var box = new SKRect((float)(offsetX + r.Left * scale), (float)(offsetY + r.Top * scale),
                              (float)(offsetX + r.Right * scale), (float)(offsetY + r.Bottom * scale));

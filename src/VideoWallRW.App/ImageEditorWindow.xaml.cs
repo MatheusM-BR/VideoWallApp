@@ -542,13 +542,18 @@ public partial class ImageEditorWindow : Window
             (_vm.Tool == EditorTool.Layers || layer.Kind == ToolLayerKind()))
         {
             var b2 = layer.Bounds;
-            bool nwse = SKPoint.Distance(pt, new SKPoint(b2.Left, b2.Top)) <= tol
-                     || SKPoint.Distance(pt, new SKPoint(b2.Right, b2.Bottom)) <= tol;
-            bool nesw = SKPoint.Distance(pt, new SKPoint(b2.Right, b2.Top)) <= tol
-                     || SKPoint.Distance(pt, new SKPoint(b2.Left, b2.Bottom)) <= tol;
-            Cursor = nwse ? Cursors.SizeNWSE
+            var fp = layer.ToFrame(pt);
+            float knobY = b2.Top - (float)(RotateHandleGap / Math.Max(CanvasScale(), 0.01));
+            bool knob = Math.Abs(fp.X - b2.MidX) <= tol && Math.Abs(fp.Y - knobY) <= tol;
+            bool nwse = SKPoint.Distance(fp, new SKPoint(b2.Left, b2.Top)) <= tol
+                     || SKPoint.Distance(fp, new SKPoint(b2.Right, b2.Bottom)) <= tol;
+            bool nesw = SKPoint.Distance(fp, new SKPoint(b2.Right, b2.Top)) <= tol
+                     || SKPoint.Distance(fp, new SKPoint(b2.Left, b2.Bottom)) <= tol;
+            if (Math.Abs(((layer.Rotation % 180) + 180) % 180 - 90) < 45) (nwse, nesw) = (nesw, nwse);
+            Cursor = knob ? Cursors.Hand
+                   : nwse ? Cursors.SizeNWSE
                    : nesw ? Cursors.SizeNESW
-                   : b2.Contains(pt.X, pt.Y) ? Cursors.SizeAll
+                   : layer.Contains(pt) ? Cursors.SizeAll
                    : _vm.Tool == EditorTool.Layers ? Cursors.Arrow : Cursors.Cross;
             return;
         }

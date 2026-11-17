@@ -21,8 +21,29 @@ namespace VideoWallRW.App.ViewModels;
 /// Com camadas mescladas age na imagem; no modo camadas, na camada de imagem sob a
 /// seleção (ou no fundo, se não houver).
 /// </summary>
+public enum SelectShape { Retângulo, Laço, Varinha }
+
 public sealed partial class ImageEditorViewModel
 {
+    /// <summary>Como a área é marcada: retângulo arrastado, laço (contorno livre à mão)
+    /// ou varinha mágica (clique pega a região da mesma cor).</summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty] private SelectShape _selectMode = SelectShape.Retângulo;
+
+    /// <summary>Borda suave, em px: a área sai esfumada nas bordas ao mover/copiar/apagar.</summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty] private int _selectFeather;
+
+    /// <summary>Tolerância de cor da varinha mágica (0 = só a cor exata).</summary>
+    [CommunityToolkit.Mvvm.ComponentModel.ObservableProperty] private int _wandTolerance = 32;
+
+    /// <summary>Formato da área quando não é retângulo: alfa 0..255 do tamanho de
+    /// <see cref="Selection"/> (laço e varinha). Null = a área é o retângulo inteiro.</summary>
+    private SKBitmap? _selectionMask;
+
+    /// <summary>Contorno pra desenhar na tela (laço/varinha), em coordenadas da imagem.</summary>
+    public SKPath? SelectionOutline { get; private set; }
+
+    public bool HasShapedSelection => _selectionMask is not null;
+
     private SKBitmap? _floatPixels;
     private EditorLayer? _floatTarget;
     private SKRect _floatRect;
@@ -47,7 +68,154 @@ public sealed partial class ImageEditorViewModel
         OnPropertyChanged(nameof(SelectionAngle));
         OnPropertyChanged(nameof(HasSelection));
         OnPropertyChanged(nameof(IsSelectionFloating));
+        OnPropertyChanged(nameof(HasShapedSelection));
         BitmapChanged?.Invoke();
+    }
+
+    private void ClearSelectionShape()
+    {
+        _selectionMask?.Dispose();
+        _selectionMask = null;
+        SelectionOutline?.Dispose();
+        SelectionOutline = null;
+    }
+
+    /// <summary>Laço: marca a área dentro do contorno desenhado à mão.</summary>
+    public void SetSelectionPath(SKPath path)
+    {
+        CommitSelection();
+        ClearSelectionShape();
+        var bounds = path.TightBounds;
+        bounds.Intersect(SKRect.Create(0, 0, Bitmap.Width, Bitmap.Height));
+        var box = SKRectI.Round(bounds);
+        if (box.Width < 2 || box.Height < 2) { Selection = null; RaiseSelectionChanged(); return; }
+
+        var mask = new SKBitmap(new SKImageInfo(box.Width, box.Height, SKColorType.Alpha8, SKAlphaType.Premul));
+        using (var c = new SKCanvas(mask))
+        using (var paint = new SKPaint { Color = SKColors.White, IsAntialias = true, Style = SKPaintStyle.Fill })
+        {
+            c.Clear(SKColors.Transparent);
+            c.Translate(-box.Left, -box.Top);
+            c.DrawPath(path, paint);
+        }
+        _selectionMask = mask;
+        SelectionOutline = new SKPath(path);
+        Selection = box;
+        StatusText = "Área marcada no laço. Arraste por dentro pra mover, alças pra esticar.";
+        RaiseSelectionChanged();
+    }
+
+    /// <summary>Varinha mágica: marca a região CONTÍNUA com cor parecida ao ponto
+    /// clicado (do que se vê: imagem + camadas), conforme <see cref="WandTolerance"/>.</summary>
+    public void SelectByColorAt(SKPoint p)
+    {
+        CommitSelection();
+        ClearSelectionShape();
+        int sx = (int)p.X, sy = (int)p.Y, w = Bitmap.Width, h = Bitmap.Height;
+        if (sx < 0 || sy < 0 || sx >= w || sy >= h) { Selection = null; RaiseSelectionChanged(); return; }
+
+        var flat = ComposeFlattened();
+        var pixels = new byte[flat.ByteCount];
+        System.Runtime.InteropServices.Marshal.Copy(flat.GetPixels(), pixels, 0, pixels.Length);
+        int rowBytes = flat.RowBytes;
+        if (!ReferenceEquals(flat, Bitmap)) flat.Dispose();
+
+        int Idx(int x, int y) => y * rowBytes + x * 4;
+        int t = Idx(sx, sy), tol = WandTolerance;
+        byte tb = pixels[t], tg = pixels[t + 1], tr = pixels[t + 2], ta = pixels[t + 3];
+        bool Match(int x, int y)
+        {
+            int i = Idx(x, y);
+            return Math.Abs(pixels[i] - tb) <= tol && Math.Abs(pixels[i + 1] - tg) <= tol &&
+                   Math.Abs(pixels[i + 2] - tr) <= tol && Math.Abs(pixels[i + 3] - ta) <= tol;
+        }
+
+        var hit = new bool[w * h];
+        int minX = sx, maxX = sx, minY = sy, maxY = sy;
+        var stack = new Stack<(int X, int Y)>();
+        stack.Push((sx, sy));
+        while (stack.Count > 0)
+        {
+            var (x, y) = stack.Pop();
+            int k = y * w + x;
+            if (hit[k] || !Match(x, y)) continue;
+            hit[k] = true;
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+            if (x > 0) stack.Push((x - 1, y));
+            if (x < w - 1) stack.Push((x + 1, y));
+            if (y > 0) stack.Push((x, y - 1));
+            if (y < h - 1) stack.Push((x, y + 1));
+        }
+
+        int bw = maxX - minX + 1, bh = maxY - minY + 1;
+        var mask = new SKBitmap(new SKImageInfo(bw, bh, SKColorType.Alpha8, SKAlphaType.Premul));
+        var alpha = new byte[mask.RowBytes * bh];
+        using var region = new SKRegion();
+        for (int y = 0; y < bh; y++)
+        {
+            int runStart = -1;
+            for (int x = 0; x <= bw; x++)
+            {
+                bool on = x < bw && hit[(y + minY) * w + x + minX];
+                if (on) alpha[y * mask.RowBytes + x] = 255;
+                if (on && runStart < 0) runStart = x;
+                else if (!on && runStart >= 0)
+                {
+                    region.Op(new SKRectI(runStart + minX, y + minY, x + minX, y + minY + 1), SKRegionOperation.Union);
+                    runStart = -1;
+                }
+            }
+        }
+        System.Runtime.InteropServices.Marshal.Copy(alpha, 0, mask.GetPixels(), alpha.Length);
+        mask.NotifyPixelsChanged();
+
+        // Área do tamanho da imagem inteira com cor única (ex.: fundo liso) = retângulo.
+        _selectionMask = mask;
+        SelectionOutline = region.GetBoundaryPath();
+        Selection = SKRect.Create(minX, minY, bw, bh);
+        StatusText = "Área da mesma cor marcada. Delete apaga, Ctrl+C copia; arraste pra mover.";
+        RaiseSelectionChanged();
+    }
+
+    /// <summary>Máscara alfa → imagem branca com aquele alfa. Desenhar um Alpha8 direto
+    /// conta como "cobertura" no Skia: com DstIn, onde a máscara é 0 o destino ficava
+    /// intacto em vez de sumir. Como imagem colorida, o recorte sai certo.</summary>
+    private static SKBitmap ToColorMask(SKBitmap alphaMask)
+    {
+        var color = new SKBitmap(new SKImageInfo(alphaMask.Width, alphaMask.Height, SKColorType.Bgra8888, SKAlphaType.Premul));
+        using var c = new SKCanvas(color);
+        c.Clear(SKColors.Transparent);
+        using var paint = new SKPaint { Color = SKColors.White };
+        c.DrawBitmap(alphaMask, 0, 0, paint);
+        return color;
+    }
+
+    /// <summary>Máscara efetiva (formato + borda suave) do tamanho de <paramref name="size"/>;
+    /// null quando é retângulo sem borda suave (aí não precisa de máscara).</summary>
+    private SKBitmap? EffectiveMask(SKSizeI size)
+    {
+        if (_selectionMask is null && SelectFeather <= 0) return null;
+        var result = new SKBitmap(new SKImageInfo(size.Width, size.Height, SKColorType.Alpha8, SKAlphaType.Premul));
+        using var c = new SKCanvas(result);
+        c.Clear(SKColors.Transparent);
+        var dest = SKRect.Create(0, 0, size.Width, size.Height);
+        using var paint = new SKPaint { Color = SKColors.White, IsAntialias = true, FilterQuality = SKFilterQuality.Medium };
+        if (SelectFeather > 0)
+        {
+            // Borda suave: o contorno vai a zero na borda da área e a 100% "feather" px pra dentro.
+            float sigma = SelectFeather / 2.5f;
+            paint.MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, sigma);
+            if (_selectionMask is null)
+            {
+                c.DrawRect(SKRect.Inflate(dest, -SelectFeather / 2f, -SelectFeather / 2f), paint);
+                return result;
+            }
+            paint.MaskFilter = null;
+            paint.ImageFilter = SKImageFilter.CreateBlur(sigma, sigma);
+        }
+        c.DrawBitmap(_selectionMask!, dest, paint);
+        return result;
     }
 
     /// <summary>Marca (ou limpa, com null) a área — limitada à tela, mínimo 1 px.
@@ -55,6 +223,7 @@ public sealed partial class ImageEditorViewModel
     public void SetSelection(SKRect? rect)
     {
         CommitSelection();
+        ClearSelectionShape();
         if (rect is { } r)
         {
             var n = Normalize(r);
@@ -93,11 +262,30 @@ public sealed partial class ImageEditorViewModel
             c.Clear(SKColors.Transparent);
             c.DrawBitmap(source, local, SKRect.Create(0, 0, local.Width, local.Height));
         }
-        // Buraco: na imagem volta à cor de fundo (branco, ou transparente se a arte era
-        // transparente); numa camada vira transparência.
-        using (var c = new SKCanvas(source))
-        using (var hole = new SKPaint { Color = target is null ? _backgroundFill : SKColors.Transparent, BlendMode = SKBlendMode.Src })
+        var holeColor = target is null ? _backgroundFill : SKColors.Transparent;
+        using var mask = EffectiveMask(new SKSizeI(local.Width, local.Height));
+        if (mask is null)
+        {
+            // Buraco: na imagem volta à cor de fundo (branco, ou transparente se a arte era
+            // transparente); numa camada vira transparência.
+            using var c = new SKCanvas(source);
+            using var hole = new SKPaint { Color = holeColor, BlendMode = SKBlendMode.Src };
             c.DrawRect(local, hole);
+        }
+        else
+        {
+            // Formato (laço/varinha) e/ou borda suave: o pedaço só leva o que está na
+            // máscara, e o buraco só abre ali (esfumado onde a máscara é parcial).
+            using var colorMask = ToColorMask(mask);
+            using (var c = new SKCanvas(pixels))
+            using (var keep = new SKPaint { BlendMode = SKBlendMode.DstIn })
+                c.DrawBitmap(colorMask, 0, 0, keep);
+            using var sc = new SKCanvas(source);
+            using var hole = holeColor.Alpha == 0
+                ? new SKPaint { BlendMode = SKBlendMode.DstOut }
+                : new SKPaint { Color = holeColor, BlendMode = SKBlendMode.SrcOver };
+            sc.DrawBitmap(mask, local, hole);
+        }
         source.NotifyPixelsChanged();
 
         SKRect localF = local; // SKRectI → SKRect (conversão implícita)
@@ -107,6 +295,7 @@ public sealed partial class ImageEditorViewModel
 
     private void BeginFloating(SKBitmap pixels, EditorLayer? target, SKRect rect)
     {
+        ClearSelectionShape(); // o formato já está nos pixels do pedaço
         _floatPixels = pixels;
         _floatTarget = target;
         _floatRect = rect;
@@ -222,7 +411,7 @@ public sealed partial class ImageEditorViewModel
             UndoWithoutRedo();
             StatusText = "Transformação cancelada.";
         }
-        else Selection = null;
+        else { Selection = null; ClearSelectionShape(); }
         RaiseSelectionChanged();
     }
 
@@ -267,6 +456,15 @@ public sealed partial class ImageEditorViewModel
                 c.DrawBitmap(flat, area, SKRect.Create(0, 0, area.Width, area.Height));
             }
             if (!ReferenceEquals(flat, Bitmap)) flat.Dispose();
+            // Laço/varinha/borda suave: copia só o formato (o resto fica transparente).
+            if (SelectionAngle == 0 && area == SKRectI.Round(sel) && EffectiveMask(new SKSizeI(area.Width, area.Height)) is { } mask)
+            {
+                using (mask)
+                using (var colorMask = ToColorMask(mask))
+                using (var c = new SKCanvas(copy))
+                using (var keep = new SKPaint { BlendMode = SKBlendMode.DstIn })
+                    c.DrawBitmap(colorMask, 0, 0, keep);
+            }
         }
         s_clipboard?.Dispose();
         s_clipboard = copy;
