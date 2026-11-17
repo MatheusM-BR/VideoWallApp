@@ -93,7 +93,7 @@ internal static class CompletionChecks
         clip.IsActive=true; clip.SourceWidth=1920;clip.SourceHeight=1080;
         clip.ThumbnailPath=Path.GetFullPath("artifacts/ui-review/demo-clip-0.png");
         clip.InPointText="8";clip.OutPointText="18";
-        data.Grid.SelectedClip=clip;main.Width=1440;main.Height=900;Frame();
+        data.Grid.SelectedClip=clip;WindowSizing.Resize(main,1440,900);Frame();
         Save((FrameworkElement)main.Content,"active");
         clip.OutPointText="5";Frame();
         Assert(clip.TrimIn==8 && clip.TrimOut==18,"Invalid timing must preserve the displayed valid timeline");
@@ -110,14 +110,14 @@ internal static class CompletionChecks
         x=Regex.Replace(x," x:Class=\"[^\"]*\"","");
         x=Regex.Replace(x,"\\s+\\w+=\"On[^\"]*\"","");
         x=x.Replace("clr-namespace:VideoWallRW.App.Controls","clr-namespace:VideoWallRW.App.Controls;assembly=VideoWallRW.App");
-        var win=(Window)XamlReader.Parse(x);win.DataContext=data;win.Left=-20000;win.Top=-20000;win.ShowActivated=false;win.ShowInTaskbar=false;win.Show();Frame();return win;
+        var win=(Window)XamlReader.Parse(x);win.DataContext=data;win.Left=-20000;win.Top=-20000;win.ShowActivated=false;win.ShowInTaskbar=false;win.Show();Frame();WindowSizing.KeepDesignSize(win);return win;
     }
     public static void CheckAuxiliaryWindows()
     {
         var screen=new ScreenViewModel("Tela de demonstração",1920,1080,()=>{});
         screen.AddSlice(new Slice { Name="Recorte principal",InputRect=new(0,0,1920,1080),OutputRect=new(0,0,1920,1080) });
         dynamic outputs=Obj(("Screens",new[]{screen}),("SelectedScreen",screen),("CompWidth",3840),("CompHeight",1080),("Identify",false),("PresetNames",new[]{"Principal"}),("PresetName","Principal"),("Rotations",Enum.GetValues<VideoWallRW.Core.Model.Rotation>()),("AvailableMonitors",Array.Empty<object>()),("StatusText","Demonstração · nenhuma saída ativada"));
-        var output=Fixture("OutputSetup",(object)outputs);Save((FrameworkElement)output.Content,"outputs");output.Width=1100;output.Height=700;Frame();Save((FrameworkElement)output.Content,"outputs-small");output.Close();
+        var output=Fixture("OutputSetup",(object)outputs);Save((FrameworkElement)output.Content,"outputs");WindowSizing.Resize(output,1100,700);Frame();Save((FrameworkElement)output.Content,"outputs-small");output.Close();
         dynamic install=Obj(("Steps",new[]{Obj(("Column",1),("Seconds",30d))}),("Rules",Array.Empty<object>()),("WatchFolders",Array.Empty<object>()),("AutostartEnabled",false),("SequencerEnabled",false),("SequencerLoop",true),("StatusText","Demonstração"));
         var installation=Fixture("Installation",(object)install);
         foreach(var tabs in Children(installation).OfType<TabControl>().ToList())
@@ -128,7 +128,7 @@ internal static class CompletionChecks
         var keymap=Fixture("KeymapEditor",(object)keys);Save((FrameworkElement)keymap.Content,"keymap");keymap.Close();
         dynamic hap=Obj(("Files",new[]{Obj(("FileName","evento-1.mp4"),("Progress",.65),("Status","Convertendo"))}),("Presets",new[]{"HAP"}),("SelectedPreset","HAP"),("DestinationFolder",@"C:\Video Wall\HAP"),("StatusText","Demonstração · nenhum arquivo convertido"));
         var converter=Fixture("HapConverter",(object)hap);Save((FrameworkElement)converter.Content,"hap");converter.Close();
-        var manual=new ManualWindow();manual.Left=-20000;manual.Top=-20000;manual.ShowActivated=false;manual.ShowInTaskbar=false;manual.Show();Frame();Save((FrameworkElement)manual.Content,"manual");manual.Close();
+        var manual=new ManualWindow();manual.Left=-20000;manual.Top=-20000;manual.ShowActivated=false;manual.ShowInTaskbar=false;manual.Show();Frame();WindowSizing.KeepDesignSize(manual);Save((FrameworkElement)manual.Content,"manual");manual.Close();
         // Controle remoto no estado "ligado" com PIN/endereço de exemplo (nenhum servidor sobe).
         var remote=new RemoteControlWindow(null);remote.Left=-20000;remote.Top=-20000;remote.ShowActivated=false;remote.ShowInTaskbar=false;remote.Show();
         remote.ShowPreview("482915",1,"192.168.0.20");Frame();Save((FrameworkElement)remote.Content,"remote");remote.Close();

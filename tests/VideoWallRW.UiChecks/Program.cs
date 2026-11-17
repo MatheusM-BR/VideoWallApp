@@ -131,7 +131,7 @@ internal static class Program
         var root = (FrameworkElement)win.Content;
         foreach (var (width, height, label) in new[] { (1440, 900, "1440"), (1100, 720, "1100"), (1920, 1080, "1920") })
         {
-            win.Width = width; win.Height = height; Frame(); Snapshot(root, label);
+            WindowSizing.Resize(win, width, height); Frame(); Snapshot(root, label);
             var inspector = (FrameworkElement)win.FindName("ClipInspector");
             var inspectorScroll = Descendants(inspector).OfType<ScrollViewer>().First();
             if (width == 1440)
@@ -153,7 +153,7 @@ internal static class Program
             if (work.RowDefinitions.Sum(r => r.ActualHeight) > work.ActualHeight + 1) throw new Exception("Workspace height overflow");
         }
         // Print do manual: aba Fontes / NDI com fontes de exemplo, em 1440×900.
-        win.Width = 1440; win.Height = 900;
+        WindowSizing.Resize(win, 1440, 900);
         fixture.NdiAvailable = true; fixture.NdiSources = new[] { "ESTUDIO-1 (Câmera PTZ)", "ESTUDIO-2 (Câmera Plano Geral)", "VMIX-PC (Output 1)" };
         fixture.ShowSourcesTab = true; Frame(); Snapshot(root, "sources");
         fixture.ShowSourcesTab = false; fixture.NdiAvailable = false; fixture.NdiSources = Array.Empty<string>(); Frame();

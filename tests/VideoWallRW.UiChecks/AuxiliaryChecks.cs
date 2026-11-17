@@ -46,7 +46,7 @@ internal static class AuxiliaryChecks
     }
     static void Show(Window win)
     {
-        win.ShowActivated = false; win.ShowInTaskbar = false; win.Left = -20000; win.Top = -20000; win.Show(); Frame();
+        win.ShowActivated = false; win.ShowInTaskbar = false; win.Left = -20000; win.Top = -20000; win.Show(); Frame(); WindowSizing.KeepDesignSize(win);
     }
     static Window FixtureWindow(string file, object data)
     {
@@ -127,7 +127,7 @@ internal static class AuxiliaryChecks
         var editorVm = new ImageEditorViewModel(path);
         var editor = new ImageEditorWindow(editorVm);
         Show(editor); Save(editor, "editor-paint3d");
-        editor.Width = 1000; editor.Height = 680;
+        WindowSizing.Resize(editor, 1000, 680);
         // Camadas de exemplo pros prints do manual: uma faixa (forma) e um texto por cima da arte.
         editorVm.LayerMode = true;
         editorVm.Tool = EditorTool.Shape; editorVm.SetColorHex("#ED1C24");
@@ -195,7 +195,7 @@ internal static class AuxiliaryChecks
         dynamic agendaData = Obj(("BannerPreviewPath", path), ("Date", new DateOnly(2026,9,8)), ("Events", events), ("SelectedEvent", events[0]), ("Details", details), ("Loading", false), ("LoadingDetails", false), ("Downloading", false), ("DownloadProgress", .4), ("StatusText", "DEMONSTRAÇÃO · Dados fictícios; nenhum download realizado."));
         foreach (var command in new[] { "PreviousDayCommand", "NextDayCommand", "TodayCommand", "SaveBannerCommand", "SaveBannerAndEditCommand", "DownloadCatalogCommand", "DownloadRegulationCommand" }) ((IDictionary<string, object?>)agendaData)[command] = null;
         Window agenda = FixtureWindow("Agenda", (object)agendaData); Show(agenda); Save(agenda, "agenda");
-        agenda.Width = 940; agenda.Height = 640;
+        WindowSizing.Resize(agenda, 940, 640);
         Children(agenda).OfType<Expander>().Single().IsExpanded = true; Save(agenda, "agenda-documents");
         agendaData.Details = null; agendaData.LoadingDetails = true; Save(agenda, "agenda-loading");
         agendaData.LoadingDetails = false; agendaData.SelectedEvent = null; agendaData.Events = new List<object>(); Save(agenda, "agenda-empty");
@@ -207,7 +207,7 @@ internal static class AuxiliaryChecks
         // A prévia do PDF usa PaintSurface; neste ensaio só de layout é substituída por uma imagem fictícia.
         var preview = (SkiaSharp.Views.WPF.SKElement)pdf.FindName("PreviewElement");
         ((Border)preview.Parent).Child = new Image { Source = new BitmapImage(new Uri(path)), Stretch = Stretch.Uniform, Margin = new Thickness(32) };
-        Show(pdf); Save(pdf, "pdf"); pdf.Width = 860; pdf.Height = 620; Save(pdf, "pdf-small"); pdf.Close();
+        Show(pdf); Save(pdf, "pdf"); WindowSizing.Resize(pdf, 860, 620); Save(pdf, "pdf-small"); pdf.Close();
         CompletionChecks.CheckAuxiliaryWindows();
         app.Shutdown(); Console.WriteLine("Auxiliary visual checks passed.");
     }
