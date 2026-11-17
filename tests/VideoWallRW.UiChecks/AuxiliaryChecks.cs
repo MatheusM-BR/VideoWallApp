@@ -172,6 +172,13 @@ internal static class AuxiliaryChecks
         if (((TextBox)editor.FindName("SelectW")).Text != ((int)Math.Round(stretched.Width)).ToString())
             throw new Exception("Selection width field did not follow the stretch");
         Save(editor, "editor-select-stretch");
+        // Giro + espelho: contorno e alças girados, campo de giro preenchido.
+        editorVm.SetSelectionAngle(-15);
+        editorVm.FlipSelection(horizontal: false);
+        Frame();
+        if (((TextBox)editor.FindName("SelectAngle")).Text != "15")
+            throw new Exception("Selection angle field did not follow the rotation/flip");
+        Save(editor, "editor-select-rotate");
         editorVm.CommitSelection();
         Frame();
         Save(editor, "editor-select-applied");

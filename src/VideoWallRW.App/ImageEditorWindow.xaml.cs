@@ -14,6 +14,10 @@ public partial class ImageEditorWindow : Window
     private readonly ImageEditorViewModel _vm;
     private SKPoint? _dragStart;
     private SKPoint? _lastPaintPoint;
+    /// <summary>Fim do último traço — Shift+clique liga a ele com uma reta.</summary>
+    private SKPoint? _lastStrokeEnd;
+    /// <summary>Ponteiro sobre a área (espaço da imagem), pro círculo do tamanho do pincel.</summary>
+    private SKPoint? _hoverPoint;
     private SKRect? _liveCropRect;
     private (SKPoint A, SKPoint B)? _liveShape;
 
@@ -61,6 +65,7 @@ public partial class ImageEditorWindow : Window
             UpdateTelaFields();
         });
         viewModel.HistoryRestored += () => Dispatcher.Invoke(InitializeToolOverlay);
+        Canvas.MouseLeave += (_, _) => { _hoverPoint = null; Canvas.InvalidateVisual(); };
         Closed += (_, _) => viewModel.Dispose();
         Loaded += (_, _) => UpdateTelaFields();
         Loaded += (_, _) => InitializeToolOverlay();
@@ -328,6 +333,43 @@ public partial class ImageEditorWindow : Window
         e.Handled = true;
     }
 
+    /// <summary>Ctrl+0 ajusta à tela, Ctrl+ + / Ctrl+ − aproximam e afastam.</summary>
+    private bool HandleViewKey(Key key)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control) return false;
+        switch (key)
+        {
+            case Key.D0 or Key.NumPad0: ResetZoom(); return true;
+            case Key.OemPlus or Key.Add: ChangeZoom(1.12); return true;
+            case Key.OemMinus or Key.Subtract: ChangeZoom(1 / 1.12); return true;
+            default: return false;
+        }
+    }
+
+    /// <summary>Letras trocam de ferramenta (como no Photoshop): M seleção, B pincel,
+    /// E borracha, G balde, I conta-gotas, U formas, T texto, L camadas, C recortar.</summary>
+    private bool HandleToolKey(Key key)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.None) return false;
+        EditorTool? tool = key switch
+        {
+            Key.M => EditorTool.Select,
+            Key.B => EditorTool.Brush,
+            Key.E => EditorTool.Eraser,
+            Key.G => EditorTool.Bucket,
+            Key.I => EditorTool.Eyedropper,
+            Key.U => EditorTool.Shape,
+            Key.T => EditorTool.Text,
+            Key.L => EditorTool.Layers,
+            Key.C => EditorTool.Crop,
+            _ => null,
+        };
+        if (tool is not { } t) return false;
+        _vm.Tool = t;
+        Canvas.InvalidateVisual();
+        return true;
+    }
+
     /// <summary>Volta ao encaixe automático (100%).</summary>
     private void ResetZoom()
     {
@@ -368,7 +410,11 @@ public partial class ImageEditorWindow : Window
             case EditorTool.Brush:
             case EditorTool.Eraser:
                 _vm.BeginStroke(pt);
+                // Shift+clique: reta desde o fim do traço anterior; clique simples: um ponto.
+                bool straight = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) && _lastStrokeEnd is not null;
+                _vm.PaintStroke(straight ? _lastStrokeEnd!.Value : pt, pt);
                 _lastPaintPoint = pt;
+                Canvas.InvalidateVisual();
                 break;
             case EditorTool.Eyedropper:
                 _vm.PickColorAt(pt);
@@ -408,6 +454,11 @@ public partial class ImageEditorWindow : Window
         }
 
         var pt = ToImageSpace(e.GetPosition(Canvas));
+        if (_vm.Tool is EditorTool.Brush or EditorTool.Eraser)
+        {
+            _hoverPoint = pt;
+            if (e.LeftButton != MouseButtonState.Pressed) Canvas.InvalidateVisual();
+        }
 
         if (e.LeftButton != MouseButtonState.Pressed)
         {
@@ -572,6 +623,7 @@ public partial class ImageEditorWindow : Window
         _layerDrag = LayerDragMode.None;
         Cursor = Cursors.Arrow;
         _dragStart = null;
+        if (_lastPaintPoint is { } strokeEnd) _lastStrokeEnd = strokeEnd;
         _lastPaintPoint = null;
         _cropMode = CropDragMode.None; // o quadro de corte permanece, editável
         Canvas.InvalidateVisual();

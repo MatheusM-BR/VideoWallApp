@@ -136,7 +136,18 @@ public partial class ImageEditorWindow
             canvas.DrawText(dimensions, sel.Left + 7, labelY + 14, labelText);
         }
 
-        // Seleção: pedaço sendo movido/esticado + tracejado e alças.
+        // Pincel/borracha: círculo do tamanho real do traço sob o ponteiro.
+        if (_vm.Tool is EditorTool.Brush or EditorTool.Eraser && _hoverPoint is { } hover)
+        {
+            var at = ToScreen(hover);
+            float radius = Math.Max((float)(_vm.BrushSize * scale / 2), 1.5f);
+            using var ringDark = new SKPaint { Color = new SKColor(0, 0, 0, 170), Style = SKPaintStyle.Stroke, StrokeWidth = 2.5f, IsAntialias = true };
+            using var ringLight = new SKPaint { Color = SKColors.White, Style = SKPaintStyle.Stroke, StrokeWidth = 1, IsAntialias = true };
+            canvas.DrawCircle(at, radius, ringDark);
+            canvas.DrawCircle(at, radius, ringLight);
+        }
+
+        // Seleção: pedaço sendo movido/esticado/girado + tracejado e alças.
         DrawSelectionOverlay(canvas, scale, offsetX, offsetY, dest);
 
         // Guias da TELA (estilo Paint): contorno provisório CENTRADO na imagem atual —

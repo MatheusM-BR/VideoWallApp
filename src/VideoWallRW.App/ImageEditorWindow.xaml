@@ -242,19 +242,40 @@
             </StackPanel.Style>
             <TextBlock Text="Seleção" FontSize="16" FontWeight="Bold" Margin="0,0,0,8" />
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,0,0,10"
-                       Text="Arraste na imagem para marcar uma área. Arraste por dentro para mover; puxe as alças para esticar — cantos nos dois sentidos (Shift mantém a proporção), laterais num sentido só." />
+                       Text="Arraste na imagem para marcar uma área. Arraste por dentro para mover; puxe as alças para esticar — cantos nos dois sentidos (Shift mantém a proporção), laterais num sentido só. A bolinha de cima gira (Shift: de 15 em 15°)." />
             <Button Content="Selecionar tudo (Ctrl+A)" Command="{Binding SelectAllCommand}" Padding="0,6" Margin="0,0,0,10" />
             <Grid Margin="0,0,0,10">
-              <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
+              <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /><ColumnDefinition Width="0.8*" /></Grid.ColumnDefinitions>
               <StackPanel Grid.Column="0" Margin="0,0,4,0">
                 <TextBlock Text="Largura (px)" FontSize="11" />
                 <TextBox x:Name="SelectW" LostFocus="OnSelectFieldCommit" KeyDown="OnSelectFieldKeyDown" IsEnabled="{Binding HasSelection}" />
               </StackPanel>
-              <StackPanel Grid.Column="1" Margin="4,0,0,0">
+              <StackPanel Grid.Column="1" Margin="4,0,4,0">
                 <TextBlock Text="Altura (px)" FontSize="11" />
                 <TextBox x:Name="SelectH" LostFocus="OnSelectFieldCommit" KeyDown="OnSelectFieldKeyDown" IsEnabled="{Binding HasSelection}" />
               </StackPanel>
+              <StackPanel Grid.Column="2" Margin="4,0,0,0">
+                <TextBlock Text="Giro (°)" FontSize="11" />
+                <TextBox x:Name="SelectAngle" LostFocus="OnSelectFieldCommit" KeyDown="OnSelectFieldKeyDown" IsEnabled="{Binding HasSelection}" />
+              </StackPanel>
             </Grid>
+            <TextBlock Text="Espelhar e girar" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,0,0,4" />
+            <UniformGrid Columns="4" Margin="0,0,0,10" IsEnabled="{Binding HasSelection}">
+              <Button Content="⇋" FontSize="15" Command="{Binding FlipSelectionAreaCommand}" CommandParameter="h" Padding="0,4" Margin="0,0,3,0"
+                      ToolTip="Espelhar na horizontal (H)" AutomationProperties.Name="Espelhar na horizontal" />
+              <Button Content="⇵" FontSize="15" Command="{Binding FlipSelectionAreaCommand}" CommandParameter="v" Padding="0,4" Margin="0,0,3,0"
+                      ToolTip="Espelhar na vertical (V)" AutomationProperties.Name="Espelhar na vertical" />
+              <Button Content="↺ 90°" Command="{Binding RotateSelectionAreaCommand}" CommandParameter="anti" Padding="0,6" Margin="0,0,3,0"
+                      ToolTip="Girar 90° no sentido anti-horário (Shift+R)" AutomationProperties.Name="Girar 90 graus anti-horário" />
+              <Button Content="↻ 90°" Command="{Binding RotateSelectionAreaCommand}" CommandParameter="horario" Padding="0,6"
+                      ToolTip="Girar 90° no sentido horário (R)" AutomationProperties.Name="Girar 90 graus horário" />
+            </UniformGrid>
+            <TextBlock Text="Área de transferência" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,0,0,4" />
+            <UniformGrid Columns="3" Margin="0,0,0,10">
+              <Button Content="Copiar" Click="OnCopySelectionClick" IsEnabled="{Binding HasSelection}" Padding="0,6" Margin="0,0,3,0" ToolTip="Copia o que se vê na área (Ctrl+C) — dá pra colar em outro programa" />
+              <Button Content="Recortar" Click="OnCutSelectionClick" IsEnabled="{Binding HasSelection}" Padding="0,6" Margin="0,0,3,0" ToolTip="Copia e apaga a área (Ctrl+X)" />
+              <Button Content="Colar" Click="OnPasteClick" Padding="0,6" ToolTip="Cola a área copiada ou uma imagem copiada de outro programa (Ctrl+V)" />
+            </UniformGrid>
             <TextBlock Text="Esticar a seleção" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,0,0,4" />
             <UniformGrid Columns="3" Margin="0,0,0,10" IsEnabled="{Binding HasSelection}">
               <Button Content="Tela inteira" Command="{Binding StretchSelectionCommand}" CommandParameter="tela" Padding="0,6" Margin="0,0,3,0" ToolTip="Estica a área selecionada até ocupar a imagem inteira" />
@@ -268,7 +289,7 @@
               <Button Content="Apagar" Command="{Binding DeleteSelectionAreaCommand}" Padding="0,6" ToolTip="Apaga a área selecionada (Delete)" />
             </UniformGrid>
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,10,0,0"
-                       Text="Enter aplica · Esc cancela · setas movem 1 px (Shift 10 px) · clicar fora ou trocar de ferramenta também aplica." />
+                       Text="Enter aplica · Esc cancela · Delete apaga · H/V espelham · R gira 90° · setas movem 1 px (Shift 10 px) · clicar fora ou trocar de ferramenta também aplica." />
           </StackPanel>
           <!-- ═══ RECORTAR (Paint 3D: presets, W/H, fixar proporção, Cancelar/Concluído) ═══ -->
           <StackPanel>

@@ -154,7 +154,7 @@ public static class ManualContent
         new("Editor · Pincéis", "Pincel, borracha, balde e conta-gotas",
             new Picture("editor-brush.png", "Pincéis com ícones"),
             new Bullets(
-                "**Pincel** pinta com a cor e o tamanho escolhidos.",
+                "**Pincel** pinta com a cor e o tamanho escolhidos; o círculo sob o ponteiro mostra o tamanho real do traço. Um clique faz um ponto; `Shift`+clique liga uma reta desde o fim do traço anterior.",
                 "**Borracha**: numa camada abre transparência (aparece o fundo); no fundo, volta à cor de fundo.",
                 "**Preencher** (balde) pinta uma área de cor parecida — ajuste a **Tolerância**.",
                 "**Conta-gotas** pega a cor de qualquer ponto da imagem e **já passa para o balde** — o próximo clique preenche com a cor pega. As cores pegas ficam no **Histórico**.",
@@ -176,15 +176,27 @@ public static class ManualContent
                 "O texto vira camada: arraste para mover, cantos para redimensionar (sem perder nitidez).",
                 "Com o texto selecionado, editar o campo, o tamanho ou a cor muda ele na hora.")),
 
-        new("Editor · Seleção", "Marcar uma área e mover ou esticar só ela",
-            new Paragraph("A ferramenta **⬚ Seleção** transforma só um pedaço da imagem — por exemplo, alongar uma faixa de fundo até a borda sem mexer no resto."),
+        new("Editor · Seleção", "Marcar uma área e mover, esticar, girar, espelhar, copiar e colar",
+            new Paragraph("A ferramenta **⬚ Seleção** (tecla `M`) transforma só um pedaço da imagem — por exemplo, alongar uma faixa de fundo até a borda, virar um logo ou duplicar um elemento, sem mexer no resto."),
             new Picture("editor-select.png", "Área selecionada sendo esticada para a direita"),
             new Steps(
                 "Clique em **Seleção** e **arraste** na imagem para marcar a área (`Shift` deixa quadrada). `Ctrl+A` seleciona a imagem inteira.",
                 "Arraste **por dentro** para mover, ou puxe as **alças**: as dos **cantos** esticam nos dois sentidos (`Shift` mantém a proporção); as do **meio dos lados** esticam num sentido só.",
+                "A **bolinha acima** da área gira livremente (`Shift`: de 15 em 15°). Com a área girada, as alças continuam esticando no sentido dela.",
                 "**Enter** (ou **Aplicar**) grava. Clicar fora ou trocar de ferramenta também grava. **Esc** (ou `Ctrl+Z`) cancela e a imagem volta como estava."),
+            new Picture("editor-select-rotate.png", "Área girada e espelhada: contorno e alças acompanham o giro"),
+            new Subtitle("Espelhar e girar"),
             new Bullets(
-                "Os campos **Largura/Altura** definem o tamanho exato em pixels.",
+                "**⇋** espelha na horizontal (`H`), **⇵** na vertical (`V`).",
+                "**↻ 90°** / **↺ 90°** giram em ângulo reto sem perder qualidade (`R` / `Shift+R`).",
+                "Campo **Giro (°)**: ângulo exato. Campos **Largura/Altura**: tamanho exato em pixels."),
+            new Subtitle("Copiar, recortar e colar"),
+            new Bullets(
+                "`Ctrl+C` copia o que se vê na área; `Ctrl+X` copia e apaga; `Ctrl+V` cola como área solta, pronta para mover, esticar ou girar.",
+                "A cópia também vai para a área de transferência do Windows — dá para colar em outro programa. E dá para colar no editor uma imagem copiada de outro lugar (um print, uma foto do navegador): se for maior que a imagem, ela encolhe para caber.",
+                "Cola na posição da seleção atual, ou no centro se não houver. Copiar numa imagem e colar em outra (outra janela do editor) também funciona.",
+                "No **modo camadas**, o que é colado vira uma **camada nova**."),
+            new Bullets(
                 "**Tela inteira**, **↔ Largura** e **↕ Altura** esticam a área até as bordas da imagem.",
                 "**Apagar** (ou `Delete`) limpa a área — fica a cor de fundo.",
                 "Setas movem 1 px (`Shift` 10 px). Enquanto a área está solta, o lugar de onde ela saiu fica com a cor de fundo."),
@@ -256,7 +268,11 @@ public static class ManualContent
                 ("Ctrl+S / Ctrl+O / Ctrl+N", "Salvar / abrir / novo projeto"),
                 ("Ctrl+C / Ctrl+V", "Copiar / colar clipe"),
                 ("Ctrl+Z / Ctrl+Y", "Desfazer / refazer no editor"),
-                ("Ctrl+A", "Editor: selecionar a imagem inteira (Seleção)")),
+                ("Ctrl+A", "Editor: selecionar a imagem inteira (Seleção)"),
+                ("Ctrl+C / Ctrl+X / Ctrl+V", "Editor: copiar / recortar / colar área"),
+                ("H / V / R", "Editor (Seleção): espelhar horizontal / vertical, girar 90°"),
+                ("M B E G I U T L C", "Editor: Seleção, Pincel, Borracha, Balde, Conta-gotas, Formas, Texto, Camadas, Recortar"),
+                ("Ctrl+0 / Ctrl+ + / Ctrl+ −", "Editor: ajustar à tela / aproximar / afastar")),
             new Picture("keymap.png", "Ferramentas → Atalhos de teclado"),
             new Paragraph("Em **Ferramentas → Atalhos de teclado** dá para trocar qualquer tecla e, nos disparos de coluna, escolher qual camada recebe o comando. **Restaurar padrão** volta à tabela acima.")),
 

@@ -174,7 +174,7 @@ public partial class ImageEditorWindow
             e.Handled = true;
             return;
         }
-        if (Mouse.Captured is null && HandleSelectKey(e.Key))
+        if (Mouse.Captured is null && (HandleClipboardKey(e.Key) || HandleSelectKey(e.Key) || HandleViewKey(e.Key) || HandleToolKey(e.Key)))
         {
             e.Handled = true;
             return;

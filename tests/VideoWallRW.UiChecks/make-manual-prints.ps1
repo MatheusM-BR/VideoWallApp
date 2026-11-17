@@ -35,6 +35,7 @@ $map = [ordered]@{
     'editor-canvas.png'    = 'layout-editor-canvas.png'
     'editor-crop.png'      = 'layout-editor-crop.png'
     'editor-select.png'    = 'layout-editor-select-stretch.png'
+    'editor-select-rotate.png' = 'layout-editor-select-rotate.png'
     'remote.png'           = 'completion-remote.png'
     'installation.png'     = 'completion-installation-0.png'
     'hap.png'              = 'completion-hap.png'

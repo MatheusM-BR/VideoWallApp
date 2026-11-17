@@ -33,4 +33,38 @@ public static class SelectionGeometry
         }
         return new SKRect(Math.Min(l, r), Math.Min(t, b), Math.Max(l, r), Math.Max(t, b));
     }
+
+    /// <summary>
+    /// Igual a <see cref="Transform"/>, mas com a área girada <paramref name="angle"/> graus
+    /// em torno do centro: o deslocamento do mouse é levado pro "eixo da área" (assim a
+    /// alça lateral estica na direção em que a área está virada) e o lado oposto à alça
+    /// fica parado na tela. Devolve o retângulo SEM giro (centro + tamanho).
+    /// </summary>
+    public static SKRect TransformRotated(SKRect origin, string handle, float dx, float dy, bool keepRatio, float angle)
+    {
+        if (angle == 0 || handle == "Move") return Transform(origin, handle, dx, dy, keepRatio);
+        var local = Rotate(new SKPoint(dx, dy), -angle);
+        var n = Transform(origin, handle, local.X, local.Y, keepRatio);
+        // Quanto o centro andou, no eixo da área → de volta pra tela.
+        var shift = Rotate(new SKPoint(n.MidX - origin.MidX, n.MidY - origin.MidY), angle);
+        float cx = origin.MidX + shift.X, cy = origin.MidY + shift.Y;
+        return SKRect.Create(cx - n.Width / 2, cy - n.Height / 2, n.Width, n.Height);
+    }
+
+    /// <summary>Ângulo (graus, horário, 0 = alça pra cima) do ponto em relação ao centro.
+    /// Com <paramref name="snap"/>, arredonda pra múltiplos de 15°.</summary>
+    public static float AngleFromCenter(SKPoint center, SKPoint p, bool snap)
+    {
+        float deg = (float)(Math.Atan2(p.Y - center.Y, p.X - center.X) * 180 / Math.PI) + 90;
+        if (snap) deg = MathF.Round(deg / 15f) * 15f;
+        deg %= 360; if (deg > 180) deg -= 360; if (deg <= -180) deg += 360;
+        return deg;
+    }
+
+    /// <summary>Gira um vetor (graus, sentido horário na tela).</summary>
+    public static SKPoint Rotate(SKPoint v, float degrees)
+    {
+        double rad = degrees * Math.PI / 180, c = Math.Cos(rad), s = Math.Sin(rad);
+        return new SKPoint((float)(v.X * c - v.Y * s), (float)(v.X * s + v.Y * c));
+    }
 }
